@@ -1,0 +1,276 @@
+@import "tailwindcss";
+
+@theme {
+  /* Earthy Brown Primary Palette */
+  --color-earth-900: #2C1810;
+  --color-earth-800: #3E2415;
+  --color-earth-700: #5C3D2E;
+  --color-earth-600: #7A5740;
+  --color-earth-500: #8B6914;
+  --color-earth-400: #A67C3B;
+  --color-earth-300: #C9A96E;
+  --color-earth-200: #DCC9A0;
+  --color-earth-100: #EDE3CF;
+  --color-earth-50: #F7F2E8;
+
+  /* Blueprint Accent (technical cyan) */
+  --color-draft-600: #1B6E8A;
+  --color-draft-500: #2494B6;
+  --color-draft-400: #3BB5D6;
+  --color-draft-300: #5BC0EB;
+  --color-draft-200: #8AD4F2;
+  --color-draft-100: #C5EAFA;
+  --color-draft-50: #E8F6FD;
+
+  /* Neutral Steel */
+  --color-steel-900: #1A1D23;
+  --color-steel-800: #2D3139;
+  --color-steel-700: #3F444F;
+  --color-steel-600: #545A68;
+  --color-steel-500: #6B7280;
+  --color-steel-400: #9CA3AF;
+  --color-steel-300: #C4C9D4;
+  --color-steel-200: #DFE3EA;
+  --color-steel-100: #EEF1F5;
+  --color-steel-50: #F6F8FB;
+
+  /* Status Colors */
+  --color-cyber-green: #10B981;
+  --color-warning-orange: #F59E0B;
+  --color-danger-red: #EF4444;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+/* Blueprint grid on warm parchment background */
+.blueprint-bg {
+  background-color: #F5F0E6;
+  background-image:
+    linear-gradient(rgba(92, 61, 46, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92, 61, 46, 0.06) 1px, transparent 1px),
+    linear-gradient(rgba(92, 61, 46, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92, 61, 46, 0.03) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+}
+
+/* Dark brown blueprint background for login */
+.blueprint-bg-dark {
+  background-color: #1E120A;
+  background-image:
+    linear-gradient(rgba(201, 169, 110, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 169, 110, 0.07) 1px, transparent 1px),
+    linear-gradient(rgba(201, 169, 110, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 169, 110, 0.035) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+}
+
+/* Landing page: dark brown blueprint background */
+.landing-bg {
+  background-color: #2C1810;
+  background-image:
+    linear-gradient(rgba(201, 169, 110, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 169, 110, 0.1) 1px, transparent 1px),
+    linear-gradient(rgba(201, 169, 110, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 169, 110, 0.04) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+}
+
+/* Landing page: warm parchment light section */
+.landing-bg-light {
+  background-color: #F5F0E6;
+  background-image:
+    linear-gradient(rgba(92, 61, 46, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92, 61, 46, 0.06) 1px, transparent 1px),
+    linear-gradient(rgba(92, 61, 46, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92, 61, 46, 0.025) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+}
+
+/* Landing page: mid-dark brown */
+.landing-bg-mid {
+  background-color: #1E120A;
+  background-image:
+    linear-gradient(rgba(201, 169, 110, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 169, 110, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(201, 169, 110, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201, 169, 110, 0.03) 1px, transparent 1px);
+  background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+}
+
+/* Scroll fade-in animation */
+@keyframes fadeInUpLanding {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.land-fade { animation: fadeInUpLanding 0.65s ease-out both; }
+.land-fade-d1 { animation-delay: 0.1s; }
+.land-fade-d2 { animation-delay: 0.2s; }
+.land-fade-d3 { animation-delay: 0.3s; }
+.land-fade-d4 { animation-delay: 0.4s; }
+.land-fade-d5 { animation-delay: 0.5s; }
+.land-fade-d6 { animation-delay: 0.6s; }
+
+/* Cyan glow pulse for hero CTA */
+@keyframes cyanPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(91,192,235,0); }
+  50%       { box-shadow: 0 0 22px 4px rgba(91,192,235,0.35); }
+}
+.cyan-pulse { animation: cyanPulse 2.4s ease-in-out infinite; }
+
+/* Brown glow for secondary CTA */
+@keyframes brownPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201,169,110,0); }
+  50%       { box-shadow: 0 0 18px 3px rgba(201,169,110,0.3); }
+}
+.brown-pulse { animation: brownPulse 2.4s ease-in-out infinite; }
+
+/* Scrollbar light on landing */
+.landing-scroll::-webkit-scrollbar { width: 6px; }
+.landing-scroll::-webkit-scrollbar-track { background: transparent; }
+.landing-scroll::-webkit-scrollbar-thumb { background: rgba(91,192,235,0.25); border-radius: 3px; }
+
+/* Navbar blur glass */
+.navbar-glass {
+  background: rgba(44, 24, 16, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(201,169,110,0.2);
+}
+
+/* Feature card hover */
+.feature-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(201,169,110,0.15);
+  border-color: rgba(201,169,110,0.5);
+}
+
+/* Screenshot card hover */
+.screenshot-card {
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.screenshot-card:hover {
+  transform: scale(1.03);
+  box-shadow: 0 12px 40px rgba(201,169,110,0.2);
+}
+
+/* Measurement tick marks */
+.tick-line {
+  position: relative;
+}
+.tick-line::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(91,192,235,0.3), transparent);
+}
+
+/* Section divider blueprint style */
+.section-divider {
+  border: none;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,169,110,0.4), rgba(139,105,20,0.3), transparent);
+}
+
+/* Dashed blueprint box */
+.blueprint-dashed {
+  border: 1.5px dashed rgba(91,192,235,0.3);
+}
+
+/* Blueprint card corners - amber/brown accent */
+.blueprint-corner {
+  position: relative;
+}
+.blueprint-corner::before,
+.blueprint-corner::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: #C9A96E;
+  opacity: 0.5;
+}
+.blueprint-corner::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+.blueprint-corner::after {
+  bottom: -1px;
+  right: -1px;
+  border-bottom: 2px solid;
+  border-right: 2px solid;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 169, 110, 0.3);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 169, 110, 0.5);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out forwards;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(201, 169, 110, 0);
+  }
+  50% {
+    box-shadow: 0 0 12px 2px rgba(201, 169, 110, 0.15);
+  }
+}
+
+.glow-hover:hover {
+  animation: pulse-glow 2s infinite;
+}
+
+/* Subtle shimmer for stat cards */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.shimmer-line {
+  background: linear-gradient(90deg, transparent, rgba(201,169,110,0.15), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease infinite;
+}
