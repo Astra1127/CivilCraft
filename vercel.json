@@ -4,7 +4,7 @@
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
-  "heayders": [
+  "headers": [
     {
       "source": "/assets/(.*)",
       "headers": [
