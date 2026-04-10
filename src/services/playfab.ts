@@ -1,6 +1,6 @@
 import type { UserRole } from '../types';
 
-const PLAYFAB_TITLE_ID = import.meta.env.VITE_PLAYFAB_TITLE_ID as string | undefined;
+const PLAYFAB_TITLE_ID = import.meta.env.VITE_PLAYFAB_TITLE_ID as string | "YOUR_PLAYFAB_TITLE_ID";
 
 /* ------------------------------------------------------------------ */
 /*  Shared PlayFab data keys (used by BOTH website and Unity game)    */
