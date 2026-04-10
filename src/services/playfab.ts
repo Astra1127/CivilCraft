@@ -1,6 +1,6 @@
 import type { UserRole } from '../types';
 
-const PLAYFAB_TITLE_ID = import.meta.env.VITE_PLAYFAB_TITLE_ID as string | "YOUR_PLAYFAB_TITLE_ID";
+const PLAYFAB_TITLE_ID = import.meta.env.VITE_PLAYFAB_TITLE_ID as string | undefined;
 
 /* ------------------------------------------------------------------ */
 /*  Shared PlayFab data keys (used by BOTH website and Unity game)    */
@@ -460,7 +460,7 @@ export async function provisionPlayFabPlayer(input: PlayFabProvisionInput) {
     email: input.email,
     role: input.role,
     defaultPassword: input.defaultPassword,
-  } satisfies PlayFabProvisionResult;
+  } as PlayFabProvisionResult;
 }
 
 /* ------------------------------------------------------------------ */
