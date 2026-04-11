@@ -26,7 +26,6 @@ interface LandingPageProps {
   onEnterApp: () => void;
 }
 
-console.log("TITLE ID:", import.meta.env.VITE_PLAYFAB_TITLE_ID);
 
 function useVisible(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null);
