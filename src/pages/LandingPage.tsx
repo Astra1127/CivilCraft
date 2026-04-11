@@ -95,7 +95,7 @@ export default function LandingPage({ onEnterApp }: LandingPageProps) {
 
   const screenshotCards = [
     {
-      image: '/images/low-poly-canyon-bridge.png',
+      image: '/images/game-screenshot-1.jpg',
       title: 'Main Menu — Canyon Bridge',
       tag: 'ENVIRONMENT',
       text: 'The low-poly desert canyon where players begin their bridge construction journey.',
@@ -109,14 +109,14 @@ export default function LandingPage({ onEnterApp }: LandingPageProps) {
       size: '',
     },
     {
-      image: '/images/game-screenshot-2.jpg',
+      image: '/images/game-screenshot-3.jpg',
       title: 'Bridge Test Preview',
       tag: 'SIMULATION',
       text: 'Preview bridge behavior, inspect the build path, and evaluate structural response.',
       size: '',
     },
     {
-      image: '/images/game-screenshot-3.jpg',
+      image: '/images/game-screenshot-1.jpg',
       title: 'Engineering Interface',
       tag: 'UI PREVIEW',
       text: 'A structured dashboard for progress tracking, assignments, and section analytics.',
