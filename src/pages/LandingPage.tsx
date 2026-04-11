@@ -95,7 +95,11 @@ export default function LandingPage({ onEnterApp }: LandingPageProps) {
 
   const screenshotCards = [
     {
-     
+      image: '/images/game-screenshot-1.jpg',
+      title: 'Main Menu — Canyon Bridge',
+      tag: 'ENVIRONMENT',
+      text: 'The low-poly desert canyon where players begin their bridge construction journey.',
+      size: 'lg:col-span-2',
     },
     {
       image: '/images/game-screenshot-1.jpg',
