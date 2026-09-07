@@ -1,0 +1,377 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * CIVIL CRAFT: BRIDGE EDITION — design system
+ *
+ * Palette (source hex -> oklch tokens):
+ *   #4A3428 dark brown / borders
+ *   #F3E7D1 warm beige background
+ *   #FCF6EC cream panels
+ *   #B9A896 muted taupe
+ *   #4E372C primary text
+ *   #C58A42 construction gold accent
+ *
+ * Never hardcode colors in components — use the semantic tokens below.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  --font-display: "Baloo 2", "Nunito", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Nunito", ui-sans-serif, system-ui, sans-serif;
+
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-taupe: var(--taupe);
+  --color-blueprint: var(--blueprint);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.9rem;
+
+  --background: oklch(0.933 0.034 85.5);
+  --foreground: oklch(0.325 0.038 48);
+  --card: oklch(0.971 0.017 86);
+  --card-foreground: oklch(0.325 0.038 48);
+  --popover: oklch(0.971 0.017 86);
+  --popover-foreground: oklch(0.325 0.038 48);
+
+  --primary: oklch(0.305 0.036 55);
+  --primary-foreground: oklch(0.971 0.017 86);
+
+  --secondary: oklch(0.9 0.028 84);
+  --secondary-foreground: oklch(0.325 0.038 48);
+
+  --muted: oklch(0.905 0.024 84);
+  --muted-foreground: oklch(0.52 0.03 60);
+
+  --accent: oklch(0.883 0.05 82);
+  --accent-foreground: oklch(0.305 0.036 55);
+
+  --gold: oklch(0.664 0.108 63);
+  --blueprint: oklch(0.4 0.085 250);
+  --gold-foreground: oklch(0.985 0.012 86);
+
+  --taupe: oklch(0.72 0.025 75);
+
+  --success: oklch(0.55 0.11 145);
+  --success-foreground: oklch(0.985 0.012 86);
+  --warning: oklch(0.72 0.13 78);
+  --warning-foreground: oklch(0.28 0.04 55);
+  --destructive: oklch(0.53 0.17 27);
+  --destructive-foreground: oklch(0.985 0.012 86);
+
+  --border: oklch(0.305 0.036 55 / 22%);
+  --input: oklch(0.305 0.036 55 / 28%);
+  --ring: oklch(0.664 0.108 63);
+
+  --chart-1: oklch(0.664 0.108 63);
+  --chart-2: oklch(0.305 0.036 55);
+  --chart-3: oklch(0.72 0.025 75);
+  --chart-4: oklch(0.55 0.11 145);
+  --chart-5: oklch(0.6 0.08 250);
+
+  --sidebar: oklch(0.971 0.017 86);
+  --sidebar-foreground: oklch(0.325 0.038 48);
+  --sidebar-primary: oklch(0.305 0.036 55);
+  --sidebar-primary-foreground: oklch(0.971 0.017 86);
+  --sidebar-accent: oklch(0.905 0.03 84);
+  --sidebar-accent-foreground: oklch(0.305 0.036 55);
+  --sidebar-border: oklch(0.305 0.036 55 / 18%);
+  --sidebar-ring: oklch(0.664 0.108 63);
+
+  --shadow-soft: 0 3px 0 0 oklch(0.305 0.036 55 / 30%);
+  --shadow-panel: 0 4px 0 0 oklch(0.305 0.036 55 / 18%), 0 14px 28px -20px oklch(0.305 0.036 55 / 45%);
+  --shadow-lift: 0 8px 0 0 oklch(0.305 0.036 55 / 18%), 0 22px 34px -22px oklch(0.305 0.036 55 / 45%);
+  --gradient-warm: linear-gradient(
+    170deg,
+    oklch(0.962 0.024 88) 0%,
+    oklch(0.933 0.034 85.5) 60%,
+    oklch(0.915 0.038 82) 100%
+  );
+  --gradient-gold: linear-gradient(180deg, oklch(0.735 0.105 70), oklch(0.645 0.115 58));
+}
+
+
+.dark {
+  --background: oklch(0.24 0.028 55);
+  --foreground: oklch(0.95 0.02 86);
+  --card: oklch(0.29 0.03 55);
+  --card-foreground: oklch(0.95 0.02 86);
+  --popover: oklch(0.29 0.03 55);
+  --popover-foreground: oklch(0.95 0.02 86);
+  --primary: oklch(0.93 0.03 86);
+  --primary-foreground: oklch(0.28 0.03 55);
+  --secondary: oklch(0.34 0.03 55);
+  --secondary-foreground: oklch(0.95 0.02 86);
+  --muted: oklch(0.34 0.03 55);
+  --muted-foreground: oklch(0.76 0.025 78);
+  --accent: oklch(0.38 0.04 60);
+  --accent-foreground: oklch(0.95 0.02 86);
+  --border: oklch(0.95 0.02 86 / 16%);
+  --input: oklch(0.95 0.02 86 / 20%);
+  --sidebar: oklch(0.29 0.03 55);
+  --sidebar-foreground: oklch(0.95 0.02 86);
+  --sidebar-accent: oklch(0.36 0.03 55);
+  --sidebar-accent-foreground: oklch(0.95 0.02 86);
+  --sidebar-border: oklch(0.95 0.02 86 / 14%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-display {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gold);
+    outline-offset: 2px;
+  }
+}
+
+/* Subtle engineering / drafting paper grid — thin warm brown lines on cream */
+@utility blueprint {
+  background-image:
+    linear-gradient(to right, oklch(0.305 0.036 55 / 5%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.305 0.036 55 / 5%) 1px, transparent 1px),
+    linear-gradient(to right, oklch(0.305 0.036 55 / 9%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.305 0.036 55 / 9%) 1px, transparent 1px);
+  background-size:
+    24px 24px,
+    24px 24px,
+    120px 120px,
+    120px 120px;
+}
+
+/* Blue engineering blueprint accent — for diagrams / almanac panels only */
+@utility blueprint-blue {
+  background-color: oklch(0.42 0.09 250);
+  background-image:
+    linear-gradient(to right, oklch(0.95 0.02 250 / 16%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.95 0.02 250 / 16%) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+/* Chunky game-UI panel: cream fill, thick brown outline, hard bottom shadow */
+@utility panel {
+  background-color: var(--color-card);
+  border: 2px solid oklch(0.305 0.036 55 / 45%);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Game screenshot frame */
+@utility game-frame {
+  background-color: var(--color-card);
+  border: 3px solid oklch(0.305 0.036 55 / 55%);
+  border-radius: var(--radius-3xl);
+  box-shadow: var(--shadow-lift);
+  overflow: hidden;
+}
+
+@utility hover-lift {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease;
+
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lift);
+  }
+}
+
+@utility warm-gradient {
+  background-image: var(--gradient-warm);
+}
+
+@utility gold-gradient {
+  background-image: var(--gradient-gold);
+}
+
+/* Truss-inspired divider stripe */
+@utility truss-rule {
+  height: 10px;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    oklch(0.664 0.108 63 / 55%) 0 10px,
+    transparent 10px 20px
+  );
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ============================================================
+ * CIVIL CRAFT GAME-ART LAYER
+ * Shared visual language: scenes, wooden beams, blueprint pages,
+ * engineer notebook paper. Used site-wide instead of card grids.
+ * ============================================================ */
+
+/* Wooden construction beam — used as a section transition */
+@utility beam-texture {
+  background-color: oklch(0.55 0.06 60);
+  background-image:
+    repeating-linear-gradient(
+      90deg,
+      oklch(0.305 0.036 55 / 22%) 0 2px,
+      transparent 2px 46px
+    ),
+    linear-gradient(180deg, oklch(0.62 0.06 62), oklch(0.46 0.055 55));
+  border-top: 2px solid oklch(0.305 0.036 55 / 55%);
+  border-bottom: 2px solid oklch(0.305 0.036 55 / 55%);
+}
+
+/* Dashed drafting line, for light-weight section transitions */
+@utility draft-line {
+  height: 2px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    oklch(0.305 0.036 55 / 40%) 0 14px,
+    transparent 14px 26px
+  );
+}
+
+/* Engineer notebook page: cream paper, warm rule lines, margin edge */
+@utility paper-panel {
+  background-color: var(--color-card);
+  background-image:
+    linear-gradient(90deg, transparent 0 46px, oklch(0.53 0.13 27 / 24%) 46px 47px, transparent 47px),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 31px,
+      oklch(0.305 0.036 55 / 10%) 31px 32px
+    );
+  border: 2px solid oklch(0.305 0.036 55 / 45%);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Blueprint construction page — for diagrams and build-mode content only */
+@utility blueprint-page {
+  background-color: oklch(0.4 0.085 250);
+  background-image:
+    linear-gradient(to right, oklch(0.95 0.02 250 / 14%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.95 0.02 250 / 14%) 1px, transparent 1px),
+    linear-gradient(to right, oklch(0.95 0.02 250 / 26%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.95 0.02 250 / 26%) 1px, transparent 1px);
+  background-size:
+    20px 20px,
+    20px 20px,
+    100px 100px,
+    100px 100px;
+  color: oklch(0.96 0.02 250);
+  border: 2px solid oklch(0.28 0.06 250);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-panel);
+}
+
+/* Full-bleed game scene: photo fades into the warm page */
+@utility scene-fade {
+  mask-image: linear-gradient(180deg, transparent 0, black 18%, black 78%, transparent 100%);
+}
+
+/* Floating low-poly prop — decorative, never interactive */
+@utility game-prop {
+  pointer-events: none;
+  position: absolute;
+  filter: drop-shadow(0 12px 18px oklch(0.305 0.036 55 / 32%));
+}
+
+/* Construction status / achievement stamp */
+@utility stamp {
+  border: 2px dashed oklch(0.664 0.108 63 / 70%);
+  border-radius: 999px;
+  color: var(--color-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-weight: 800;
+  transform: rotate(-6deg);
+}
+
+
+
+/* Featured gameplay showcase: slightly stronger engineering grid than the page */
+@utility showcase-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.305 0.036 55 / 8%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.305 0.036 55 / 8%) 1px, transparent 1px),
+    linear-gradient(to right, oklch(0.305 0.036 55 / 14%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.305 0.036 55 / 14%) 1px, transparent 1px);
+  background-size:
+    26px 26px,
+    26px 26px,
+    130px 130px,
+    130px 130px;
+}
+
+/* Large game display / mission preview panel */
+@utility showcase-panel {
+  background-color: var(--color-card);
+  border: 3px solid oklch(0.305 0.036 55 / 75%);
+  border-radius: var(--radius-3xl);
+  box-shadow:
+    inset 0 2px 0 0 oklch(0.985 0.012 86 / 80%),
+    var(--shadow-lift);
+}
