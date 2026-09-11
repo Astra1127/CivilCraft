@@ -1,29 +1,35 @@
-# Welcome to your Lovable project
+# Civil Craft: Bridge Edition
 
-This project was built with [Lovable](https://lovable.dev).
+The Civil Craft website, Player Dashboard and Admin Dashboard, built with React, TypeScript, TanStack Start and Tailwind CSS.
 
-## Build with Lovable
+## Local development
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Use Node.js and npm:
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+npm ci
 npm run dev
 ```
 
-## Built with
+## Production build
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+```sh
+npm run build
+```
+
+The standard Nitro Vite plugin builds the server and detects the deployment provider, including Vercel. See the [TanStack hosting guide](https://tanstack.com/start/latest/docs/framework/react/guide/hosting). The custom SSR error handler remains in src/server.ts. For the default local Node build, run `node .output/server/index.mjs`.
+
+Gameplay images are bundled from src/assets and require no external asset proxy.
+
+## Public game configuration
+
+`VITE_PLAYFAB_TITLE_ID` overrides the default Civil Craft title `17FA03`. Player sign-in continues to use PlayFab.
+
+## Administrator sign-in
+
+Staff use server-verified Civil Craft credentials at `/admin/login`, separately from PlayFab player login.
+Complete the [administrator setup guide](docs/admin-authentication.md) and the
+server-only values in `.env.example`. Missing configuration fails closed.
+Run `npm run test:auth` for the isolated authentication checks.
+
+Administrative PlayFab backend setup and Phase 3 validation: [PlayFab admin backend](docs/playfab-admin-backend.md).

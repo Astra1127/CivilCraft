@@ -21,7 +21,7 @@ export const Route = createFileRoute("/signup")({
       {
         name: "description",
         content:
-          "Create your Civil Craft engineer account to track progress, achievements and leaderboard rank alongside the game.",
+          "Create your Civil Craft engineer account to track progress and achievements alongside the game.",
       },
       { property: "og:title", content: "Become an Engineer — Civil Craft" },
       { property: "og:description", content: "Create your Civil Craft player account." },
@@ -104,12 +104,7 @@ function SignupPage() {
     }
   };
 
-  const field = (
-    id: keyof typeof values,
-    label: string,
-    type = "text",
-    autoComplete?: string,
-  ) => (
+  const field = (id: keyof typeof values, label: string, type = "text", autoComplete?: string) => (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
       <Input
@@ -124,10 +119,7 @@ function SignupPage() {
     </div>
   );
 
-  const passwordField = (
-    id: "password" | "confirm",
-    label: string,
-  ) => (
+  const passwordField = (id: "password" | "confirm", label: string) => (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
       <div className="relative">
@@ -190,7 +182,7 @@ function SignupPage() {
               <>
                 <h1 className="mt-6 text-3xl">Become an Engineer</h1>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Create your account to track progress, achievements and rank.
+                  Create your account to track progress and achievements.
                 </p>
 
                 <form onSubmit={submit} noValidate className="mt-6 space-y-4">
@@ -233,8 +225,8 @@ function SignupPage() {
                 </form>
 
                 <IntegrationNotice>
-                  Your account is created on the Civil Craft game servers, so you can use it to
-                  play the game as well as sign in here.
+                  Your account is created on the Civil Craft game servers, so you can use it to play
+                  the game as well as sign in here.
                 </IntegrationNotice>
 
                 <p className="mt-4 text-center text-sm font-semibold">

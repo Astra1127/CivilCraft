@@ -3,11 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Receipt } from "lucide-react";
 import { useState } from "react";
 import { AdminHeading, AdminPage, FilterChips, Panel, StatusPill } from "@/components/admin/ui";
-import { DemoBadge } from "@/components/common/DemoBadge";
 import { ErrorState, LoadingState } from "@/components/common/States";
 import { EmptyState } from "@/components/common/States";
 import { formatDate } from "@/lib/cms/store";
-import { transactionService, usingMockData, type Transaction } from "@/lib/playfab";
+import { adminPlayerService, type Transaction } from "@/lib/playfab";
 
 export const Route = createFileRoute("/admin/transactions")({
   component: AdminTransactions,
@@ -34,7 +33,7 @@ function AdminTransactions() {
   const [filter, setFilter] = useState<Filter>("All");
   const query = useQuery({
     queryKey: ["admin", "transactions"],
-    queryFn: () => transactionService.getTransactions(),
+    queryFn: () => adminPlayerService.getTransactions(),
   });
 
   const rows = (query.data ?? []).filter((t) => filter === "All" || t.type === filter);
@@ -44,7 +43,6 @@ function AdminTransactions() {
       <AdminHeading
         title="Transactions"
         description="Purchases and granted rewards recorded by the game backend. Read-only — the website never grants items or currency."
-        status={usingMockData ? <DemoBadge label="Development data" /> : undefined}
       />
 
       <FilterChips options={filters} value={filter} onChange={setFilter} />

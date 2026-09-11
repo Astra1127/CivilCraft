@@ -3,19 +3,13 @@
  *
  * Every PlayFab request in the browser goes through `callPlayFab` so no
  * component ever builds a PlayFab URL itself. Only the Client API is reachable
- * from here — Admin/Server APIs require the Developer Secret Key and live
- * exclusively on the server (`admin.server.ts`).
+ * from here. Privileged administrator APIs are not configured.
  */
 import { playFabConfig, playFabUrl } from "./config";
 import type { PlayerIdentity } from "./types";
 
 export type PlayFabErrorKind =
-  | "network"
-  | "credentials"
-  | "session_expired"
-  | "not_found"
-  | "service"
-  | "unknown";
+  "network" | "credentials" | "session_expired" | "not_found" | "service" | "unknown";
 
 export class PlayFabError extends Error {
   kind: PlayFabErrorKind;
@@ -97,8 +91,6 @@ export interface PlayFabSession {
   entityToken?: string;
   entityId?: string;
   entityType?: string;
-  /** Admin sessions carry a server-issued token instead of PlayFab powers. */
-  adminToken?: string;
 }
 
 const SESSION_KEYS: Record<AuthScope, string> = {
@@ -109,7 +101,7 @@ const SESSION_KEYS: Record<AuthScope, string> = {
 const LEGACY_SESSION_KEY = "civilcraft.session.v1";
 
 export function readSession(scope: AuthScope): PlayFabSession | null {
-  if (typeof window === "undefined") return null;
+  if (typeof window === "undefined" || scope !== "player") return null;
   try {
     const raw = window.localStorage.getItem(SESSION_KEYS[scope]);
     if (!raw) return null;
@@ -122,7 +114,7 @@ export function readSession(scope: AuthScope): PlayFabSession | null {
 }
 
 export function writeSession(scope: AuthScope, session: PlayFabSession): void {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined" || scope !== "player") return;
   window.localStorage.setItem(SESSION_KEYS[scope], JSON.stringify(session));
 }
 

@@ -1,14 +1,7 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import {
-  ChevronDown,
-  LayoutDashboard,
-  LogIn,
-  LogOut,
-  Menu,
-  Settings,
-  User,
-} from "lucide-react";
+import { ChevronDown, LayoutDashboard, LogIn, LogOut, Menu, Settings, User } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,25 +23,32 @@ const publicLinks = [
   { to: "/contact", label: "Contact" },
 ] as const;
 
-
-
 function initials(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase() || "?";
+  return (
+    name
+      .split(" ")
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?"
+  );
 }
 
 export function SiteNavbar() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const { isAuthenticated, player, logout } = useAuth();
+  const { isAuthenticated, isAdmin, adminReady, player, admin, logout } = useAuth();
+  const hasAccount = adminReady && (isAuthenticated || isAdmin);
+  const account = isAdmin ? admin : player;
+  const dashboardTo = isAdmin ? "/admin" : "/dashboard";
 
   const signOut = async () => {
-    await logout();
-    navigate({ to: "/login", replace: true });
+    try {
+      await logout(isAdmin ? "admin" : "player");
+      navigate({ to: isAdmin ? "/admin/login" : "/login", replace: true });
+    } catch {
+      toast.error("Sign-out failed. Please check your connection and try again.");
+    }
   };
 
   return (
@@ -79,7 +79,7 @@ export function SiteNavbar() {
         </ul>
 
         <div className="ml-auto flex shrink-0 items-center gap-2 xl:ml-0">
-          {isAuthenticated ? (
+          {hasAccount ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -89,30 +89,35 @@ export function SiteNavbar() {
                 >
                   <Avatar className="h-7 w-7 border border-border">
                     <AvatarFallback className="bg-gold/15 text-xs font-extrabold text-gold">
-                      {initials(player?.displayName ?? "Player")}
+                      {initials(account?.displayName ?? "Account")}
                     </AvatarFallback>
                   </Avatar>
                   <span className="hidden max-w-[8rem] truncate sm:inline">
-                    {player?.displayName ?? "Player"}
+                    {account?.displayName ?? "Account"}
                   </span>
                   <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 border-2 border-border bg-card">
                 <DropdownMenuItem asChild className="cursor-pointer">
-                  <Link to="/dashboard" className="flex items-center gap-2">
+                  <Link to={dashboardTo} className="flex items-center gap-2">
                     <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-                    Player Dashboard
+                    {isAdmin ? "Admin Dashboard" : "Player Dashboard"}
                   </Link>
                 </DropdownMenuItem>
+                {!isAdmin ? (
+                  <DropdownMenuItem asChild className="cursor-pointer">
+                    <Link to="/dashboard/profile" className="flex items-center gap-2">
+                      <User className="h-4 w-4" aria-hidden="true" />
+                      Profile
+                    </Link>
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem asChild className="cursor-pointer">
-                  <Link to="/dashboard/profile" className="flex items-center gap-2">
-                    <User className="h-4 w-4" aria-hidden="true" />
-                    Profile
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="cursor-pointer">
-                  <Link to="/dashboard/settings" className="flex items-center gap-2">
+                  <Link
+                    to={isAdmin ? "/admin/settings" : "/dashboard/settings"}
+                    className="flex items-center gap-2"
+                  >
                     <Settings className="h-4 w-4" aria-hidden="true" />
                     Settings
                   </Link>
@@ -161,17 +166,16 @@ export function SiteNavbar() {
                     </Link>
                   </li>
                 ))}
-                {isAuthenticated ? (
+                {hasAccount ? (
                   <>
                     <li>
                       <Link
-                        to="/dashboard"
+                        to={dashboardTo}
                         onClick={() => setOpen(false)}
                         className="block rounded-xl border-2 border-transparent px-3 py-2.5 text-base font-bold hover:bg-accent/60"
                       >
-                        Player Dashboard
+                        {isAdmin ? "Admin Dashboard" : "Player Dashboard"}
                       </Link>
-
                     </li>
                     <li>
                       <button

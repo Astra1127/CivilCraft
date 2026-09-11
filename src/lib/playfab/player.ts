@@ -55,7 +55,9 @@ interface AccountInfoResult {
 export async function getPlayerProfile(playFabId?: string): Promise<PlayerProfile> {
   const stored = readSession("player");
   const [account, data, stats] = await Promise.all([
-    callPlayerApi<AccountInfoResult>("/Client/GetAccountInfo", {}).catch(() => ({}) as AccountInfoResult),
+    callPlayerApi<AccountInfoResult>("/Client/GetAccountInfo", {}).catch(
+      () => ({}) as AccountInfoResult,
+    ),
     getPlayerData().catch(() => ({}) as Record<string, string>),
     getPlayerStatisticMap().catch(() => ({}) as Record<string, number>),
   ]);
@@ -81,9 +83,9 @@ export async function getPlayerProfile(playFabId?: string): Promise<PlayerProfil
     xp: numberFrom(data, "XP") ?? 0,
     xpToNextLevel: numberFrom(data, "XPToNextLevel") ?? 0,
     totalScore: stats["TotalScore"] ?? 0,
-    rank: null,
     bridgesCompleted: stats["BridgesCompleted"] ?? numberFrom(data, "BridgesCompleted") ?? 0,
-    challengesCompleted: stats["ChallengesCompleted"] ?? numberFrom(data, "ChallengesCompleted") ?? 0,
+    challengesCompleted:
+      stats["ChallengesCompleted"] ?? numberFrom(data, "ChallengesCompleted") ?? 0,
     achievementsUnlocked: numberFrom(data, "AchievementsUnlocked") ?? 0,
     achievementsTotal: numberFrom(data, "AchievementsTotal") ?? 0,
     ...(currentRegion ? { currentRegion } : {}),
@@ -111,7 +113,11 @@ export async function getEquippedCosmetics(): Promise<EquippedCosmetics> {
 
 /** The in-game character as last synced by the game. */
 export async function getPlayerCharacter(): Promise<PlayerCharacter> {
-  const data = await getPlayerData(["EquippedCosmetics", "CharacterPortraitUrl", "CharacterSyncedAt"]);
+  const data = await getPlayerData([
+    "EquippedCosmetics",
+    "CharacterPortraitUrl",
+    "CharacterSyncedAt",
+  ]);
   const equippedMap = jsonFrom<Record<string, { itemId: string; name?: string }>>(
     data,
     "EquippedCosmetics",

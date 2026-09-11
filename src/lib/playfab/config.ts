@@ -6,9 +6,8 @@
  * game. The Title ID is public information and is therefore safe in client
  * code; the Developer Secret Key is NOT and must never appear here.
  *
- * Works identically in Lovable preview, a published build, an exported
- * project, VS Code, localhost and any other host — no Lovable-specific
- * service is involved. `VITE_PLAYFAB_TITLE_ID` is honoured when present, but
+ * Works identically in local development and published builds on any host.
+ * `VITE_PLAYFAB_TITLE_ID` is honoured when present, but
  * the title falls back to the real Civil Craft title so a missing .env file
  * can never break connectivity.
  */
@@ -37,4 +36,4 @@ export function playFabUrl(path: string): string {
  * labelled in the UI.
  */
 export const demoMode =
-  (import.meta.env["VITE_PLAYFAB_DEMO"] as string | undefined)?.toLowerCase() === "true";
+  (import.meta.env["VITE_PLAYFAB_DEMO"] as string | undefined)?.toLowerCase() === "false";

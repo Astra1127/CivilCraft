@@ -2,6 +2,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Bell, LogOut, Menu } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { BrandMark } from "@/components/site/BrandMark";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { ReportBugDialog } from "@/components/dashboard/ReportBugDialog";
@@ -18,7 +19,6 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { formatDate, useCms } from "@/lib/cms/store";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-
 
 export interface DashboardNavItem {
   to: string;
@@ -102,10 +102,13 @@ export function DashboardShell({
   const admin = variant === "admin";
   const notifications = useCms((s) => s.activity).slice(0, 6);
 
-
   const signOut = async () => {
-    await logout(admin ? "admin" : "player");
-    navigate({ to: admin ? "/admin/login" : "/login", replace: true });
+    try {
+      await logout(admin ? "admin" : "player");
+      navigate({ to: admin ? "/admin/login" : "/login", replace: true });
+    } catch {
+      toast.error("Sign-out failed. Please check your connection and try again.");
+    }
   };
 
   return (
@@ -138,7 +141,12 @@ export function DashboardShell({
             {admin ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="relative"
+                    aria-label="Notifications"
+                  >
                     <Bell className="h-5 w-5" aria-hidden="true" />
                     {notifications.length > 0 ? (
                       <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-gold" />
@@ -149,7 +157,9 @@ export function DashboardShell({
                   <DropdownMenuLabel className="font-display">Recent activity</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   {notifications.length === 0 ? (
-                    <p className="px-3 py-4 text-sm text-muted-foreground">Nothing new right now.</p>
+                    <p className="px-3 py-4 text-sm text-muted-foreground">
+                      Nothing new right now.
+                    </p>
                   ) : (
                     <ul className="max-h-72 space-y-1 overflow-y-auto p-1">
                       {notifications.map((n) => (
@@ -177,7 +187,6 @@ export function DashboardShell({
               Sign out
             </Button>
           </div>
-
         </div>
       </header>
 
@@ -210,4 +219,3 @@ export function DashboardShell({
     </div>
   );
 }
-

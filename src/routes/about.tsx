@@ -36,9 +36,9 @@ import { useAuth } from "@/lib/auth";
 import type { TeamMember } from "@/lib/cms/types";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
 import chibiEngineer from "@/assets/chibi-engineer.png";
-import shotExplore from "@/assets/gameplay.jpg.asset.json";
-import shotBuild from "@/assets/gameplay-2.jpg.asset.json";
-import shotTest from "@/assets/gameplay-3.jpg.asset.json";
+import shotExplore from "@/assets/explore-world.jpg";
+import shotBuild from "@/assets/build-mode.jpg";
+import shotTest from "@/assets/load-test.jpg";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -90,14 +90,42 @@ const roleSteps = [
 ];
 
 const concepts = [
-  { icon: GitCompareArrows, title: "Structural Forces", text: "How forces travel through bridge members." },
-  { icon: Layers, title: "Tension & Compression", text: "Which parts are pulled apart and which are pushed together." },
+  {
+    icon: GitCompareArrows,
+    title: "Structural Forces",
+    text: "How forces travel through bridge members.",
+  },
+  {
+    icon: Layers,
+    title: "Tension & Compression",
+    text: "Which parts are pulled apart and which are pushed together.",
+  },
   { icon: Ruler, title: "Load Distribution", text: "How weight spreads across the structure." },
-  { icon: ShieldCheck, title: "Bridge Stability", text: "What keeps a structure standing under load." },
-  { icon: Boxes, title: "Material Properties", text: "What each available material can and cannot take." },
-  { icon: Sparkles, title: "Structural Failure", text: "Where and why a bridge gives way during the test." },
-  { icon: Coins, title: "Budget & Cost", text: "Building an adequate structure within the level's budget." },
-  { icon: Puzzle, title: "Problem Solving", text: "Reading a failed test and improving the design." },
+  {
+    icon: ShieldCheck,
+    title: "Bridge Stability",
+    text: "What keeps a structure standing under load.",
+  },
+  {
+    icon: Boxes,
+    title: "Material Properties",
+    text: "What each available material can and cannot take.",
+  },
+  {
+    icon: Sparkles,
+    title: "Structural Failure",
+    text: "Where and why a bridge gives way during the test.",
+  },
+  {
+    icon: Coins,
+    title: "Budget & Cost",
+    text: "Building an adequate structure within the level's budget.",
+  },
+  {
+    icon: Puzzle,
+    title: "Problem Solving",
+    text: "Reading a failed test and improving the design.",
+  },
 ];
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -152,14 +180,18 @@ function AboutPage() {
   useHashScroll();
   const { isAuthenticated } = useAuth();
   const about = useCms((s) => s.about);
-  const team = [...(about?.team ?? [])].filter((m) => m.published).sort((a, b) => a.order - b.order);
+  const team = [...(about?.team ?? [])]
+    .filter((m) => m.published)
+    .sort((a, b) => a.order - b.order);
   const story = about?.story;
   const academic = about?.academic;
   const [active, setActive] = useState<TeamMember | null>(null);
 
   // Player-only reference: send guests to login first, admins to their own area.
   const almanacTo = isAuthenticated ? "/dashboard/almanac" : "/login";
-  const almanacLabel = isAuthenticated ? "Explore the Bridge Almanac" : "Log in to open the Almanac";
+  const almanacLabel = isAuthenticated
+    ? "Explore the Bridge Almanac"
+    : "Log in to open the Almanac";
 
   return (
     <PublicLayout>
@@ -215,7 +247,7 @@ function AboutPage() {
         <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
           <div className="game-frame p-2">
             <img
-              src={shotExplore.url}
+              src={shotExplore}
               alt="Civil Craft gameplay: a chibi engineer surveying a canyon crossing"
               loading="lazy"
               width={1920}
@@ -225,9 +257,21 @@ function AboutPage() {
           </div>
           <ul className="mt-6 grid gap-6 sm:grid-cols-3 sm:divide-x-2 sm:divide-dashed sm:divide-border">
             {[
-              { icon: Hammer, title: "Build", text: "Design and construct bridges for each crossing." },
-              { icon: Weight, title: "Test", text: "Run load simulations and watch how the bridge behaves." },
-              { icon: GraduationCap, title: "Learn", text: "Understand the engineering behind your design." },
+              {
+                icon: Hammer,
+                title: "Build",
+                text: "Design and construct bridges for each crossing.",
+              },
+              {
+                icon: Weight,
+                title: "Test",
+                text: "Run load simulations and watch how the bridge behaves.",
+              },
+              {
+                icon: GraduationCap,
+                title: "Learn",
+                text: "Understand the engineering behind your design.",
+              },
             ].map((p) => (
               <li key={p.title} className="min-w-0 sm:px-6 sm:first:pl-0 sm:last:pr-0">
                 <p.icon className="h-7 w-7 text-gold" aria-hidden="true" />
@@ -246,7 +290,9 @@ function AboutPage() {
         <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <div className="min-w-0">
             <Label>The story</Label>
-            <h2 className="mt-2 text-3xl sm:text-4xl">{story?.heading ?? "One canyon at a time."}</h2>
+            <h2 className="mt-2 text-3xl sm:text-4xl">
+              {story?.heading ?? "One canyon at a time."}
+            </h2>
             {(story?.fullStory ?? "").split("\n\n").map((para) => (
               <p key={para.slice(0, 24)} className="mt-3 text-muted-foreground">
                 {para}
@@ -290,8 +336,8 @@ function AboutPage() {
               <Label>Your role</Label>
               <h2 className="mt-2 text-3xl sm:text-4xl">Become the engineer.</h2>
               <p className="mt-3 text-muted-foreground">
-                Every crossing is handed over as an engineering contract. This is the loop you repeat
-                in every region.
+                Every crossing is handed over as an engineering contract. This is the loop you
+                repeat in every region.
               </p>
               <GameArt
                 kind="engineer"
@@ -329,7 +375,7 @@ function AboutPage() {
           <div className="grid gap-10 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:items-center">
             <div className="game-frame p-2">
               <img
-                src={shotTest.url}
+                src={shotTest}
                 alt="A Civil Craft bridge deforming under a load simulation"
                 loading="lazy"
                 width={1920}
@@ -341,9 +387,9 @@ function AboutPage() {
               <Label>Engineering through play</Label>
               <h2 className="mt-2 text-3xl sm:text-4xl">The physics is the teacher.</h2>
               <p className="mt-3 text-muted-foreground">
-                Civil Craft introduces engineering concepts through bridge-building challenges. Every
-                idea below is something the player meets directly in the game — in the build screen,
-                in the budget, or in the moment a structure gives way.
+                Civil Craft introduces engineering concepts through bridge-building challenges.
+                Every idea below is something the player meets directly in the game — in the build
+                screen, in the budget, or in the moment a structure gives way.
               </p>
             </div>
           </div>
@@ -363,13 +409,12 @@ function AboutPage() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <BookOpen className="h-5 w-5 text-gold" aria-hidden="true" />
-                <h3 className="font-display text-xl">
-                  Want to understand the engineering behind your bridge?
-                </h3>
+                <h3 className="font-display text-xl">Revisit what you discovered in the game</h3>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                The Bridge Almanac inside the Player Dashboard provides additional information about
-                the bridge types, structural mechanics and game concepts encountered in Civil Craft.
+                Learning happens as you build, test, observe and improve. Your Bridge Almanac
+                records completed bridges and provides a reference for the bridge types, materials
+                and engineering concepts you encounter along the way.
               </p>
             </div>
             <Button asChild variant="gold" className="shrink-0">
@@ -395,7 +440,7 @@ function AboutPage() {
           <div className="mt-8 grid gap-6 lg:grid-cols-2">
             <article className="min-w-0 overflow-hidden rounded-3xl border-2 border-border bg-card shadow-[var(--shadow-soft)]">
               <img
-                src={shotBuild.url}
+                src={shotBuild}
                 alt="Civil Craft story mode build screen over a canyon contract"
                 loading="lazy"
                 width={1920}
@@ -436,7 +481,10 @@ function AboutPage() {
       </section>
 
       {/* ── 06 · MEET THE DEVELOPMENT TEAM ───────────────── */}
-      <section id="team" className="scroll-mt-20 border-y-2 border-border bg-card/60 py-14 sm:py-20">
+      <section
+        id="team"
+        className="scroll-mt-20 border-y-2 border-border bg-card/60 py-14 sm:py-20"
+      >
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="max-w-2xl">
             <Label>Behind Civil Craft</Label>
@@ -518,9 +566,9 @@ function AboutPage() {
           <Label>Academic project</Label>
           <h2 className="mt-2 text-2xl sm:text-3xl">Built for learning.</h2>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-            Civil Craft: Bridge Edition is developed as an academic thesis/capstone project. The game
-            is the practical output of that research: an interactive way to present introductory
-            structural engineering concepts.
+            Civil Craft: Bridge Edition is developed as an academic thesis/capstone project. The
+            game is the practical output of that research: an interactive way to present
+            introductory structural engineering concepts.
           </p>
           <dl className="mt-7 grid gap-x-8 gap-y-5 border-t-2 border-dashed border-border pt-6 sm:grid-cols-2 lg:grid-cols-3">
             {[

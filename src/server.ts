@@ -2,6 +2,8 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { handleAdminRequest } from "./lib/admin-auth/http.server";
+import { handlePlayFabAdminRequest } from "./lib/playfab/admin-api.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -47,8 +49,16 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const apiResponse = await handlePlayFabAdminRequest(request);
+      if (apiResponse) return apiResponse;
+      const authResponse = await handleAdminRequest(request);
+      if (authResponse) return authResponse;
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
+      if (new URL(request.url).pathname.startsWith("/admin")) {
+        response.headers.set("Cache-Control", "no-store, private");
+        response.headers.append("Vary", "Cookie");
+      }
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);

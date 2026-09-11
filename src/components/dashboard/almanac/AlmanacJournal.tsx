@@ -26,7 +26,10 @@ const tabs = [
 export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string }) {
   const { player } = useAuth();
   const id = player?.playFabId ?? "";
-  const journey = useQuery({ queryKey: ["almanac-journey", id], queryFn: almanacService.getJourney });
+  const journey = useQuery({
+    queryKey: ["almanac-journey", id],
+    queryFn: almanacService.getJourney,
+  });
   const profile = useQuery({
     queryKey: ["profile", id],
     queryFn: () => profileService.getProfile(id),
@@ -66,10 +69,7 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
             </Avatar>
             <div className="min-w-0">
               <p className="truncate font-display text-lg">{p?.displayName ?? "—"}</p>
-              <p className="text-sm text-muted-foreground">
-                {p ? `Level ${p.level}` : "—"}
-                {p?.rank ? ` · Global rank #${p.rank}` : ""}
-              </p>
+              <p className="text-sm text-muted-foreground">{p ? `Level ${p.level}` : "—"}</p>
             </div>
             <dl className="grid w-full gap-1 text-sm sm:w-auto">
               <div className="flex justify-between gap-6">
@@ -114,50 +114,50 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
             />
           ) : null}
           {j.regions.length === 0 ? null : (
-          <section className="panel overflow-hidden p-6">
-            <h2 className="text-xl sm:text-2xl">Your engineering journey</h2>
-            <ol className="mt-5 flex gap-3 overflow-x-auto overflow-y-hidden pb-2 sm:grid sm:grid-flow-col sm:auto-cols-fr sm:overflow-hidden">
-              {j.regions.map((r, index) => (
-                <li key={r.regionId} className="relative min-w-[9rem] text-center">
-                  {index < j.regions.length - 1 ? (
+            <section className="panel overflow-hidden p-6">
+              <h2 className="text-xl sm:text-2xl">Your engineering journey</h2>
+              <ol className="mt-5 flex gap-3 overflow-x-auto overflow-y-hidden pb-2 sm:grid sm:grid-flow-col sm:auto-cols-fr sm:overflow-hidden">
+                {j.regions.map((r, index) => (
+                  <li key={r.regionId} className="relative min-w-[9rem] text-center">
+                    {index < j.regions.length - 1 ? (
+                      <span
+                        aria-hidden="true"
+                        className="absolute left-1/2 top-5 -z-10 hidden h-1 w-full bg-border sm:block"
+                      />
+                    ) : null}
                     <span
-                      aria-hidden="true"
-                      className="absolute left-1/2 top-5 -z-10 hidden h-1 w-full bg-border sm:block"
-                    />
-                  ) : null}
-                  <span
-                    className={cn(
-                      "mx-auto grid h-10 w-10 place-items-center rounded-full border-2",
-                      r.status === "completed"
-                        ? "gold-gradient border-primary text-gold-foreground"
-                        : r.status === "current"
-                          ? "border-gold bg-gold/15 text-gold"
-                          : "border-border bg-secondary text-muted-foreground",
-                    )}
-                  >
-                    {r.status === "completed" ? (
-                      <Check className="h-5 w-5" aria-hidden="true" />
-                    ) : r.status === "current" ? (
-                      <CircleDot className="h-5 w-5" aria-hidden="true" />
-                    ) : (
-                      <Lock className="h-4 w-4" aria-hidden="true" />
-                    )}
-                  </span>
-                  <p className="mt-2 truncate font-display text-xs uppercase tracking-[0.14em]">
-                    {r.name}
-                  </p>
-                  <p className="text-xs capitalize text-muted-foreground">{r.status}</p>
-                </li>
-              ))}
-            </ol>
-            <div className="mt-6">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Journey progress</span>
-                <span className="font-display">{j.journeyPercent}%</span>
+                      className={cn(
+                        "mx-auto grid h-10 w-10 place-items-center rounded-full border-2",
+                        r.status === "completed"
+                          ? "gold-gradient border-primary text-gold-foreground"
+                          : r.status === "current"
+                            ? "border-gold bg-gold/15 text-gold"
+                            : "border-border bg-secondary text-muted-foreground",
+                      )}
+                    >
+                      {r.status === "completed" ? (
+                        <Check className="h-5 w-5" aria-hidden="true" />
+                      ) : r.status === "current" ? (
+                        <CircleDot className="h-5 w-5" aria-hidden="true" />
+                      ) : (
+                        <Lock className="h-4 w-4" aria-hidden="true" />
+                      )}
+                    </span>
+                    <p className="mt-2 truncate font-display text-xs uppercase tracking-[0.14em]">
+                      {r.name}
+                    </p>
+                    <p className="text-xs capitalize text-muted-foreground">{r.status}</p>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-6">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Journey progress</span>
+                  <span className="font-display">{j.journeyPercent}%</span>
+                </div>
+                <Progress value={j.journeyPercent} className="mt-2" />
               </div>
-              <Progress value={j.journeyPercent} className="mt-2" />
-            </div>
-          </section>
+            </section>
           )}
 
           {j.regions.map((r) => (

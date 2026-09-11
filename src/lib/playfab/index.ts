@@ -3,8 +3,7 @@
  *
  * ALL player/game data access in the app goes through these services. They
  * talk to the PlayFab Client API directly from the browser (Title ID only,
- * never the secret key). Administrator features that require the Developer
- * Secret Key run through server endpoints in `admin.functions.ts`.
+ * never the secret key). Privileged administrator game operations are not configured.
  *
  * Demo/placeholder data is only used when VITE_PLAYFAB_DEMO=true, and is
  * always labelled in the UI.
@@ -19,16 +18,17 @@ import {
 } from "./auth";
 import {
   PlayFabError,
-  clearSession,
   currentSessionTicket,
-  readSession,
   writeSession,
   type AuthScope,
   type PlayFabSession,
 } from "./client";
 import { demoMode, playFabConfig } from "./config";
 import { getInventory as fetchInventory, getVirtualCurrency } from "./inventory";
-import { getLeaderboard as fetchLeaderboard, getPlayerRank as fetchPlayerRank } from "./leaderboard";
+import {
+  getLeaderboard as fetchLeaderboard,
+  getPlayerRank as fetchPlayerRank,
+} from "./leaderboard";
 import {
   mockAchievements,
   mockCharacter,
@@ -64,7 +64,6 @@ import type {
   PlayerInventory,
   PlayerNotification,
   PlayerProfile,
-  PlayerRole,
   PlayerProgress,
   PlayerStatistic,
   RegisterInput,
@@ -119,7 +118,7 @@ export function passwordIsValid(value: string) {
 export const authService = {
   /**
    * Player sign-in against the real Civil Craft PlayFab title. Administrator
-   * sign-in is a SEPARATE flow handled server-side (`adminLogin`).
+   * sign-in is a SEPARATE flow verified by the Civil Craft server.
    */
   async login({ email, password, scope = "player" }: LoginInput): Promise<PlayerIdentity> {
     if (scope === "admin") {
@@ -166,42 +165,14 @@ export const authService = {
     await sendRecoveryEmail(email);
   },
 
-  setSession(identity: PlayerIdentity, scope: AuthScope): void {
-    const existing = readSession(scope);
-    writeSession(scope, { ...(existing ?? { sessionTicket: "" }), identity });
-  },
-
-  /** Restores the persisted session for one portal. */
+  /** Only PlayFab player sessions can be restored from browser storage. */
   getCurrentUser(scope: AuthScope = "player"): PlayerIdentity | null {
-    if (scope === "admin") {
-      const session = readSession("admin");
-      if (!session?.adminToken) return null;
-      return session.identity;
-    }
-    return getStoredPlayer();
-  },
-
-  /** Server-issued administrator token; required by every admin endpoint. */
-  getAdminToken(): string | null {
-    return readSession("admin")?.adminToken ?? null;
-  },
-
-  storeAdminSession(identity: PlayerIdentity, token: string): void {
-    writeSession("admin", { identity, sessionTicket: "", adminToken: token });
-  },
-
-  getRole(identity: PlayerIdentity | null): PlayerRole | null {
-    if (!identity) return null;
-    return identity.role ?? (identity.isAdmin ? "admin" : "player");
-  },
-
-  isAuthenticated(scope: AuthScope = "player"): boolean {
-    return !!authService.getCurrentUser(scope);
+    return scope === "player" ? getStoredPlayer() : null;
   },
 
   async logout(scope: AuthScope = "player"): Promise<void> {
-    if (scope === "admin") clearSession("admin");
-    else signOutPlayer();
+    if (scope !== "player") throw new Error("Use the administrator sign-out endpoint.");
+    signOutPlayer();
   },
 };
 
@@ -338,58 +309,7 @@ export function getActivityStatus(
   return days <= INACTIVITY_THRESHOLD_DAYS ? "recently_active" : "inactive";
 }
 
-export const adminPlayerService = {
-  /** Player directory — always fetched through the secure server endpoint. */
-  async searchPlayers(query: string): Promise<PlayerProfile[]> {
-    if (demoMode) {
-      await latency(360);
-      return mockLeaderboard(0).map((e) => ({
-        ...mockProfile,
-        playFabId: e.playFabId,
-        displayName: e.displayName,
-        level: e.level,
-        totalScore: e.score,
-        rank: e.rank,
-        lastActive: e.updatedAt,
-        accountStatus: "active" as AccountStatus,
-      }));
-    }
-    const token = authService.getAdminToken();
-    if (!token) throw new Error("Administrator authorisation required.");
-    const { adminSearchPlayers } = await import("./admin.functions");
-    return adminSearchPlayers({ data: { token, query } });
-  },
-
-  /**
-   * Moderation. Progression data (level, XP, score, rank, achievements,
-   * cosmetics) is game-owned and can never be edited from the website.
-   */
-  async setAccountStatus(
-    playFabId: string,
-    status: AccountStatus,
-    reason?: string,
-  ): Promise<AccountStatus> {
-    if (status === "banned" && !reason?.trim()) {
-      throw new Error("A reason is required to ban a player.");
-    }
-    if (demoMode) {
-      await latency(280);
-      return status;
-    }
-    const token = authService.getAdminToken();
-    if (!token) throw new Error("Administrator authorisation required.");
-    const { adminSetBanned } = await import("./admin.functions");
-    await adminSetBanned({
-      data: {
-        token,
-        playFabId,
-        banned: status !== "active",
-        ...(reason ? { reason } : {}),
-      },
-    });
-    return status;
-  },
-};
+export { adminPlayerService } from "./admin-service";
 
 /* --------------------------------------------------------- transactions */
 

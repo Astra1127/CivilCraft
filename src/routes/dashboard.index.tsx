@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Hammer, Medal, Star, Trophy } from "lucide-react";
+import { Hammer, Medal, Star } from "lucide-react";
 import { DemoBadge } from "@/components/common/DemoBadge";
 import { CharacterPreview } from "@/components/dashboard/CharacterPreview";
 import { SectionHeading } from "@/components/common/PageHeader";
@@ -88,9 +88,8 @@ function PlayerOverview() {
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-3">
         <StatCard icon={Star} label="Total score" value={p.totalScore.toLocaleString()} />
-        <StatCard icon={Trophy} label="Global rank" value={p.rank ? `#${p.rank}` : "Unranked"} />
         <StatCard icon={Hammer} label="Bridges completed" value={p.bridgesCompleted} />
         <StatCard
           icon={Medal}

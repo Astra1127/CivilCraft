@@ -18,12 +18,12 @@ import { GameProp, GameArt } from "@/components/site/GameProp";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useCms, formatDate } from "@/lib/cms/store";
+import { useAuth } from "@/lib/auth";
 import heroKeyart from "@/assets/hero-keyart.jpg";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
-import shotExplore from "@/assets/gameplay.jpg.asset.json";
-import shotBuild from "@/assets/gameplay-2.jpg.asset.json";
-import shotTest from "@/assets/gameplay-3.jpg.asset.json";
-import shotTutorial from "@/assets/gameplay-4.jpg.asset.json";
+import shotExplore from "@/assets/explore-world.jpg";
+import shotBuild from "@/assets/build-mode.jpg";
+import shotTest from "@/assets/load-test.jpg";
 import worldBreak from "@/assets/world-break-strip.png";
 
 export const Route = createFileRoute("/")({
@@ -60,17 +60,17 @@ const pillars = [
   {
     icon: Hammer,
     title: "Build",
-    text: "Design and construct bridges for different challenges.",
+    text: "Start with a design that answers the bridge challenge.",
   },
   {
     icon: Gauge,
     title: "Test",
-    text: "Put your structures through simulated loads and structural tests.",
+    text: "Run the simulation and observe how your structure carries the load.",
   },
   {
     icon: BookOpen,
     title: "Learn",
-    text: "Understand engineering concepts through interactive gameplay.",
+    text: "Understand the result, then refine your next design.",
   },
 ];
 
@@ -78,42 +78,46 @@ const shots = [
   {
     id: "explore",
     label: "Explore",
-    src: shotExplore.url,
+    src: shotExplore,
     alt: "Chibi engineer walking through the low-poly canyon in Civil Craft",
   },
   {
     id: "build",
     label: "Build",
-    src: shotBuild.url,
+    src: shotBuild,
     alt: "Civil Craft blueprint build mode with beams placed on a grid",
   },
   {
     id: "test",
     label: "Test",
-    src: shotTest.url,
+    src: shotTest,
     alt: "A completed wooden bridge crossing the canyon during a Civil Craft simulation",
   },
   {
     id: "learn",
     label: "Learn",
-    src: shotTutorial.url,
-    alt: "An in-game tutorial panel explaining bridge forces with an NPC engineer",
+    src: shotTest,
+    alt: "Bridge load test showing member stress and the load carried by the structure",
   },
 ] as const;
 
 const journey = [
   { n: "01", title: "Explore", text: "Discover the environment and challenge." },
-  { n: "02", title: "Learn", text: "Understand the objective." },
-  { n: "03", title: "Plan", text: "Study the gap, loads and requirements." },
-  { n: "04", title: "Build", text: "Construct your bridge." },
-  { n: "05", title: "Test", text: "Run the simulation." },
-  { n: "06", title: "Improve", text: "Learn from the result and refine your design." },
+  { n: "02", title: "Plan", text: "Study the gap, loads and requirements." },
+  { n: "03", title: "Build", text: "Construct your bridge." },
+  { n: "04", title: "Test", text: "Run the simulation." },
+  { n: "05", title: "Learn", text: "Observe the result and identify weak points." },
+  { n: "06", title: "Improve", text: "Apply what you discovered to your next design." },
 ];
 
 const features = [
   { icon: Hammer, title: "Bridge Building", text: "Beam, truss, arch and suspension systems." },
   { icon: Gauge, title: "Physics Simulation", text: "Real load paths, stress and failure." },
-  { icon: BookOpen, title: "Engineering Learning", text: "Concepts taught by playing, not lecturing." },
+  {
+    icon: BookOpen,
+    title: "Engineering Learning",
+    text: "Concepts taught by playing, not lecturing.",
+  },
   { icon: Target, title: "Challenges", text: "Budgets, terrain and safety margins to beat." },
 ];
 
@@ -133,6 +137,7 @@ function Checks({ items }: { items: string[] }) {
 }
 
 function HomePage() {
+  const { player } = useAuth();
   const [active, setActive] = useState<string>("explore");
   const news = useCms((s) =>
     s.news
@@ -147,7 +152,10 @@ function HomePage() {
     <PublicLayout>
       {/* ---------- HERO: enter the world ---------- */}
       <section className="relative overflow-hidden border-b-2 border-border bg-background">
-        <div className="blueprint pointer-events-none absolute inset-0 opacity-70" aria-hidden="true" />
+        <div
+          className="blueprint pointer-events-none absolute inset-0 opacity-70"
+          aria-hidden="true"
+        />
         <div className="relative mx-auto grid max-w-7xl items-center gap-8 px-4 pb-12 pt-12 sm:px-6 lg:min-h-[38rem] lg:grid-cols-[minmax(0,42fr)_minmax(0,58fr)] lg:gap-4 lg:pb-16 lg:pt-20">
           <div className="min-w-0">
             <Badge
@@ -162,8 +170,8 @@ function HomePage() {
             </h1>
             <p className="mt-3 font-display text-xl">Build. Test. Learn.</p>
             <p className="mt-4 max-w-lg text-muted-foreground">
-              Step into a low-poly desert canyon, take an engineering contract, draft your bridge and
-              send the truck across to find out whether your structure holds.
+              Step into a low-poly desert canyon, take an engineering contract, draft your bridge
+              and send the truck across to find out whether your structure holds.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button asChild size="lg" variant="gold">
@@ -239,8 +247,8 @@ function HomePage() {
             </p>
             <h2 className="mt-3 text-3xl sm:text-4xl">Build. Test. Learn.</h2>
             <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-              Civil Craft: Bridge Edition combines bridge construction, physics simulation and
-              engineering learning inside a playful low-poly world.
+              Explore the canyon, build the bridge, run the simulation, learn from the result, and
+              improve the next design. Each contract continues the same learning loop.
             </p>
           </div>
 
@@ -263,7 +271,6 @@ function HomePage() {
         </div>
       </section>
 
-
       {/* ---------- STORY TEASER ---------- */}
       <section className="relative overflow-hidden border-y-2 border-border bg-card/60 py-12">
         <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -283,7 +290,7 @@ function HomePage() {
               </Link>
             </Button>
           </div>
-          <div className="game-frame p-2">
+          <div className="game-frame min-w-0 p-2">
             <img
               src={canyonPanorama}
               alt="Low-poly Civil Craft canyon split by a deep gap"
@@ -305,7 +312,7 @@ function HomePage() {
             </p>
             <h2 className="mt-3 text-3xl sm:text-4xl">See Civil Craft in Action</h2>
             <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-              Explore, build and test your way through Civil Craft.
+              Explore, build, test, learn from the result, and improve your next design.
             </p>
           </div>
 
@@ -321,7 +328,7 @@ function HomePage() {
                   Gameplay preview
                 </span>
                 <span className="rounded-full border-2 border-gold/60 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold">
-                  {shot.label} mode
+                  {shot.label}
                 </span>
               </div>
 
@@ -385,7 +392,6 @@ function HomePage() {
 
       <SectionDivider variant="ridge" />
 
-
       {/* ---------- ENGINEERING JOURNEY (construction route, no cards) ---------- */}
       <section className="relative overflow-hidden bg-secondary/40 py-12">
         <GameProp kind="rocks" className="-left-28 bottom-2 w-44 opacity-60" />
@@ -411,10 +417,10 @@ function HomePage() {
             <StepLink dir="down" />
 
             {/* row 2: 06 ← 05 ← 04 */}
-            <div className="flex flex-col items-stretch gap-8 md:flex-row md:items-start md:gap-0">
-              {[...journey.slice(3)].reverse().map((s, i) => (
+            <div className="flex flex-col items-stretch gap-8 md:flex-row-reverse md:items-start md:gap-0">
+              {journey.slice(3).map((s, i) => (
                 <div key={s.n} className="flex min-w-0 flex-1 md:items-start">
-                  {i > 0 ? <StepLink dir="left" /> : null}
+                  {i < 2 ? <StepLink dir="left" /> : null}
                   <Step {...s} />
                 </div>
               ))}
@@ -423,17 +429,15 @@ function HomePage() {
         </div>
       </section>
 
-
       <SectionDivider variant="ridge" />
 
       {/* ---------- A. EXPLORE THE WORLD (image LEFT / text RIGHT) ---------- */}
       <section className="relative overflow-hidden border-y-2 border-border bg-card/60">
         <GameProp kind="rocks" className="-right-16 bottom-0 w-64 opacity-80" />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-2">
-
-          <div className="game-frame p-2">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-12 lg:grid-cols-2 lg:gap-10">
+          <div className="game-frame min-w-0 p-2">
             <img
-              src={shotExplore.url}
+              src={shotExplore}
               alt="Chibi engineer exploring a low-poly canyon path lined with cacti and rope fences"
               loading="lazy"
               width={1280}
@@ -461,7 +465,7 @@ function HomePage() {
 
       {/* ---------- B. BUILD YOUR BRIDGE (text LEFT / image RIGHT) ---------- */}
       <section className="relative overflow-hidden bg-background">
-        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-2">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-12 lg:grid-cols-2 lg:gap-10">
           <div className="min-w-0">
             <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">Build</p>
             <h2 className="mt-3 text-3xl sm:text-4xl">Build Your Bridge</h2>
@@ -477,9 +481,9 @@ function HomePage() {
               ]}
             />
           </div>
-          <div className="game-frame relative p-2">
+          <div className="game-frame relative min-w-0 p-2">
             <img
-              src={shotBuild.url}
+              src={shotBuild}
               alt="Civil Craft blueprint build mode showing a bridge drafted on a grid"
               loading="lazy"
               width={1920}
@@ -494,14 +498,12 @@ function HomePage() {
         </div>
       </section>
 
-
       {/* ---------- C. TEST YOUR DESIGN (image LEFT / text RIGHT) ---------- */}
       <section className="relative overflow-hidden border-y-2 border-border bg-card/60">
-        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 lg:grid-cols-2">
-
-          <div className="game-frame p-2">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-12 lg:grid-cols-2 lg:gap-10">
+          <div className="game-frame min-w-0 p-2">
             <img
-              src={shotTest.url}
+              src={shotTest}
               alt="A truck crossing a player-built bridge while stress colours show member loads"
               loading="lazy"
               width={1280}
@@ -524,8 +526,52 @@ function HomePage() {
               ]}
             />
             <p className="mt-6 font-display text-sm uppercase tracking-[0.18em] text-gold">
-              Build → Test → Learn
+              Build → Test → Learn → Improve
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- D. LEARN FROM THE RESULT (text LEFT / image RIGHT) ---------- */}
+      <section className="relative overflow-hidden bg-background" aria-labelledby="learn-heading">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-12 lg:grid-cols-2 lg:gap-10">
+          <div className="min-w-0">
+            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">Learn</p>
+            <h2 id="learn-heading" className="mt-3 text-3xl sm:text-4xl">
+              Learn From the Result
+            </h2>
+            <p className="mt-4 max-w-lg text-muted-foreground">
+              Every test shows more than whether a bridge passes or fails. Observe how loads affect
+              the structure, identify weak points, and use what you discover to improve your next
+              design.
+            </p>
+            <Checks
+              items={[
+                "Understand why a bridge succeeded or failed",
+                "Observe structural forces and load behavior",
+                "Apply what you learned to the next contract",
+              ]}
+            />
+            <p className="mt-5 max-w-lg text-sm text-muted-foreground">
+              Engineering concepts discovered throughout the game are recorded in your Bridge
+              Almanac.
+            </p>
+            <Button asChild variant="outline" size="sm" className="mt-3 min-h-11">
+              <Link to={player ? "/dashboard/almanac" : "/login"}>
+                View Bridge Almanac
+                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+          <div className="game-frame min-w-0 p-2">
+            <img
+              src={shotTest}
+              alt="Civil Craft load test showing stress colours on a bridge carrying a truck"
+              loading="lazy"
+              width={1280}
+              height={800}
+              className="h-auto w-full rounded-2xl"
+            />
           </div>
         </div>
       </section>
@@ -549,7 +595,10 @@ function HomePage() {
       </section>
 
       {/* ---------- WORLD BREAK (purely visual) ---------- */}
-      <div className="relative overflow-hidden border-y-2 border-border bg-background" aria-hidden="true">
+      <div
+        className="relative overflow-hidden border-y-2 border-border bg-background"
+        aria-hidden="true"
+      >
         <img
           src={worldBreak}
           alt=""
@@ -558,11 +607,9 @@ function HomePage() {
         />
       </div>
 
-
       {/* ---------- WHAT'S HAPPENING (asymmetric updates) ---------- */}
       {lead ? (
         <section className="bg-background py-12">
-
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <h2 className="text-3xl sm:text-4xl">What's Happening in Civil Craft?</h2>
@@ -656,7 +703,6 @@ function HomePage() {
             />
           </div>
 
-
           <div className="min-w-0">
             <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">Community</p>
             <h2 className="mt-3 text-3xl sm:text-4xl">Build Together</h2>
@@ -684,7 +730,6 @@ function HomePage() {
           </div>
         </div>
       </section>
-
 
       {/* ---------- TEAM TEASER ---------- */}
       <section className="border-y-2 border-border bg-background py-11">
@@ -750,7 +795,6 @@ function HomePage() {
         </div>
       </section>
 
-
       {/* ---------- QUIET CONTACT LINE ---------- */}
       <div className="bg-background py-8 text-center">
         <Link
@@ -789,10 +833,7 @@ function StepLink({ dir = "right" }: { dir?: "right" | "left" | "down" }) {
     );
   }
   return (
-    <div
-      aria-hidden="true"
-      className="hidden shrink-0 items-center self-start pt-6 md:flex"
-    >
+    <div aria-hidden="true" className="hidden shrink-0 items-center self-start pt-6 md:flex">
       <span className="block h-0 w-7 border-t-2 border-dashed border-muted-foreground/45" />
       <span className="ml-0.5 font-display text-sm text-muted-foreground/70">
         {dir === "right" ? "›" : "‹"}
@@ -800,5 +841,3 @@ function StepLink({ dir = "right" }: { dir?: "right" | "left" | "down" }) {
     </div>
   );
 }
-
-

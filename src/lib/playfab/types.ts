@@ -29,7 +29,6 @@ export interface PlayerProfile extends PlayerIdentity {
   xp: number;
   xpToNextLevel: number;
   totalScore: number;
-  rank: number | null;
   bridgesCompleted: number;
   challengesCompleted: number;
   achievementsUnlocked: number;
@@ -112,14 +111,7 @@ export interface PlayFabStatus {
 /* ------------------------------------------------- character & cosmetics */
 
 export type CosmeticSlot =
-  | "helmet"
-  | "hair"
-  | "top"
-  | "vest"
-  | "pants"
-  | "gloves"
-  | "shoes"
-  | "accessory";
+  "helmet" | "hair" | "top" | "vest" | "pants" | "gloves" | "shoes" | "accessory";
 
 /** A single equipped cosmetic, resolved from the game item catalog. */
 export interface CosmeticItem {
@@ -225,12 +217,7 @@ export interface AlmanacJourney {
 
 /* --------------------------------------------------------- notifications */
 
-export type NotificationKind =
-  | "achievement"
-  | "level"
-  | "cosmetic"
-  | "release"
-  | "announcement";
+export type NotificationKind = "achievement" | "level" | "cosmetic" | "release" | "announcement";
 
 /**
  * A backend-driven player notification. The website never invents these —

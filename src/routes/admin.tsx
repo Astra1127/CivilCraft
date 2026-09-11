@@ -1,4 +1,10 @@
-import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Outlet,
+  redirect,
+  useNavigate,
+  useRouterState,
+} from "@tanstack/react-router";
 import {
   Bug,
   BookOpen,
@@ -16,9 +22,20 @@ import { useEffect } from "react";
 import { LoadingState } from "@/components/common/States";
 import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/DashboardShell";
 import { useAuth } from "@/lib/auth";
+import { getAdminSession } from "@/lib/admin-auth/functions";
 
 export const Route = createFileRoute("/admin")({
   ssr: false,
+  beforeLoad: async ({ location }) => {
+    const login = location.pathname.replace(/\/+$/, "") === "/admin/login";
+    const session = await getAdminSession().catch(() => null);
+    if (login) {
+      if (session?.authenticated) throw redirect({ to: "/admin" });
+      return;
+    }
+    if (!session?.authenticated) throw redirect({ to: "/admin/login" });
+  },
+  staleTime: 0,
   head: () => ({
     meta: [
       { title: "Admin Dashboard — Civil Craft: Bridge Edition" },
@@ -43,9 +60,8 @@ const items: DashboardNavItem[] = [
   { to: "/admin/settings", label: "Settings", icon: Settings, section: "System" },
 ];
 
-
 function AdminLayout() {
-  const { ready, isAdmin } = useAuth();
+  const { adminReady: ready, isAdmin } = useAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // The admin sign-in page is the one child that renders outside the guard.
@@ -72,4 +88,3 @@ function AdminLayout() {
     </DashboardShell>
   );
 }
-

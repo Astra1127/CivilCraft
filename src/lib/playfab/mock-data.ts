@@ -29,7 +29,6 @@ export const mockProfile: PlayerProfile = {
   xp: 4820,
   xpToNextLevel: 6000,
   totalScore: 18240,
-  rank: 7,
   bridgesCompleted: 24,
   challengesCompleted: 31,
   achievementsUnlocked: 9,
@@ -72,7 +71,6 @@ export const mockCharacter: PlayerCharacter = {
  * catalog. Real transactions arrive from the backend once it is connected.
  */
 export const mockTransactions: Transaction[] = [];
-
 
 export const mockStatistics: PlayerStatistic[] = [
   { name: "TotalScore", value: 18240 },
@@ -234,7 +232,9 @@ function demoLevel(
   return {
     levelId,
     regionId,
-    ...(status === "locked" ? {} : { levelName: `Placeholder Challenge ${String(order).padStart(2, "0")}` }),
+    ...(status === "locked"
+      ? {}
+      : { levelName: `Placeholder Challenge ${String(order).padStart(2, "0")}` }),
     order,
     status,
     engineeringConceptIds: conceptIds,
@@ -310,9 +310,24 @@ const region3: AlmanacLevel[] = [
 
 export const mockJourney: AlmanacJourney = (() => {
   const regions = [
-    { regionId: "region-1", name: "Region 1 (placeholder)", status: "completed" as const, levels: region1 },
-    { regionId: "region-2", name: "Region 2 (placeholder)", status: "current" as const, levels: region2 },
-    { regionId: "region-3", name: "Region 3 (placeholder)", status: "locked" as const, levels: region3 },
+    {
+      regionId: "region-1",
+      name: "Region 1 (placeholder)",
+      status: "completed" as const,
+      levels: region1,
+    },
+    {
+      regionId: "region-2",
+      name: "Region 2 (placeholder)",
+      status: "current" as const,
+      levels: region2,
+    },
+    {
+      regionId: "region-3",
+      name: "Region 3 (placeholder)",
+      status: "locked" as const,
+      levels: region3,
+    },
   ];
   const levels = regions.flatMap((r) => r.levels);
   const completed = levels.filter((l) => l.status === "completed");

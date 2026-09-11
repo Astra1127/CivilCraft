@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Hammer, Star, Target, Trophy, Zap } from "lucide-react";
+import { AlertTriangle, Hammer, Star, Target, Zap } from "lucide-react";
 import { DemoBadge, IntegrationNotice } from "@/components/common/DemoBadge";
 import { SectionHeading } from "@/components/common/PageHeader";
 import { StatCard } from "@/components/common/StatCard";
@@ -67,9 +67,7 @@ function ProfilePage() {
 
         <div className="panel flex flex-col gap-4 p-6">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">
-              {p.rank ? `Rank #${p.rank} engineer` : "Engineer"}
-            </p>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">Engineer</p>
             <h2 className="truncate text-2xl sm:text-3xl">{p.displayName}</h2>
             <p className="mt-1 text-sm text-muted-foreground">Level {p.level}</p>
           </div>
@@ -112,7 +110,11 @@ function ProfilePage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatCard icon={Star} label="Total score" value={p.totalScore.toLocaleString()} />
-            <StatCard icon={Hammer} label="Bridges completed" value={p.bridgesCompleted.toLocaleString()} />
+            <StatCard
+              icon={Hammer}
+              label="Bridges completed"
+              value={p.bridgesCompleted.toLocaleString()}
+            />
             <StatCard
               icon={Target}
               label="Challenges completed"
@@ -128,7 +130,6 @@ function ProfilePage() {
               label="Structural failures"
               value={statValue(stats.data, "StructuralFailures")}
             />
-            <StatCard icon={Trophy} label="Global rank" value={p.rank ? `#${p.rank}` : "Unranked"} />
           </div>
         )}
       </section>

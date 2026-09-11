@@ -7,7 +7,7 @@ import type { CmsState } from "./types";
  *
  * Persisted in localStorage so that admin CRUD genuinely changes what the
  * public site renders during review. This is the single seam to swap for a
- * real database (Lovable Cloud) later: keep the same read/write API.
+ * real database later: keep the same read/write API.
  */
 
 const KEY = "civilcraft.cms.v3";
@@ -78,14 +78,11 @@ export function useCms<T>(selector: (s: CmsState) => T): T {
   );
 }
 
-
 export function resetCms() {
   setCmsState(() => seedState);
 }
 
-export function logActivity(
-  entry: Omit<import("./types").ActivityEntry, "id" | "at">,
-) {
+export function logActivity(entry: Omit<import("./types").ActivityEntry, "id" | "at">) {
   setCmsState((prev) => ({
     ...prev,
     activity: [
