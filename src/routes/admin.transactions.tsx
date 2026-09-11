@@ -36,7 +36,7 @@ function AdminTransactions() {
     queryFn: () => adminPlayerService.getTransactions(),
   });
 
-  const rows = (query.data ?? []).filter((t) => filter === "All" || t.type === filter);
+  const rows = (query.data?.records ?? []).filter((t) => filter === "All" || t.type === filter);
 
   return (
     <AdminPage>
@@ -48,16 +48,19 @@ function AdminTransactions() {
       <FilterChips options={filters} value={filter} onChange={setFilter} />
 
       {query.isPending ? (
-        <LoadingState rows={3} />
+        <LoadingState label="Loading transaction records…" rows={3} />
       ) : query.isError ? (
         <ErrorState
-          description="Transaction history is unavailable until the game backend is connected."
+          title="Unable to load transaction records"
+          description="An error occurred while retrieving transaction data from the game backend."
           onRetry={() => query.refetch()}
         />
+      ) : !query.data.configured ? (
+        <ErrorState title="PlayFab administrative access is not configured." />
       ) : rows.length === 0 ? (
         <EmptyState
-          title="No transactions"
-          description="Player purchases and rewards will appear here."
+          title="No transaction records yet"
+          description="Purchases, rewards and item transactions recorded by Civil Craft will appear here."
         />
       ) : (
         <Panel title="Recent activity" icon={Receipt} bodyClassName="p-0">

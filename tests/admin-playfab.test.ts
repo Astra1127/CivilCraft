@@ -181,6 +181,7 @@ test("all privileged paths reject guests, player tickets, forged cookies before 
   for (const path of [
     "/api/admin/players",
     "/api/admin/playfab/status",
+    "/api/admin/transactions",
     "/api/admin/players/ABC123",
     "/api/admin/players/ABC123/ban",
     "/api/admin/unknown",
@@ -217,6 +218,29 @@ test("missing secret is a safe partial state; live probe checks PlayFab", async 
   assert.match(down, /Unavailable/);
   assert.ok(!down.includes(env.PLAYFAB_SECRET_KEY));
 });
+test("transactions distinguish missing access, empty history and provider failure", async () => {
+  const cookie = await session();
+  delete process.env["PLAYFAB_SECRET_KEY"];
+  const missing = await request("/api/admin/transactions", cookie);
+  assert.equal(missing.status, 200);
+  assert.deepEqual(await missing.json(), { configured: false, records: [] });
+  assert.equal(calls.length, 0);
+
+  process.env["PLAYFAB_SECRET_KEY"] = env.PLAYFAB_SECRET_KEY;
+  const empty = await request("/api/admin/transactions", cookie);
+  assert.equal(empty.status, 200);
+  assert.deepEqual(await empty.json(), { configured: true, records: [] });
+  assert.deepEqual(
+    calls.map((call) => call.operation),
+    ["Admin/GetAllSegments"],
+  );
+
+  failOperation = "Admin/GetAllSegments";
+  const failed = await request("/api/admin/transactions", cookie);
+  assert.equal(failed.status, 503);
+  assert.ok(!(await failed.text()).includes(env.PLAYFAB_SECRET_KEY));
+});
+
 test("details contain only real mapped fields; missing progression stays null", async () => {
   const cookie = await session();
   const missing = await (await request("/api/admin/players/ABC123", cookie)).json();

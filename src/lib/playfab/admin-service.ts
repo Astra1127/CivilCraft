@@ -50,7 +50,7 @@ export const adminPlayerService = {
       durationHours,
     });
   },
-  async getTransactions(): Promise<Transaction[]> {
-    throw new Error("Administrator transaction integration is not configured.");
+  getTransactions() {
+    return request<{ configured: boolean; records: Transaction[] }>("transactions");
   },
 };

@@ -87,6 +87,13 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
       status.checkedAt = new Date().toISOString();
       return json(status);
     }
+    if (path === "/api/admin/transactions" && request.method === "GET") {
+      if (!adminGameConfig().secret) return json({ configured: false, records: [] });
+      // Reuse the administrative access probe. Current inventory is not a ledger,
+      // and Civil Craft has no global transaction-history source implemented yet.
+      await playFabAdmin("Admin/GetAllSegments");
+      return json({ configured: true, records: [] });
+    }
     if (path === "/api/admin/players" && request.method === "GET") {
       // Configuration is checked even when an export snapshot is cached.
       if (!adminGameConfig().secret)
