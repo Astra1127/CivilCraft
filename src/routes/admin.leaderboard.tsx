@@ -6,8 +6,8 @@ function AdminLeaderboard() {
   return (
     <AdminPage>
       <AdminHeading
-        title="Global Leaderboard"
-        description="Read-only engineering scores recorded by Civil Craft."
+        title="Leaderboard"
+        description="Read-only engineering rankings recorded by Civil Craft."
       />
       <LeaderboardView admin />
     </AdminPage>

@@ -90,7 +90,7 @@ export interface Achievement {
   progressTarget?: number;
 }
 
-export type LeaderboardWindow = "global";
+export type LeaderboardWindow = "weekly" | "all-time";
 
 export interface LeaderboardEntry {
   rank: number;

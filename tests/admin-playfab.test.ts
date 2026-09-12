@@ -551,7 +551,7 @@ async function board(path = "", ticket = "", cookie = "") {
     }),
   );
 }
-test("player A, player B and admin retrieve identical global pages independent of sessions", async () => {
+test("player A, player B and admin retrieve identical all-time pages independent of sessions", async () => {
   rankingRows = Array.from({ length: 23 }, (_, i) => ({
     PlayFabId: i === 0 ? "ABC123" : i === 1 ? "DEF456" : (i + 1).toString(16),
     Position: i,
@@ -563,10 +563,10 @@ test("player A, player B and admin retrieve identical global pages independent o
   const admin = await (await board("", "", cookie))!.json();
   assert.deepEqual(a, b);
   assert.deepEqual(a, admin);
-  assert.equal(a.entries.length, 10);
+  assert.equal(a.entries.length, 20);
   assert.equal(a.entries[0].level, null);
   assert.equal(a.entries[0].displayName, "Engineer");
-  const second = await (await board("?start=10&version=3", "", cookie))!.json();
+  const second = await (await board("?start=10&version=3&pageSize=10", "", cookie))!.json();
   assert.equal(second.entries[0].rank, 11);
   assert.equal(second.nextStart, 20);
   const last = await (await board("?start=20&version=3", "valid-player"))!.json();
@@ -718,4 +718,41 @@ test("registration UTC buckets and activity boundaries do not invent missing his
   assert.equal(result.progression[1]!.value, 10);
   assert.equal(result.progression[1]!.available, 2);
   assert.equal(result.progression[0]!.value, null);
+});
+
+test("weekly is explicitly empty for both consumers and never borrows lifetime scores", async () => {
+  rankingRows = [{ PlayFabId: "ABC123", Position: 0, StatValue: 18240 }];
+  const cookie = await session();
+  const player = await (await board("?period=weekly", "valid-player"))!.json();
+  const admin = await (await board("?period=weekly", "", cookie))!.json();
+  assert.deepEqual(player, { entries: [], version: null, nextStart: null });
+  assert.deepEqual(admin, player);
+  assert.equal(await (await board("/me?period=weekly", "valid-player"))!.json(), null);
+  assert.ok(!calls.some((c) => c.operation.startsWith("Server/GetLeaderboard")));
+  assert.equal(
+    (await (await board("?period=all-time", "", cookie))!.json()).entries[0].score,
+    18240,
+  );
+  assert.equal((await board("?period=local", "", cookie))!.status, 400);
+  assert.equal((await board("?period=monthly", "", cookie))!.status, 400);
+  assert.equal((await board("?pageSize=1", "", cookie))!.status, 400);
+});
+test("leaderboard supports 10, 20 and 50 backend entries per page", async () => {
+  rankingRows = Array.from({ length: 55 }, (_, i) => ({
+    PlayFabId: (i + 1).toString(16),
+    Position: i,
+    StatValue: 100 - i,
+  }));
+  const cookie = await session();
+  for (const size of [10, 20, 50]) {
+    const first = await (await board("?period=all-time&pageSize=" + size, "", cookie))!.json();
+    assert.equal(first.entries.length, size);
+    assert.equal(first.nextStart, size);
+    const second = await (await board(
+      "?period=all-time&pageSize=" + size + "&start=" + size + "&version=3",
+      "",
+      cookie,
+    ))!.json();
+    assert.equal(second.entries[0].rank, size + 1);
+  }
 });

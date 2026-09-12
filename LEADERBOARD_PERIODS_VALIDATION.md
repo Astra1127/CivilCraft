@@ -1,0 +1,15 @@
+# Weekly and All-Time leaderboard update
+
+This supersedes the previous single-view leaderboard design.
+
+1. **Weekly source:** no weekly statistic is implemented in the current game integration. After authentication, the shared endpoint returns an explicit empty weekly result; it never requests TotalScore as a substitute. Both dashboards show “No weekly leaderboard records yet.” and “Weekly scores recorded by Civil Craft will appear here.”
+2. **All-Time source:** the existing canonical PlayFab `TotalScore`, through `Server/GetLeaderboard`. No score system or statistic was created or renamed. The Unity write implementation and live title reset settings have not been independently verified in this workspace.
+3. **Weekly reset:** not implemented because no weekly backend mapping exists. The website does not calculate weekly deltas, reset scores, or infer a weekly period from the calendar. A future implementation must map a real game-written weekly statistic and follow its PlayFab period/version. Monthly is not added.
+4. **Personal rank:** All-Time uses `Server/GetLeaderboardAroundUser` for the server-authenticated player, with exact-ID and leaderboard-membership verification. Weekly Rank is Not available until its backend exists. Rank labels follow the selected tab; no rank is estimated from the visible page.
+5. **Pagination:** 20 entries by default, with 10/20/50 selection. The backend validates the size and uses StartPosition/MaxResultsCount. All-Time pages retain the returned statistic version; displayed ranks come from PlayFab Position + 1. Period changes reset page, version and the loaded-page filter.
+6. **UI:** Player and Admin page titles are Leaderboard. Both render the shared Weekly / All-Time tabs. Admin description is “Read-only engineering rankings recorded by Civil Craft.” No Global, Local, Worldwide or redundant Overall leaderboard view remains. Admin player record uses All-Time Rank. Unrelated local CMS/development terminology and overall game completion are unchanged. The filter remains labeled “Filter this page.”
+7. **Shared source/security:** both consumers use `/api/leaderboard` with the same period selection. Personal rank uses `/api/leaderboard/me`. Existing player/admin authentication remains required; unknown periods and unsupported page sizes are rejected. No score-write endpoint, browser-authoritative ranking store or demo ranking data was added.
+
+Validation: `npm run build` PASS; `npx tsc --noEmit` PASS; `node --test tests/*.test.ts` **45/45 PASS**; `git diff --check` PASS. Tests cover matching player/admin data, weekly isolation from lifetime scores, invalid periods, exact personal rank and 10/20/50 backend pagination. Public JavaScript scanning found none of the server credential identifiers. Live browser visual validation was not performed. No deployment or push was performed.
+
+Changed files: `src/lib/playfab/leaderboard-shared.ts`, `leaderboard.server.ts`, `leaderboard.ts`, `types.ts`; `src/components/site/LeaderboardView.tsx`; `src/components/admin/PlayerRecordModal.tsx`; `src/routes/admin.leaderboard.tsx`; `tests/admin-playfab.test.ts`; this report.

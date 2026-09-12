@@ -8,7 +8,7 @@ import {
   textValue,
 } from "./admin-client.server.ts";
 import { LEADERBOARD_PAGE_SIZE, LEADERBOARD_STATISTIC } from "./leaderboard-shared.ts";
-import type { LeaderboardPage } from "./leaderboard-shared.ts";
+import type { LeaderboardPage, LeaderboardPeriod } from "./leaderboard-shared.ts";
 import type { LeaderboardEntry } from "./types.ts";
 
 export function mapLeaderboard(raw: unknown): LeaderboardEntry[] {
@@ -42,11 +42,18 @@ export function mapLeaderboard(raw: unknown): LeaderboardEntry[] {
 }
 const versionBody = (version?: number) =>
   version === undefined ? {} : { UseSpecificVersion: true, Version: version };
-export async function leaderboardPage(start = 0, version?: number): Promise<LeaderboardPage> {
+export async function leaderboardPage(
+  start = 0,
+  version?: number,
+  period: LeaderboardPeriod = "all-time",
+  pageSize = LEADERBOARD_PAGE_SIZE,
+): Promise<LeaderboardPage> {
+  // No weekly statistic is implemented by the game integration. Never reuse lifetime scores.
+  if (period === "weekly") return { entries: [], version: null, nextStart: null };
   const result = await playFabAdmin("Server/GetLeaderboard", {
     StatisticName: LEADERBOARD_STATISTIC,
     StartPosition: start,
-    MaxResultsCount: LEADERBOARD_PAGE_SIZE,
+    MaxResultsCount: pageSize,
     ProfileConstraints: { ShowDisplayName: true },
     ...versionBody(version),
   });
@@ -62,13 +69,15 @@ export async function leaderboardPage(start = 0, version?: number): Promise<Lead
   return {
     entries,
     version: returnedVersion,
-    nextStart: entries.length === LEADERBOARD_PAGE_SIZE ? start + LEADERBOARD_PAGE_SIZE : null,
+    nextStart: entries.length === pageSize ? start + pageSize : null,
   };
 }
 export async function leaderboardRank(
   id: string,
   version?: number,
+  period: LeaderboardPeriod = "all-time",
 ): Promise<LeaderboardEntry | null> {
+  if (period === "weekly") return null;
   const result = await playFabAdmin("Server/GetLeaderboardAroundUser", {
     StatisticName: LEADERBOARD_STATISTIC,
     PlayFabId: id,
@@ -79,7 +88,7 @@ export async function leaderboardRank(
   const candidate = mapLeaderboard(result["Leaderboard"]).find((row) => row.playFabId === id);
   if (!candidate) return null;
   // AroundUser can return position 0 for an account with NO statistic. Confirm
-  // membership against the global leaderboard at that position, in the same version.
+  // membership against the all-time leaderboard at that position, in the same version.
   const actualVersion = result["Version"];
   if (
     typeof actualVersion !== "number" ||
@@ -145,12 +154,18 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
       return Number(raw);
     };
     const version = integer("version");
+    const period = url.searchParams.get("period") ?? "all-time";
+    if (period !== "weekly" && period !== "all-time")
+      throw new AdminApiError(400, "Choose Weekly or All-Time.");
+    const pageSize = integer("pageSize", LEADERBOARD_PAGE_SIZE)!;
+    if (![10, 20, 50].includes(pageSize))
+      throw new AdminApiError(400, "Choose 10, 20 or 50 entries per page.");
     if (url.pathname === "/api/leaderboard/me") {
       if (!playerId) return json({ error: "Player sign-in is required." }, 401);
-      return json(await leaderboardRank(playerId, version));
+      return json(await leaderboardRank(playerId, version, period));
     }
     if (url.pathname !== "/api/leaderboard") return json({ error: "Not found." }, 404);
-    return json(await leaderboardPage(integer("start", 0), version));
+    return json(await leaderboardPage(integer("start", 0), version, period, pageSize));
   } catch (e) {
     return json(
       {

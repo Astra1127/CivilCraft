@@ -153,7 +153,10 @@ export function PlayerRecordModal({
                       label="Engineering score"
                       value={player.totalScore?.toLocaleString() ?? "\u2014"}
                     />
-                    <Metric label="Global rank" value={player.rank == null ? "Not available" : "#" + player.rank} />
+                    <Metric
+                      label="All-Time Rank"
+                      value={player.rank == null ? "Not available" : "#" + player.rank}
+                    />
                     <Metric label="Bridges" value={player.bridgesCompleted ?? "\u2014"} />
                     <Metric label="Challenges" value={player.challengesCompleted ?? "\u2014"} />
                     <Metric

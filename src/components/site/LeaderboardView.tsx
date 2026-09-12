@@ -9,7 +9,9 @@ import { useQuery } from "@tanstack/react-query";
 import { leaderboardService, type LeaderboardEntry } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
 
-import { LEADERBOARD_PAGE_SIZE as PAGE_SIZE } from "@/lib/playfab/leaderboard-shared";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { LeaderboardPeriod } from "@/lib/playfab/leaderboard-shared";
+import { LEADERBOARD_PAGE_SIZE, LEADERBOARD_VIEWS } from "@/lib/playfab/leaderboard-shared";
 
 const podiumIcon = [Crown, Trophy, Medal];
 
@@ -63,22 +65,33 @@ export function LeaderboardView({
   compact?: boolean;
   admin?: boolean;
 }) {
+  const [period, setPeriod] = useState<LeaderboardPeriod>("weekly");
+  const [pageSize, setPageSize] = useState(LEADERBOARD_PAGE_SIZE);
   const [version, setVersion] = useState<number | undefined>();
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["canonical-leaderboard", admin ? "admin" : highlightId, page, version, refreshKey],
-    queryFn: () => leaderboardService.getLeaderboard((page - 1) * PAGE_SIZE, version, admin),
+    queryKey: [
+      "canonical-leaderboard",
+      admin ? "admin" : highlightId,
+      page,
+      version,
+      refreshKey,
+      period,
+      pageSize,
+    ],
+    queryFn: () =>
+      leaderboardService.getLeaderboard((page - 1) * pageSize, version, admin, period, pageSize),
     staleTime: 0,
   });
   useEffect(() => {
-    if (data && version === undefined) setVersion(data.version);
+    if (data && data.version !== null && version === undefined) setVersion(data.version);
   }, [data, version]);
   const mine = useQuery({
-    queryKey: ["canonical-leaderboard-rank", highlightId, version, refreshKey],
-    queryFn: () => leaderboardService.getPlayerRank(highlightId!, version),
-    enabled: !admin && !!highlightId && version !== undefined,
+    queryKey: ["canonical-leaderboard-rank", highlightId, version, refreshKey, period],
+    queryFn: () => leaderboardService.getPlayerRank(highlightId!, version, period),
+    enabled: !admin && !!highlightId && period === "all-time" && version !== undefined,
     staleTime: 0,
   });
 
@@ -94,7 +107,23 @@ export function LeaderboardView({
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:flex sm:items-center sm:justify-between">
-        <p className="font-display">Global</p>
+        <Tabs
+          value={period}
+          onValueChange={(value) => {
+            setPeriod(value as LeaderboardPeriod);
+            setPage(1);
+            setVersion(undefined);
+            setQuery("");
+          }}
+        >
+          <TabsList>
+            {LEADERBOARD_VIEWS.map((view) => (
+              <TabsTrigger key={view.id} value={view.id}>
+                {view.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -127,10 +156,10 @@ export function LeaderboardView({
 
       {!admin && highlightId ? (
         <p className="text-sm">
-          Your Rank:{" "}
+          {period === "weekly" ? "Weekly Rank" : "All-Time Rank"}:{" "}
           {isPending || mine.isFetching
             ? "Loading..."
-            : mine.data
+            : !mine.isError && mine.data
               ? "#" + mine.data.rank
               : "Not available"}
         </p>
@@ -150,9 +179,19 @@ export function LeaderboardView({
       {!isPending && !isError ? (
         filtered.length === 0 ? (
           <EmptyState
-            title={query ? "No matching players on this page." : "No leaderboard records yet."}
+            title={
+              query
+                ? "No matching players on this page."
+                : period === "weekly"
+                  ? "No weekly leaderboard records yet."
+                  : "No all-time leaderboard records yet."
+            }
             description={
-              query ? "Try another filter." : "Scores recorded by Civil Craft will appear here."
+              query
+                ? "Try another filter."
+                : period === "weekly"
+                  ? "Weekly scores recorded by Civil Craft will appear here."
+                  : "Engineering scores recorded by Civil Craft will appear here."
             }
           />
         ) : (
@@ -235,7 +274,30 @@ export function LeaderboardView({
         )
       ) : null}
       {!compact && !isPending && !isError ? (
-        <div className="flex items-center justify-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <label className="flex items-center gap-2 text-sm">
+            Entries per page
+            <select
+              aria-label="Entries per page"
+              className="rounded-md border border-input bg-background p-2"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+            >
+              {[10, 20, 50].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+          {data?.entries.length ? (
+            <span className="text-sm text-muted-foreground">
+              Showing {(page - 1) * pageSize + 1} - {(page - 1) * pageSize + data.entries.length}
+            </span>
+          ) : null}
           <Button
             variant="outline"
             size="sm"
