@@ -17,6 +17,7 @@ export interface AdminPlayer {
   currentRegion: string | null;
 }
 export interface AdminPlayerDetail extends AdminPlayer {
+  rank: number | null;
   statistics: { name: string; value: number }[] | null;
   currencies: { code: string; balance: number }[] | null;
   inventory: { itemId: string; name: string | null; purchasedAt: string | null }[] | null;
@@ -33,6 +34,8 @@ export interface AdminPlayerDetail extends AdminPlayer {
   unavailable: string[];
 }
 export interface AdminPlayerPage {
+  totalPlayers?: number;
+  snapshotCursor?: string;
   players: AdminPlayer[];
   nextCursor: string | null;
   pending: boolean;

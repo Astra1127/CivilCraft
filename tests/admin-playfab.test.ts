@@ -1,3 +1,7 @@
+import { summarizePlayers } from "../src/lib/playfab/analytics.server.ts";
+import { mapIdentity } from "../src/lib/playfab/admin-players.server.ts";
+import { handleLeaderboardRequest, mapLeaderboard } from "../src/lib/playfab/leaderboard.server.ts";
+import { handlePlayerBugRequest } from "../src/lib/playfab/bug-reports.server.ts";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { hashAdminPassword } from "../src/lib/admin-auth/password.server.ts";
@@ -28,6 +32,8 @@ let calls: { operation: string; body: Record<string, unknown> }[] = [];
 let data: Record<string, unknown> = {},
   stats: unknown[] = [],
   bans: unknown[] = [];
+let reports: Record<string, unknown> = {};
+let rankingRows: Record<string, unknown>[] = [];
 let failOperation = "",
   exportPending = false,
   malformedAccount = false;
@@ -38,9 +44,15 @@ const tsv =
     (_, i) =>
       `17FA03\t${(i + 1).toString(16).toUpperCase()}\tEngineer ${i}\t2026-01-01 00:00:00\t2026-09-01 00:00:00\t[{"Name":"TotalScore","StatisticValue":${i}}]`,
   ).join("\n");
+let exportSerial = 0;
+let fragmentFiles: string[] | null = null;
 beforeEach(() => {
+  env.ADMIN_SESSION_SECRET = "test-admin-session-credential-" + ++exportSerial + "-long-enough";
+  fragmentFiles = null;
   Object.assign(process.env, env);
   calls = [];
+  reports = {};
+  rankingRows = [];
   data = {};
   stats = [];
   bans = [];
@@ -58,9 +70,15 @@ beforeEach(() => {
       );
       if (url.includes("index"))
         return new Response(
-          "https://exports.blob.core.windows.net/fragment?sig=private-export-url",
+          fragmentFiles
+            ? fragmentFiles
+                .map((_, i) => "https://exports.blob.core.windows.net/fragment/" + i)
+                .join("\n")
+            : "https://exports.blob.core.windows.net/fragment?sig=private-export-url",
         );
-      const bytes = Buffer.from(tsv),
+      const bytes = Buffer.from(
+          fragmentFiles ? fragmentFiles[Number(url.split("/").at(-1))]! : tsv,
+        ),
         start = Number(headers.get("range")?.match(/bytes=(\d+)/)?.[1] ?? 0);
       return new Response(bytes.subarray(start), {
         status: 206,
@@ -84,11 +102,51 @@ beforeEach(() => {
       );
     let result: unknown;
     switch (operation) {
+      case "Server/GetLeaderboard":
+        assert.equal(body["StatisticName"], "TotalScore");
+        result = {
+          Version: 3,
+          Leaderboard: rankingRows.slice(
+            Number(body["StartPosition"]),
+            Number(body["StartPosition"]) + Number(body["MaxResultsCount"]),
+          ),
+        };
+        break;
+      case "Server/GetLeaderboardAroundUser":
+        result = {
+          Version: 3,
+          Leaderboard: [
+            rankingRows.find((r) => r["PlayFabId"] === body["PlayFabId"]) ?? {
+              PlayFabId: body["PlayFabId"],
+              Position: 0,
+              StatValue: 0,
+            },
+          ],
+        };
+        break;
+      case "Server/AuthenticateSessionTicket":
+        result = ["valid-player", "second-player"].includes(String(body["SessionTicket"]))
+          ? {
+              UserInfo: {
+                PlayFabId: body["SessionTicket"] === "second-player" ? "DEF456" : "ABC123",
+                TitleInfo: { DisplayName: "Real Player" },
+              },
+            }
+          : { IsSessionTicketExpired: true };
+        break;
+      case "Admin/GetTitleInternalData":
+        result = { Data: { ...reports } };
+        break;
+      case "Admin/SetTitleInternalData":
+        if (body["Value"] === null) delete reports[String(body["Key"])];
+        else reports[String(body["Key"])] = body["Value"];
+        result = {};
+        break;
       case "Admin/GetAllSegments":
         result = { Segments: [{ Id: "ALL", Name: "All Players" }] };
         break;
       case "Admin/ExportPlayersInSegment":
-        result = { ExportId: "private-export-id" };
+        result = { ExportId: "private-export-id-" + exportSerial };
         break;
       case "Admin/GetSegmentExport":
         result = exportPending
@@ -179,6 +237,8 @@ async function request(path: string, cookie = "", body?: unknown, requestOrigin 
 }
 test("all privileged paths reject guests, player tickets, forged cookies before PlayFab", async () => {
   for (const path of [
+    "/api/admin/analytics",
+    "/api/admin/bug-reports",
     "/api/admin/players",
     "/api/admin/playfab/status",
     "/api/admin/transactions",
@@ -418,4 +478,244 @@ test("encrypted cursors survive a fresh instance and reject tampering, other own
   } finally {
     Date.now = previousNow;
   }
+});
+
+async function submitBug(ticket = "valid-player", extra: Record<string, unknown> = {}) {
+  return handlePlayerBugRequest(
+    new Request(origin + "/api/player/bug-reports", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + ticket },
+      body: JSON.stringify({
+        category: "Gameplay",
+        description: "Bridge fails to load after opening.",
+        ...extra,
+      }),
+    }),
+  );
+}
+test("separate player and admin sessions share persistent reports; identity is verified", async () => {
+  const response = await submitBug("valid-player", {
+    playFabId: "FAKE",
+    player: "Spoof",
+    status: "Closed",
+    createdAt: "fake",
+  });
+  assert.equal(response?.status, 201);
+  const cookie = await session();
+  const list = await (await request("/api/admin/bug-reports", cookie)).json();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].playFabId, "ABC123");
+  assert.equal(list[0].player, "Real Player");
+  assert.equal(list[0].status, "New");
+  assert.ok(Number.isFinite(Date.parse(list[0].createdAt)));
+  const id = list[0].id;
+  assert.equal(
+    (await request("/api/admin/bug-reports", cookie, { id, status: "Resolved" })).status,
+    200,
+  );
+  assert.equal(
+    (await (await request("/api/admin/bug-reports", await session())).json())[0].status,
+    "Resolved",
+  );
+  assert.equal(
+    (await request("/api/admin/bug-reports", cookie, { id, action: "delete" })).status,
+    200,
+  );
+  assert.deepEqual(await (await request("/api/admin/bug-reports", cookie)).json(), []);
+});
+test("bug validation, authentication, CSRF and storage failures never report success", async () => {
+  assert.equal((await submitBug("expired"))?.status, 401);
+  assert.equal((await submitBug("valid-player", { description: "short" }))?.status, 400);
+  assert.equal((await submitBug("valid-player", { category: "invalid" }))?.status, 400);
+  assert.deepEqual(reports, {});
+  failOperation = "Admin/SetTitleInternalData";
+  const failed = await submitBug();
+  assert.equal(failed?.status, 503);
+  assert.ok(!(await failed!.text()).includes(env.PLAYFAB_SECRET_KEY));
+  assert.equal(
+    (await request("/api/admin/bug-reports", await session(), {}, "https://evil.test")).status,
+    403,
+  );
+});
+test("concurrent submissions preserve each report without a shared list overwrite", async () => {
+  await Promise.all([submitBug(), submitBug()]);
+  const list = await (await request("/api/admin/bug-reports", await session())).json();
+  assert.equal(list.length, 2);
+  assert.notEqual(list[0].id, list[1].id);
+});
+
+async function board(path = "", ticket = "", cookie = "") {
+  return handleLeaderboardRequest(
+    new Request(origin + "/api/leaderboard" + path, {
+      headers: { cookie, ...(ticket ? { authorization: "Bearer " + ticket } : {}) },
+    }),
+  );
+}
+test("player A, player B and admin retrieve identical global pages independent of sessions", async () => {
+  rankingRows = Array.from({ length: 23 }, (_, i) => ({
+    PlayFabId: i === 0 ? "ABC123" : i === 1 ? "DEF456" : (i + 1).toString(16),
+    Position: i,
+    StatValue: 24000 - i,
+  }));
+  const cookie = await session();
+  const a = await (await board("", "valid-player"))!.json();
+  const b = await (await board("", "second-player"))!.json();
+  const admin = await (await board("", "", cookie))!.json();
+  assert.deepEqual(a, b);
+  assert.deepEqual(a, admin);
+  assert.equal(a.entries.length, 10);
+  assert.equal(a.entries[0].level, null);
+  assert.equal(a.entries[0].displayName, "Engineer");
+  const second = await (await board("?start=10&version=3", "", cookie))!.json();
+  assert.equal(second.entries[0].rank, 11);
+  assert.equal(second.nextStart, 20);
+  const last = await (await board("?start=20&version=3", "valid-player"))!.json();
+  assert.equal(last.entries[0].rank, 21);
+  assert.equal(last.nextStart, null);
+  assert.equal((await (await board("/me?version=3", "valid-player"))!.json()).rank, 1);
+  assert.equal((await (await board("/me?version=3", "second-player"))!.json()).rank, 2);
+  assert.deepEqual(await (await board("", "", cookie))!.json(), admin);
+  assert.ok(
+    calls
+      .filter((c) => c.operation === "Server/GetLeaderboard")
+      .every((c) => !c.body["PlayFabId"] && c.body["StatisticName"] === "TotalScore"),
+  );
+});
+test("leaderboard distinguishes empty, failure, missing access and unranked users", async () => {
+  const cookie = await session();
+  assert.equal((await board())!.status, 401);
+  assert.equal((await board("", "expired"))!.status, 401);
+  assert.deepEqual((await (await board("", "", cookie))!.json()).entries, []);
+  assert.equal(await (await board("/me", "valid-player"))!.json(), null);
+  rankingRows = [{ PlayFabId: "DEF456", Position: 0, StatValue: 10 }];
+  assert.equal(
+    await (await board("/me", "valid-player"))!.json(),
+    null,
+    "AroundUser synthetic position zero is not rank one",
+  );
+  assert.equal((await board("?start=-1", "", cookie))!.status, 400);
+  assert.equal((await board("?version=wrong", "", cookie))!.status, 400);
+  assert.equal((await board("?version=4", "", cookie))!.status, 502);
+  failOperation = "Server/GetLeaderboard";
+  assert.equal((await board("", "", cookie))!.status, 503);
+  process.env["PLAYFAB_SECRET_KEY"] = "";
+  assert.equal(
+    (await (await board("", "", cookie))!.json()).error,
+    "PlayFab administrative access is not configured.",
+  );
+});
+test("leaderboard ranks come from backend positions and malformed rows fail closed", () => {
+  assert.equal(
+    mapLeaderboard([
+      {
+        PlayFabId: "ABC123",
+        Position: 42,
+        StatValue: 18240,
+        Profile: { DisplayName: "Engineer A" },
+      },
+    ])[0]!.rank,
+    43,
+  );
+  assert.throws(() => mapLeaderboard([{ PlayFabId: "ABC123", Position: -1, StatValue: 1 }]));
+});
+
+for (const count of [0, 1, 5, 20, 21, 53])
+  test("directory joins one-row export fragments: " + count + " players", async () => {
+    const lines = tsv.split("\n");
+    fragmentFiles = Array.from(
+      { length: count },
+      (_, i) =>
+        lines[0] +
+        "\n" +
+        [
+          "17FA03",
+          (i + 1).toString(16),
+          "Engineer " + i,
+          "2026-01-01 00:00:00",
+          "2026-09-01 00:00:00",
+          "[]",
+        ].join("\t"),
+    );
+    const cookie = await session();
+    const first = await (await request("/api/admin/players?page=1", cookie)).json();
+    assert.equal(first.players.length, Math.min(20, count));
+    assert.equal(first.totalPlayers, count);
+    for (const size of [10, 20, 50]) {
+      const ids: string[] = [];
+      for (let page = 1; page <= Math.max(1, Math.ceil(count / size)); page++) {
+        const result = await (
+          await request(
+            "/api/admin/players?page=" +
+              page +
+              "&pageSize=" +
+              size +
+              "&cursor=" +
+              first.snapshotCursor,
+            cookie,
+          )
+        ).json();
+        assert.equal(result.players.length, Math.min(size, Math.max(0, count - (page - 1) * size)));
+        ids.push(...result.players.map((p: { playFabId: string }) => p.playFabId));
+      }
+      assert.equal(new Set(ids).size, count);
+    }
+    assert.deepEqual(
+      (
+        await (
+          await request("/api/admin/players?page=1&cursor=" + first.snapshotCursor, await session())
+        ).json()
+      ).players,
+      first.players,
+    );
+    assert.equal((await request("/api/admin/players?pageSize=1", cookie)).status, 400);
+  });
+test("analytics counts full snapshots, keeps missing values distinct and isolates failures", async () => {
+  const cookie = await session();
+  const result = await (await request("/api/admin/analytics", cookie)).json();
+  assert.equal(result.players.data.total, 25);
+  assert.equal(result.players.data.progression[1].value, 12);
+  assert.equal(result.players.data.progression[0].value, null);
+  assert.equal(result.bugs.data.open, 0);
+  assert.deepEqual(result.leaderboard.data, []);
+  assert.equal(result.backend, "Connected");
+  assert.ok(
+    !calls.some(
+      (c) => c.operation === "Admin/GetUserAccountInfo" || c.operation === "Server/GetUserData",
+    ),
+  );
+  failOperation = "Admin/GetTitleInternalData";
+  const partial = await (await request("/api/admin/analytics", cookie)).json();
+  assert.equal(partial.bugs.status, "error");
+  assert.equal(partial.players.status, "ready");
+});
+test("registration UTC buckets and activity boundaries do not invent missing history", () => {
+  const players = [
+    mapIdentity({
+      PlayFabId: "A",
+      TitleInfo: { Created: "2026-09-12T00:00:00Z", LastLogin: "2026-09-05T12:00:00Z" },
+    }),
+    mapIdentity({
+      PlayFabId: "B",
+      TitleInfo: { Created: "2026-09-01T00:00:00Z", LastLogin: "2026-08-13T12:00:00Z" },
+    }),
+    mapIdentity({ PlayFabId: "C", TitleInfo: { LastLogin: "2026-01-01T00:00:00Z" } }),
+    mapIdentity({ PlayFabId: "D" }),
+  ];
+  players[0]!.totalScore = 0;
+  players[1]!.totalScore = 20;
+  const result = summarizePlayers(players, "2026-09-12T12:00:00Z");
+  assert.equal(result.total, 4);
+  assert.equal(result.recentlyActive, 1);
+  assert.deepEqual(
+    result.activity.map((b) => b.count),
+    [1, 1, 1, 1],
+  );
+  assert.equal(
+    result.registrations.reduce((n, b) => n + b.count, 0),
+    2,
+  );
+  assert.equal(result.registrationUnknown, 2);
+  assert.equal(result.progression[1]!.value, 10);
+  assert.equal(result.progression[1]!.available, 2);
+  assert.equal(result.progression[0]!.value, null);
 });

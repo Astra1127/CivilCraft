@@ -20,43 +20,42 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { logActivity, setCmsState, uid } from "@/lib/cms/store";
-import { useAuth } from "@/lib/auth";
+import { requireSessionTicket } from "@/lib/playfab/client";
 
 const categories = ["Gameplay", "Graphics", "Performance", "Account", "Website", "Other"];
 
 /** Player-facing bug report. Lands in the admin Bug Reports inbox. */
 export function ReportBugDialog() {
-  const { player } = useAuth();
+  const [sending, setSending] = useState(false);
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState(categories[0]!);
   const [description, setDescription] = useState("");
 
-  const submit = () => {
+  const submit = async () => {
     if (description.trim().length < 10) {
       toast.error("Please describe the issue in a little more detail.");
       return;
     }
-    setCmsState((prev) => ({
-      ...prev,
-      bugs: [
-        {
-          id: uid(),
-          player: player?.displayName ?? "Player",
-          category,
-          description: description.trim(),
-          gameVersion: "—",
-          device: typeof navigator !== "undefined" ? navigator.platform || "Unknown" : "Unknown",
-          createdAt: new Date().toISOString(),
-          status: "New" as const,
+    setSending(true);
+    try {
+      const response = await fetch("/api/player/bug-reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + requireSessionTicket(),
         },
-        ...prev.bugs,
-      ],
-    }));
-    logActivity({ area: "Messages", action: "Bug reported", target: category });
-    setDescription("");
-    setOpen(false);
-    toast.success("Thanks! Your report was sent to the team.");
+        body: JSON.stringify({ category, description, device: navigator.platform }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Report could not be sent.");
+      setDescription("");
+      setOpen(false);
+      toast.success("Thanks! Your report was sent to the team.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Report could not be sent.");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -95,6 +94,7 @@ export function ReportBugDialog() {
             <Textarea
               id="bug-description"
               rows={5}
+              maxLength={2000}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe the issue and the steps that led to it."
@@ -105,7 +105,7 @@ export function ReportBugDialog() {
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button variant="gold" onClick={submit}>
+          <Button variant="gold" disabled={sending} onClick={submit}>
             Send report
           </Button>
         </DialogFooter>

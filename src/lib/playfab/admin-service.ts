@@ -5,7 +5,7 @@ import type {
   PlayerSearchKind,
 } from "./admin-types";
 import type { Transaction } from "./types";
-async function request<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+export async function request<T>(path: string, body?: Record<string, unknown>): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`/api/admin/${path}`, {
@@ -32,9 +32,16 @@ async function request<T>(path: string, body?: Record<string, unknown>): Promise
   return data as T;
 }
 export const adminPlayerService = {
-  searchPlayers(query: string, kind: PlayerSearchKind = "PlayFabId", cursor: string | null = null) {
-    const params = new URLSearchParams({ q: query, kind });
+  searchPlayers(
+    query: string,
+    kind: PlayerSearchKind = "PlayFabId",
+    cursor: string | null = null,
+    pageSize = 20,
+    page?: number,
+  ) {
+    const params = new URLSearchParams({ q: query, kind, pageSize: String(pageSize) });
     if (cursor) params.set("cursor", cursor);
+    if (page !== undefined) params.set("page", String(page));
     return request<AdminPlayerPage>(`players?${params}`);
   },
   getPlayer(id: string) {

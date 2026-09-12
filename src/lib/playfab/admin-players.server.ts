@@ -1,3 +1,5 @@
+import { leaderboardRank } from "./leaderboard.server.ts";
+import { LEADERBOARD_STATISTIC } from "./leaderboard-shared.ts";
 import {
   AdminApiError,
   dateValue,
@@ -96,9 +98,10 @@ export async function getAdminPlayer(id: string): Promise<AdminPlayerDetail> {
     playFabAdmin("Server/GetPlayerStatistics", { PlayFabId: id }),
     playFabAdmin("Server/GetUserInventory", { PlayFabId: id }),
     playFabAdmin("Admin/GetUserBans", { PlayFabId: id }),
-  ]);
+    leaderboardRank(id),
+  ] as const);
   const unavailable: string[] = [];
-  const read = (index: number, name: string) => {
+  const read = (index: 0 | 1 | 2 | 3, name: string) => {
     const r = results[index]!;
     if (r.status === "fulfilled") return r.value;
     unavailable.push(name);
@@ -128,12 +131,15 @@ export async function getAdminPlayer(id: string): Promise<AdminPlayerDetail> {
       unavailable.push("Ban status");
     }
   }
+  const ranking = results[4]!;
+  if (ranking.status === "rejected") unavailable.push("Leaderboard rank");
   return {
     ...player,
+    rank: ranking.status === "fulfilled" ? (ranking.value?.rank ?? null) : null,
     level: numberValue(value("CurrentLevel")),
     xp: numberValue(value("XP")),
     xpToNextLevel: numberValue(value("XPToNextLevel")),
-    totalScore: stat("TotalScore"),
+    totalScore: stat(LEADERBOARD_STATISTIC),
     bridgesCompleted: stat("BridgesCompleted") ?? numberValue(value("BridgesCompleted")),
     challengesCompleted: stat("ChallengesCompleted") ?? numberValue(value("ChallengesCompleted")),
     achievementsUnlocked: numberValue(value("AchievementsUnlocked")),

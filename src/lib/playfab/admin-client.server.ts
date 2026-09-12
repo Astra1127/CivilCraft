@@ -13,6 +13,11 @@ export function adminGameConfig() {
   return { titleId, secret: process.env["PLAYFAB_SECRET_KEY"]?.trim() || "" };
 }
 type Operation =
+  | "Server/GetLeaderboard"
+  | "Server/GetLeaderboardAroundUser"
+  | "Server/AuthenticateSessionTicket"
+  | "Admin/GetTitleInternalData"
+  | "Admin/SetTitleInternalData"
   | "Admin/GetAllSegments"
   | "Admin/ExportPlayersInSegment"
   | "Admin/GetSegmentExport"

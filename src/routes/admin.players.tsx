@@ -34,15 +34,26 @@ function AdminPlayers() {
   const [selected, setSelected] = useState<AdminPlayerDetail | null>(null);
   const [submitted, setSubmitted] = useState("");
   const [kind, setKind] = useState<PlayerSearchKind>("PlayFabId");
-  const [cursors, setCursors] = useState<(string | null)[]>([null]);
+  const [snapshot, setSnapshot] = useState<string | null>(null);
+  const [pageSize, setPageSize] = useState(20);
+  useEffect(() => {
+    try {
+      const saved = Number(sessionStorage.getItem("civilcraft.admin.directory.rows"));
+      if ([10, 20, 50].includes(saved)) setPageSize(saved);
+    } catch {
+      /* preference only */
+    }
+  }, []);
+  const [generation, setGeneration] = useState(0);
   const [page, setPage] = useState(0);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const cursor = cursors[page] ?? null;
+  const cursor = snapshot;
   const [pollCursor, setPollCursor] = useState<string | null>(null);
 
   const q = useQuery({
-    queryKey: ["admin-players", submitted, kind, cursor],
-    queryFn: () => adminPlayerService.searchPlayers(submitted, kind, pollCursor ?? cursor),
+    queryKey: ["admin-players", submitted, kind, cursor, generation, page, pageSize],
+    queryFn: () =>
+      adminPlayerService.searchPlayers(submitted, kind, pollCursor ?? cursor, pageSize, page + 1),
     retry: false,
     refetchOnWindowFocus: false,
     refetchInterval: (result) => (result.state.data?.pending ? 5000 : false),
@@ -50,10 +61,11 @@ function AdminPlayers() {
 
   useEffect(() => {
     if (q.data?.pending) setPollCursor(q.data.nextCursor);
-  }, [q.data]);
+    if (q.data?.snapshotCursor && !snapshot) setSnapshot(q.data.snapshotCursor);
+  }, [q.data, snapshot]);
   const resetPage = () => {
     setPage(0);
-    setCursors([null]);
+    setSnapshot(null);
     setPollCursor(null);
   };
   const openPlayer = async (id: string) => {
@@ -84,6 +96,9 @@ function AdminPlayers() {
         }
       />
 
+      {q.data?.totalPlayers !== undefined ? (
+        <p className="text-sm font-semibold">Total players: {q.data.totalPlayers}</p>
+      ) : null}
       <Panel
         title="Player directory"
         icon={Users}
@@ -135,7 +150,7 @@ function AdminPlayers() {
                 setQuery("");
                 setSubmitted("");
                 resetPage();
-                void q.refetch();
+                setGeneration((v) => v + 1);
               }}
             >
               Directory
@@ -165,7 +180,7 @@ function AdminPlayers() {
                   <TableHead className="text-right">Level</TableHead>
                   <TableHead className="text-right">Score</TableHead>
                   <TableHead>Account status</TableHead>
-                  <TableHead>Last active</TableHead>
+                  <TableHead>Last login</TableHead>
                   <TableHead className="text-right">Details</TableHead>
                 </TableRow>
               </TableHeader>
@@ -207,6 +222,43 @@ function AdminPlayers() {
       </Panel>
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <label className="flex items-center gap-2">
+          Rows per page
+          <select
+            aria-label="Rows per page"
+            className="rounded-md border border-input bg-background p-2"
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              try {
+                sessionStorage.setItem("civilcraft.admin.directory.rows", e.target.value);
+              } catch {
+                /* preference only */
+              }
+              setPage(0);
+              setPollCursor(null);
+            }}
+          >
+            {[10, 20, 50].map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!q.isPending && !q.data?.pending && !q.isError ? (
+          <p>
+            {q.data?.players.length
+              ? "Showing " +
+                (page * pageSize + 1) +
+                "\u2013" +
+                (page * pageSize + q.data.players.length)
+              : "Showing 0"}
+            {q.data?.totalPlayers !== undefined
+              ? " of " + q.data.totalPlayers + " players"
+              : " matching players"}
+          </p>
+        ) : null}
         <p className="text-xs text-muted-foreground">
           {q.data?.snapshotAt
             ? "Directory snapshot: " + new Date(q.data.snapshotAt).toLocaleString()
@@ -224,14 +276,19 @@ function AdminPlayers() {
           >
             Previous
           </Button>
-          <span>Page {page + 1}</span>
+          <span>
+            Page {page + 1}
+            {q.data?.totalPlayers !== undefined
+              ? " of " + Math.max(1, Math.ceil(q.data.totalPlayers / pageSize))
+              : ""}
+          </span>
           <Button
             size="sm"
             variant="outline"
             disabled={!q.data?.nextCursor || q.data.pending || q.isFetching}
             onClick={() => {
               setPollCursor(null);
-              setCursors([...cursors.slice(0, page + 1), q.data!.nextCursor]);
+
               setPage(page + 1);
             }}
           >

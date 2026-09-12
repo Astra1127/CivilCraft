@@ -1,3 +1,4 @@
+import { LEADERBOARD_STATISTIC } from "./leaderboard-shared.ts";
 import { createHmac } from "node:crypto";
 import { EncryptJWT, jwtDecrypt } from "jose";
 import type { AdminAuthConfig } from "../admin-auth/config.server.ts";
@@ -79,11 +80,16 @@ async function download(
   };
 }
 /** Parse the documented TSV header. Only player IDs survive this boundary. */
-export function readExportPage(bytes: Buffer, complete: boolean, header: string[] | null) {
+export function readExportPage(
+  bytes: Buffer,
+  complete: boolean,
+  header: string[] | null,
+  limit = PAGE_SIZE,
+) {
   let used = 0,
     columns = header;
   const players: AdminPlayer[] = [];
-  while (used < bytes.length && players.length < PAGE_SIZE) {
+  while (used < bytes.length && players.length < limit) {
     let end = bytes.indexOf(10, used);
     if (end < 0) {
       if (!complete) break;
@@ -123,7 +129,7 @@ export function readExportPage(bytes: Buffer, complete: boolean, header: string[
         if (Array.isArray(stats)) {
           const stat = (name: string) =>
             numberValue(object(stats.find((s) => object(s)["Name"] === name))["StatisticValue"]);
-          player.totalScore = stat("TotalScore");
+          player.totalScore = stat(LEADERBOARD_STATISTIC);
           player.bridgesCompleted = stat("BridgesCompleted");
           player.challengesCompleted = stat("ChallengesCompleted");
         }
@@ -141,18 +147,22 @@ export async function directoryPage(
   config: AdminAuthConfig,
   owner: string,
   token: string | null,
+  bypassCache = false,
+  pageSize = 20,
+  requestedPage?: number,
+  includeAll = false,
 ): Promise<AdminPlayerPage> {
   const title = adminGameConfig().titleId;
   const cacheKey = createHmac("sha256", config.sessionSecret)
     .update(config.origin + ":" + title + ":" + owner)
     .digest("hex");
-  const key = createHmac("sha256", config.sessionSecret).update("civilcraft:directory:v1").digest();
+  const key = createHmac("sha256", config.sessionSecret).update("civilcraft:directory:v2").digest();
   let state: Cursor;
   if (token) {
     if (token.length > 6000) expired();
     try {
       const { payload } = await jwtDecrypt(token, key, {
-        issuer: "civilcraft:directory:v1",
+        issuer: "civilcraft:directory:v2",
         audience: config.origin,
         keyManagementAlgorithms: ["dir"],
         contentEncryptionAlgorithms: ["A256GCM"],
@@ -188,6 +198,7 @@ export async function directoryPage(
   } else {
     for (const [id, value] of latestExports)
       if (value.expires <= Date.now()) latestExports.delete(id);
+    if (bypassCache) latestExports.delete(cacheKey);
     let cached = latestExports.get(cacheKey);
     if (!cached) {
       if (latestExports.size >= 20)
@@ -228,7 +239,7 @@ export async function directoryPage(
   const save = async (next: Cursor) => {
     const token = await new EncryptJWT({ cursor: next })
       .setProtectedHeader({ alg: "dir", enc: "A256GCM" })
-      .setIssuer("civilcraft:directory:v1")
+      .setIssuer("civilcraft:directory:v2")
       .setAudience(config.origin)
       .setIssuedAt()
       .setExpirationTime(Math.floor(snapshotTime / 1000) + TTL)
@@ -239,11 +250,13 @@ export async function directoryPage(
   };
   const exported = await playFabAdmin("Admin/GetSegmentExport", { ExportId: state.exportId });
   if (exported["State"] !== "Complete") {
-    if (["Failed", "Cancelled", "Error"].includes(String(exported["State"])))
+    if (["Failed", "Cancelled", "Error"].includes(String(exported["State"]))) {
+      latestExports.delete(cacheKey);
       throw new AdminApiError(
         503,
-        "The player directory export failed. Try again after the snapshot expires.",
+        "The player directory export failed. Refresh the directory to try again.",
       );
+    }
     return {
       players: [],
       pending: true,
@@ -253,29 +266,91 @@ export async function directoryPage(
   }
   if (typeof exported["IndexUrl"] !== "string")
     throw new AdminApiError(502, "The player directory index is unavailable.");
-  const index = await download(exported["IndexUrl"]);
-  const fragments = index.bytes
-    .toString("utf8")
-    .split(/\r?\n/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (fragments.length > 5000)
-    throw new AdminApiError(502, "The player directory export exceeds the supported index size.");
-  const url = fragments[state.fragment];
-  if (!url) return { players: [], pending: false, nextCursor: null, snapshotAt: state.snapshotAt };
-  const fragment = await download(url, state.offset);
-  const page = readExportPage(fragment.bytes, fragment.complete, state.columns);
-  const finished = fragment.complete && page.used === fragment.bytes.length;
-  const next = {
-    ...state,
-    fragment: state.fragment + Number(finished),
-    offset: finished ? 0 : state.offset + page.used,
-    columns: finished ? null : page.columns,
-  };
+  const all = await readSnapshot(state.exportId, title, String(exported["IndexUrl"]), snapshotTime);
+  const start = requestedPage === undefined ? state.offset : (requestedPage - 1) * pageSize;
+  const end = Math.min(start + pageSize, all.length);
   return {
-    players: page.players,
+    players: includeAll ? all : all.slice(start, end),
     pending: false,
-    nextCursor: next.fragment < fragments.length ? await save(next) : null,
+    nextCursor: end < all.length ? await save({ ...state, offset: end }) : null,
+    snapshotCursor: await save({ ...state, offset: 0 }),
+    totalPlayers: all.length,
     snapshotAt: state.snapshotAt,
   };
+}
+
+const snapshots = new Map<string, { expires: number; value: Promise<AdminPlayer[]> }>();
+async function readSnapshot(
+  exportId: string,
+  title: string,
+  indexUrl: string,
+  snapshotTime: number,
+) {
+  const cacheKey = createHmac("sha256", adminGameConfig().secret)
+    .update(title + ":" + exportId)
+    .digest("hex");
+  for (const [key, item] of snapshots) if (item.expires <= Date.now()) snapshots.delete(key);
+  let cached = snapshots.get(cacheKey);
+  if (!cached) {
+    if (snapshots.size >= 20)
+      throw new AdminApiError(429, "The directory is busy. Try again shortly.");
+    const value = (async () => {
+      const index = await download(indexUrl);
+      const urls = index.bytes
+        .toString("utf8")
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (urls.length > 5000)
+        throw new AdminApiError(502, "The directory exceeds its safe snapshot limit.");
+      const parts: AdminPlayer[][] = new Array(urls.length);
+      let next = 0,
+        totalBytes = 0,
+        totalRows = 0;
+      const started = Date.now();
+      const results = await Promise.allSettled(
+        Array.from({ length: Math.min(4, urls.length) }, async () => {
+          while (next < urls.length) {
+            const i = next++;
+            let offset = 0,
+              columns: string[] | null = null;
+            const rows: AdminPlayer[] = [];
+            while (true) {
+              if (Date.now() - started > 25000)
+                throw new AdminApiError(
+                  503,
+                  "The player snapshot exceeded its read time limit. Please retry.",
+                );
+              const chunk = await download(urls[i]!, offset);
+              totalBytes += chunk.bytes.length;
+              if (totalBytes > 64 * 1024 * 1024)
+                throw new AdminApiError(502, "The directory exceeds its safe snapshot limit.");
+              const parsed = readExportPage(chunk.bytes, chunk.complete, columns, 50001);
+              rows.push(...parsed.players);
+              totalRows += parsed.players.length;
+              if (totalRows > 50000)
+                throw new AdminApiError(502, "The directory exceeds its safe snapshot limit.");
+              if (chunk.complete && parsed.used === chunk.bytes.length) break;
+              if (!parsed.used)
+                throw new AdminApiError(502, "The directory fragment could not be read.");
+              offset += parsed.used;
+              columns = parsed.columns;
+            }
+            parts[i] = rows;
+          }
+        }),
+      );
+      const failure = results.find((r) => r.status === "rejected");
+      if (failure?.status === "rejected") throw failure.reason;
+      const unique = new Map<string, AdminPlayer>();
+      for (const player of parts.flat()) unique.set(player.playFabId, player);
+      return [...unique.values()];
+    })();
+    cached = { expires: snapshotTime + TTL * 1000, value };
+    snapshots.set(cacheKey, cached);
+    value.catch(() => {
+      if (snapshots.get(cacheKey)?.value === value) snapshots.delete(cacheKey);
+    });
+  }
+  return cached.value;
 }

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { getActivityStatus } from "@/lib/playfab";
+
 import type { AdminPlayerDetail } from "@/lib/playfab/admin-types";
 type AccountStatus = "active" | "banned" | null;
 
@@ -37,16 +37,6 @@ export function AccountStatusBadge({ status }: { status: AccountStatus }) {
       }
     >
       {status ?? "Not available"}
-    </StatusPill>
-  );
-}
-
-export function ActivityBadge({ lastActive }: { lastActive?: string | null | undefined }) {
-  const activity = getActivityStatus(lastActive ?? undefined);
-  if (!activity) return null;
-  return (
-    <StatusPill tone={activity === "recently_active" ? "info" : "off"}>
-      {activity === "recently_active" ? "Recently active" : "Inactive"}
     </StatusPill>
   );
 }
@@ -119,12 +109,11 @@ export function PlayerRecordModal({
                     </DialogDescription>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <AccountStatusBadge status={status} />
-                      <ActivityBadge lastActive={player.lastActive} />
                     </div>
                   </div>
                   <div className="pr-6 text-right">
                     <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
-                      Last active
+                      Last login
                     </p>
                     <p className="text-sm font-bold">{formatDate(player.lastActive)}</p>
                   </div>
@@ -144,14 +133,10 @@ export function PlayerRecordModal({
                       value={<span className="font-mono text-xs">{player.playFabId}</span>}
                     />
                     <DataRow label="Member since" value={formatDate(player.createdAt)} />
-                    <DataRow label="Last active" value={formatDate(player.lastActive)} />
+                    <DataRow label="Last login" value={formatDate(player.lastActive)} />
                     <DataRow
                       label="Account status"
                       value={<AccountStatusBadge status={status} />}
-                    />
-                    <DataRow
-                      label="Activity"
-                      value={<ActivityBadge lastActive={player.lastActive} />}
                     />
                   </div>
                 </section>
@@ -165,9 +150,10 @@ export function PlayerRecordModal({
                       value={`${player.xp ?? "\u2014"} / ${player.xpToNextLevel ?? "\u2014"}`}
                     />
                     <Metric
-                      label="Total score"
+                      label="Engineering score"
                       value={player.totalScore?.toLocaleString() ?? "\u2014"}
                     />
+                    <Metric label="Global rank" value={player.rank == null ? "Not available" : "#" + player.rank} />
                     <Metric label="Bridges" value={player.bridgesCompleted ?? "\u2014"} />
                     <Metric label="Challenges" value={player.challengesCompleted ?? "\u2014"} />
                     <Metric

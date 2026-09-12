@@ -1,3 +1,5 @@
+import { handleLeaderboardRequest } from "./lib/playfab/leaderboard.server";
+import { handlePlayerBugRequest } from "./lib/playfab/bug-reports.server";
 import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
@@ -49,6 +51,10 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const leaderboardResponse = await handleLeaderboardRequest(request);
+      if (leaderboardResponse) return leaderboardResponse;
+      const playerResponse = await handlePlayerBugRequest(request);
+      if (playerResponse) return playerResponse;
       const apiResponse = await handlePlayFabAdminRequest(request);
       if (apiResponse) return apiResponse;
       const authResponse = await handleAdminRequest(request);

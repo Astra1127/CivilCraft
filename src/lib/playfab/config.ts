@@ -36,4 +36,5 @@ export function playFabUrl(path: string): string {
  * labelled in the UI.
  */
 export const demoMode =
-  (import.meta.env["VITE_PLAYFAB_DEMO"] as string | undefined)?.toLowerCase() === "false";
+  import.meta.env.DEV &&
+  (import.meta.env["VITE_PLAYFAB_DEMO"] as string | undefined)?.toLowerCase() === "true";

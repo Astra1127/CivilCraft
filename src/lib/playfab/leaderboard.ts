@@ -1,52 +1,32 @@
-/**
- * PlayFab leaderboards. The website never keeps its own ranking data — every
- * row comes from a PlayFab player statistic.
- */
-import { callPlayerApi } from "./client";
-import type { LeaderboardEntry, LeaderboardWindow } from "./types";
-
-/** Primary Civil Craft ranking statistic reported by the Unity game. */
-export const LEADERBOARD_STATISTIC = "TotalScore";
-
-interface LeaderboardResult {
-  Leaderboard?: {
-    PlayFabId: string;
-    DisplayName?: string;
-    StatValue: number;
-    Position: number;
-    Profile?: { DisplayName?: string };
-  }[];
-}
-
-function toEntries(result: LeaderboardResult): LeaderboardEntry[] {
-  return (result.Leaderboard ?? []).map((row) => ({
-    rank: row.Position + 1,
-    playFabId: row.PlayFabId,
-    displayName: row.DisplayName ?? row.Profile?.DisplayName ?? row.PlayFabId,
-    level: 0,
-    score: row.StatValue,
-  }));
-}
-
-export async function getLeaderboard(
-  _window: LeaderboardWindow = "global",
-  maxResults = 25,
-): Promise<LeaderboardEntry[]> {
-  const result = await callPlayerApi<LeaderboardResult>("/Client/GetLeaderboard", {
-    StatisticName: LEADERBOARD_STATISTIC,
-    StartPosition: 0,
-    MaxResultsCount: maxResults,
-    ProfileConstraints: { ShowDisplayName: true },
+import { requireSessionTicket } from "./client";
+import type { LeaderboardEntry } from "./types";
+import type { LeaderboardPage } from "./leaderboard-shared";
+export { LEADERBOARD_STATISTIC } from "./leaderboard-shared";
+async function request<T>(path: string, admin = false): Promise<T> {
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: admin ? {} : { Authorization: "Bearer " + requireSessionTicket() },
   });
-  return toEntries(result);
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.error || "Unable to load the leaderboard.");
+  return data as T;
 }
-
-export async function getPlayerRank(playFabId: string): Promise<LeaderboardEntry | null> {
-  const result = await callPlayerApi<LeaderboardResult>("/Client/GetLeaderboardAroundPlayer", {
-    StatisticName: LEADERBOARD_STATISTIC,
-    MaxResultsCount: 1,
-    ProfileConstraints: { ShowDisplayName: true },
-  });
-  const entries = toEntries(result);
-  return entries.find((e) => e.playFabId === playFabId) ?? entries[0] ?? null;
+export function getLeaderboard(
+  start = 0,
+  version?: number,
+  admin = false,
+): Promise<LeaderboardPage> {
+  const params = new URLSearchParams({ start: String(start) });
+  if (version !== undefined) params.set("version", String(version));
+  return request("/api/leaderboard?" + params, admin);
+}
+export async function getPlayerRank(
+  playFabId: string,
+  version?: number,
+): Promise<LeaderboardEntry | null> {
+  const row = await request<LeaderboardEntry | null>(
+    "/api/leaderboard/me" + (version === undefined ? "" : "?version=" + version),
+  );
+  return row?.playFabId === playFabId ? row : null;
 }

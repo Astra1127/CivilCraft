@@ -150,19 +150,6 @@ export const seedState: CmsState = {
       status: "New",
     },
   ],
-  bugs: [
-    {
-      id: "b1",
-      player: "Demo Engineer",
-      category: "Physics",
-      description:
-        "Sample bug report retained for review of the admin workflow.",
-      gameVersion: "0.1.0",
-      device: "Android",
-      createdAt: "2026-08-18T08:00:00.000Z",
-      status: "New",
-    },
-  ],
   activity: [],
   releases: [
     {

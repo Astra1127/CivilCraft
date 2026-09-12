@@ -34,7 +34,6 @@ import {
   mockCharacter,
   mockCosmetics,
   mockJourney,
-  mockLeaderboard,
   mockProfile,
   mockProgress,
   mockStatistics,
@@ -53,7 +52,6 @@ import { getTransactions as fetchTransactions } from "./transactions";
 import type {
   AccountStatus,
   Achievement,
-  ActivityStatus,
   EquippedCosmetics,
   AlmanacJourney,
   LeaderboardEntry,
@@ -250,26 +248,7 @@ export const achievementsService = {
 
 /* ---------------------------------------------------------- leaderboards */
 
-export const leaderboardService = {
-  async getLeaderboard(window: LeaderboardWindow): Promise<LeaderboardEntry[]> {
-    if (demoMode) {
-      await latency(360);
-      const seed = window === "global" ? 0 : window === "weekly" ? 3 : 6;
-      return mockLeaderboard(seed);
-    }
-    return fetchLeaderboard(window);
-  },
-  async getPlayerRank(
-    playFabId: string,
-    window: LeaderboardWindow,
-  ): Promise<LeaderboardEntry | null> {
-    if (demoMode) {
-      const board = await this.getLeaderboard(window);
-      return board.find((e) => e.playFabId === playFabId) ?? null;
-    }
-    return fetchPlayerRank(playFabId);
-  },
-};
+export const leaderboardService = { getLeaderboard: fetchLeaderboard, getPlayerRank: fetchPlayerRank };
 
 /* ------------------------------------------------------------- almanac  */
 
@@ -290,24 +269,6 @@ export const almanacService = {
 };
 
 /* ----------------------------------------------------------- admin views */
-
-/** Inactivity threshold in days. Configurable in one place. */
-export const INACTIVITY_THRESHOLD_DAYS = 30;
-
-/**
- * Activity is ALWAYS derived from `lastActive` and is never a moderation
- * state — an inactive player is not suspended or banned.
- */
-export function getActivityStatus(
-  lastActive: string | undefined,
-  now: Date = new Date(),
-): ActivityStatus | null {
-  if (!lastActive) return null;
-  const then = new Date(lastActive).getTime();
-  if (Number.isNaN(then)) return null;
-  const days = (now.getTime() - then) / 86_400_000;
-  return days <= INACTIVITY_THRESHOLD_DAYS ? "recently_active" : "inactive";
-}
 
 export { adminPlayerService } from "./admin-service";
 

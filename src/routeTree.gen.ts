@@ -31,6 +31,7 @@ import { Route as AdminBugsRouteImport } from './routes/admin.bugs'
 import { Route as AdminFaqRouteImport } from './routes/admin.faq'
 import { Route as AdminGalleryRouteImport } from './routes/admin.gallery'
 import { Route as AdminIntegrationRouteImport } from './routes/admin.integration'
+import { Route as AdminLeaderboardRouteImport } from './routes/admin.leaderboard'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminMessagesRouteImport } from './routes/admin.messages'
 import { Route as AdminNewsRouteImport } from './routes/admin.news'
@@ -160,6 +161,11 @@ const AdminIntegrationRoute = AdminIntegrationRouteImport.update({
   path: '/integration',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminLeaderboardRoute = AdminLeaderboardRouteImport.update({
+  id: '/leaderboard',
+  path: '/leaderboard',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -273,6 +279,7 @@ export interface FileRoutesByFullPath {
   '/admin/faq': typeof AdminFaqRoute
   '/admin/gallery': typeof AdminGalleryRoute
   '/admin/integration': typeof AdminIntegrationRoute
+  '/admin/leaderboard': typeof AdminLeaderboardRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/news': typeof AdminNewsRoute
@@ -312,6 +319,7 @@ export interface FileRoutesByTo {
   '/admin/faq': typeof AdminFaqRoute
   '/admin/gallery': typeof AdminGalleryRoute
   '/admin/integration': typeof AdminIntegrationRoute
+  '/admin/leaderboard': typeof AdminLeaderboardRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/news': typeof AdminNewsRoute
@@ -355,6 +363,7 @@ export interface FileRoutesById {
   '/admin/faq': typeof AdminFaqRoute
   '/admin/gallery': typeof AdminGalleryRoute
   '/admin/integration': typeof AdminIntegrationRoute
+  '/admin/leaderboard': typeof AdminLeaderboardRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/news': typeof AdminNewsRoute
@@ -399,6 +408,7 @@ export interface FileRouteTypes {
     | '/admin/faq'
     | '/admin/gallery'
     | '/admin/integration'
+    | '/admin/leaderboard'
     | '/admin/login'
     | '/admin/messages'
     | '/admin/news'
@@ -438,6 +448,7 @@ export interface FileRouteTypes {
     | '/admin/faq'
     | '/admin/gallery'
     | '/admin/integration'
+    | '/admin/leaderboard'
     | '/admin/login'
     | '/admin/messages'
     | '/admin/news'
@@ -480,6 +491,7 @@ export interface FileRouteTypes {
     | '/admin/faq'
     | '/admin/gallery'
     | '/admin/integration'
+    | '/admin/leaderboard'
     | '/admin/login'
     | '/admin/messages'
     | '/admin/news'
@@ -676,6 +688,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIntegrationRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/leaderboard': {
+      id: '/admin/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/admin/leaderboard'
+      preLoaderRoute: typeof AdminLeaderboardRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/login': {
       id: '/admin/login'
       path: '/login'
@@ -811,6 +830,7 @@ interface AdminRouteChildren {
   AdminFaqRoute: typeof AdminFaqRoute
   AdminGalleryRoute: typeof AdminGalleryRoute
   AdminIntegrationRoute: typeof AdminIntegrationRoute
+  AdminLeaderboardRoute: typeof AdminLeaderboardRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminMessagesRoute: typeof AdminMessagesRoute
   AdminNewsRoute: typeof AdminNewsRoute
@@ -827,6 +847,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminFaqRoute: AdminFaqRoute,
   AdminGalleryRoute: AdminGalleryRoute,
   AdminIntegrationRoute: AdminIntegrationRoute,
+  AdminLeaderboardRoute: AdminLeaderboardRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminMessagesRoute: AdminMessagesRoute,
   AdminNewsRoute: AdminNewsRoute,

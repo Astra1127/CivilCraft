@@ -21,7 +21,11 @@ function hydrate() {
   hydrated = true;
   try {
     const raw = window.localStorage.getItem(KEY);
-    if (raw) state = { ...seedState, ...(JSON.parse(raw) as CmsState) };
+    if (raw) {
+      const saved = JSON.parse(raw);
+      delete saved.bugs;
+      state = { ...seedState, ...saved };
+    }
   } catch {
     /* ignore corrupt storage */
   }

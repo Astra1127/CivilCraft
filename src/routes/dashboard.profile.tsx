@@ -50,7 +50,10 @@ function ProfilePage() {
     return <ErrorState onRetry={profile.refetch} description={(profile.error as Error).message} />;
 
   const p = profile.data;
-  const xpPercent = Math.round((p.xp / Math.max(p.xpToNextLevel, 1)) * 100);
+  const xpPercent =
+    p.xp !== null && p.xpToNextLevel !== null
+      ? Math.round((p.xp / Math.max(p.xpToNextLevel, 1)) * 100)
+      : 0;
   const equippedBySlot = new Map((character.data?.equipped ?? []).map((i) => [i.slot, i]));
 
   return (
@@ -69,14 +72,15 @@ function ProfilePage() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">Engineer</p>
             <h2 className="truncate text-2xl sm:text-3xl">{p.displayName}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Level {p.level}</p>
+            <p className="mt-1 text-sm text-muted-foreground">Level {p.level ?? "\u2014"}</p>
           </div>
 
           <div>
             <div className="flex items-baseline justify-between text-sm">
               <span className="font-semibold">Experience</span>
               <span className="text-muted-foreground">
-                {p.xp.toLocaleString()} / {p.xpToNextLevel.toLocaleString()} XP
+                {p.xp?.toLocaleString() ?? "\u2014"} /{" "}
+                {p.xpToNextLevel?.toLocaleString() ?? "\u2014"} XP
               </span>
             </div>
             <Progress value={xpPercent} className="mt-2" />
@@ -88,7 +92,7 @@ function ProfilePage() {
               ["Email", p.email ?? "—"],
               ["Current region", progress.data?.currentRegion ?? "—"],
               ["Member since", p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "—"],
-              ["Last active", p.lastActive ? new Date(p.lastActive).toLocaleDateString() : "—"],
+              ["Last login", p.lastActive ? new Date(p.lastActive).toLocaleDateString() : "—"],
             ].map(([k, v]) => (
               <div
                 key={k}
@@ -109,16 +113,20 @@ function ProfilePage() {
           <LoadingState rows={2} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <StatCard icon={Star} label="Total score" value={p.totalScore.toLocaleString()} />
+            <StatCard
+              icon={Star}
+              label="Engineering score"
+              value={p.totalScore?.toLocaleString() ?? "\u2014"}
+            />
             <StatCard
               icon={Hammer}
               label="Bridges completed"
-              value={p.bridgesCompleted.toLocaleString()}
+              value={p.bridgesCompleted?.toLocaleString() ?? "\u2014"}
             />
             <StatCard
               icon={Target}
               label="Challenges completed"
-              value={p.challengesCompleted.toLocaleString()}
+              value={p.challengesCompleted?.toLocaleString() ?? "\u2014"}
             />
             <StatCard
               icon={Zap}

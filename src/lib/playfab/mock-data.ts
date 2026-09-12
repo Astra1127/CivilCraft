@@ -3,7 +3,6 @@ import type {
   EquippedCosmetics,
   AlmanacJourney,
   AlmanacLevel,
-  LeaderboardEntry,
   PlayerCharacter,
   PlayerProfile,
   PlayerProgress,
@@ -184,34 +183,6 @@ export const mockAchievements: Achievement[] = [
   },
 ];
 
-const names = [
-  "BridgeBuilder01",
-  "TrussTitan",
-  "CantileverKid",
-  "SpanSmith",
-  "ArchAce",
-  "LoadTester",
-  "Demo Engineer",
-  "BeamQueen",
-  "RiverCrosser",
-  "SteelScout",
-  "CanyonCarver",
-  "PylonPro",
-  "DeckDesigner",
-  "CableCraft",
-  "GirderGuru",
-];
-
-export function mockLeaderboard(seed: number): LeaderboardEntry[] {
-  return names.map((displayName, i) => ({
-    rank: i + 1,
-    playFabId: displayName === "Demo Engineer" ? mockProfile.playFabId : `PF-DEMO-${seed}${i}`,
-    displayName,
-    level: 20 - i + (seed % 3),
-    score: 24000 - i * 1180 - seed * 37,
-    updatedAt: "2026-08-21T12:00:00.000Z",
-  }));
-}
 
 /* ----------------------------------------------------------- almanac ---- */
 

@@ -9,7 +9,7 @@
  * The game is authoritative for every gameplay value: progression,
  * statistics, inventory, transactions and Almanac completion records. The
  * website only READS them. Website-authored content (gallery, FAQ, releases,
- * messages, bug reports, site settings) is owned by the CMS layer instead.
+ * messages, site settings) is owned by the CMS layer instead. Bug reports use server-only PlayFab storage.
  *
  * Components must call these services (or hooks built on them) rather than
  * embedding backend logic. Swapping the mock implementations for live PlayFab
@@ -77,17 +77,6 @@ export const downloadService = {
   latestRelease(): Release | undefined {
     return getCmsState().releases[0];
   },
-};
-
-export const bugReportService = {
-  list(): BugReport[] {
-    return getCmsState().bugs;
-  },
-  submit(report: BugReport) {
-    setCmsState((prev) => ({ ...prev, bugs: [report, ...prev.bugs] }));
-    logActivity({ action: "Bug report submitted", target: report.category, area: "System" });
-  },
-
 };
 
 export const messageService = {

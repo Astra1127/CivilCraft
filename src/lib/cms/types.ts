@@ -1,11 +1,7 @@
 /** Website-only CMS data. Never stored in PlayFab. */
 
 export type NewsCategory =
-  | "Game Updates"
-  | "Development"
-  | "Patch Notes"
-  | "Announcements"
-  | "Community";
+  "Game Updates" | "Development" | "Patch Notes" | "Announcements" | "Community";
 
 export interface NewsArticle {
   id: string;
@@ -56,6 +52,7 @@ export interface ContactMessage {
 export type BugStatus = "New" | "Investigating" | "Resolved" | "Closed";
 
 export interface BugReport {
+  playFabId: string;
   id: string;
   player: string;
   category: string;
@@ -150,7 +147,7 @@ export interface CmsState {
   gallery: GalleryItem[];
   faq: FaqEntry[];
   messages: ContactMessage[];
-  bugs: BugReport[];
+
   releases: Release[];
   /** About page story, development team and academic project content. */
   about: AboutContent;

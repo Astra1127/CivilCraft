@@ -1,3 +1,6 @@
+import { getAdminAnalytics } from "./analytics.server.ts";
+import { smallBody } from "./request-body.server.ts";
+import { listBugReports, changeBugReport } from "./bug-reports.server.ts";
 import { getAdminAuthConfig } from "../admin-auth/config.server.ts";
 import { isAuthorizedStaff, readAdminSession } from "../admin-auth/session.server.ts";
 import { AdminApiError, adminGameConfig, object, playFabAdmin } from "./admin-client.server.ts";
@@ -11,30 +14,6 @@ const headers = {
   "X-Content-Type-Options": "nosniff",
 };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers });
-async function smallBody(request: Request): Promise<Record<string, unknown>> {
-  if (!request.headers.get("content-type")?.startsWith("application/json"))
-    throw new AdminApiError(415, "A JSON request is required.");
-  const reader = request.body?.getReader();
-  if (!reader) throw new AdminApiError(400, "A confirmation is required.");
-  let size = 0;
-  const parts: Uint8Array[] = [];
-  try {
-    while (true) {
-      const part = await reader.read();
-      if (part.done) break;
-      size += part.value.length;
-      if (size > 2048) throw new AdminApiError(413, "The request is too large.");
-      parts.push(part.value);
-    }
-  } finally {
-    await reader.cancel();
-  }
-  try {
-    return object(JSON.parse(Buffer.concat(parts).toString("utf8")));
-  } catch {
-    throw new AdminApiError(400, "The request is invalid.");
-  }
-}
 /** Own the entire privileged namespace, including unknown endpoints, before SSR. */
 export async function handlePlayFabAdminRequest(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
@@ -61,6 +40,12 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     )
       return json({ error: "This request is not permitted." }, 403);
 
+    if (path === "/api/admin/analytics" && request.method === "GET")
+      return json(await getAdminAnalytics(config, session.user.id));
+    if (path === "/api/admin/bug-reports") {
+      if (request.method === "GET") return json(await listBugReports());
+      return json(await changeBugReport(await smallBody(request)));
+    }
     if (path === "/api/admin/playfab/status" && request.method === "GET") {
       const { titleId, secret } = adminGameConfig();
       const status: AdminIntegrationStatus = {
@@ -123,7 +108,23 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
           throw e;
         }
       }
-      return json(await directoryPage(config, session.user.id, url.searchParams.get("cursor")));
+      const pageSize = Number(url.searchParams.get("pageSize") ?? 20);
+      const page = url.searchParams.has("page") ? Number(url.searchParams.get("page")) : undefined;
+      if (
+        ![10, 20, 50].includes(pageSize) ||
+        (page !== undefined && (!Number.isSafeInteger(page) || page < 1 || page > 5000))
+      )
+        throw new AdminApiError(400, "Choose a valid page and 10, 20 or 50 rows per page.");
+      return json(
+        await directoryPage(
+          config,
+          session.user.id,
+          url.searchParams.get("cursor"),
+          process.env["NODE_ENV"] === "development" && url.searchParams.get("fresh") === "1",
+          pageSize,
+          page,
+        ),
+      );
     }
     const match = path.match(/^\/api\/admin\/players\/([a-f0-9]{1,32})(?:\/(ban|unban))?$/i);
     if (!match) return json({ error: "Endpoint not found." }, 404);

@@ -25,16 +25,16 @@ export interface PlayerIdentity {
 }
 
 export interface PlayerProfile extends PlayerIdentity {
-  level: number;
-  xp: number;
-  xpToNextLevel: number;
-  totalScore: number;
-  bridgesCompleted: number;
-  challengesCompleted: number;
-  achievementsUnlocked: number;
-  achievementsTotal: number;
+  level: number | null;
+  xp: number | null;
+  xpToNextLevel: number | null;
+  totalScore: number | null;
+  bridgesCompleted: number | null;
+  challengesCompleted: number | null;
+  achievementsUnlocked: number | null;
+  achievementsTotal: number | null;
   lastActive?: string | undefined;
-  /** Moderation state from the backend. Defaults to "active" when absent. */
+  /** Moderation state from the backend. Unavailable when absent. */
   accountStatus?: AccountStatus;
   /** Optional game summary fields — only rendered when the backend supplies them. */
   currentRegion?: string;
@@ -90,13 +90,13 @@ export interface Achievement {
   progressTarget?: number;
 }
 
-export type LeaderboardWindow = "global" | "weekly" | "monthly";
+export type LeaderboardWindow = "global";
 
 export interface LeaderboardEntry {
   rank: number;
   playFabId: string;
   displayName: string;
-  level: number;
+  level: number | null;
   score: number;
   updatedAt?: string;
 }
