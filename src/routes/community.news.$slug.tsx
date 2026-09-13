@@ -1,8 +1,8 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
-/** Individual news posts were retired — release notes live on Download. */
+/** Legacy news URLs return to the homepage updates list. */
 export const Route = createFileRoute("/community/news/$slug")({
   beforeLoad: () => {
-    throw redirect({ to: "/download" });
+    throw redirect({ to: "/", hash: "updates" });
   },
 });

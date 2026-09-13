@@ -8,7 +8,6 @@ import {
   Gauge,
   Hammer,
   Smartphone,
-  Sparkles,
   Target,
   Wrench,
 } from "lucide-react";
@@ -139,11 +138,11 @@ function Checks({ items }: { items: string[] }) {
 function HomePage() {
   const { player } = useAuth();
   const [active, setActive] = useState<string>("explore");
+  const [showAllUpdates, setShowAllUpdates] = useState(false);
   const news = useCms((s) =>
     s.news
       .filter((n) => n.status === "published")
-      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
-      .slice(0, 3),
+      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
   );
   const shot = shots.find((s) => s.id === active) ?? shots[0];
   const [lead, ...rest] = news;
@@ -609,19 +608,22 @@ function HomePage() {
 
       {/* ---------- WHAT'S HAPPENING (asymmetric updates) ---------- */}
       {lead ? (
-        <section className="bg-background py-12">
+        <section id="updates" className="scroll-mt-24 bg-background py-12">
           <div className="mx-auto max-w-6xl px-4 sm:px-6">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <h2 className="text-3xl sm:text-4xl">What's Happening in Civil Craft?</h2>
               <Button asChild variant="outline" size="sm">
-                <Link to="/community/news">
-                  See All in Community
+                <a href="#updates-list" onClick={() => setShowAllUpdates(true)}>
+                  View All Updates
                   <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-                </Link>
+                </a>
               </Button>
             </div>
 
-            <div className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,4fr)]">
+            <div
+              id="updates-list"
+              className="scroll-mt-24 mt-8 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,4fr)]"
+            >
               <article className="min-w-0">
                 <div className="overflow-hidden rounded-3xl border-2 border-border shadow-[var(--shadow-lift)]">
                   <img
@@ -641,18 +643,19 @@ function HomePage() {
                 </div>
                 <h3 className="mt-2 font-display text-2xl sm:text-3xl">{lead.title}</h3>
                 <p className="mt-2 max-w-xl text-muted-foreground">{lead.excerpt}</p>
-                <Link
-                  to="/community/news/$slug"
-                  params={{ slug: lead.slug }}
-                  className="mt-4 inline-flex items-center font-display text-sm text-gold hover:underline"
-                >
-                  Read Update
-                  <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
-                </Link>
+                <details className="mt-4">
+                  <summary className="mt-4 inline-flex items-center font-display text-sm text-gold hover:underline cursor-pointer">
+                    Read Update
+                    <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+                  </summary>
+                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                    {lead.content}
+                  </p>
+                </details>
               </article>
 
               <div className="min-w-0 space-y-6">
-                {rest.map((n) => (
+                {(showAllUpdates ? rest : rest.slice(0, 2)).map((n) => (
                   <article key={n.id} className="border-b-2 border-border pb-5 last:border-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline" className="border-2 border-border text-xs">
@@ -664,14 +667,15 @@ function HomePage() {
                     </div>
                     <h3 className="mt-2 font-display text-lg">{n.title}</h3>
                     <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{n.excerpt}</p>
-                    <Link
-                      to="/community/news/$slug"
-                      params={{ slug: n.slug }}
-                      className="mt-2 inline-flex items-center text-sm font-bold text-gold hover:underline"
-                    >
-                      Read Update
-                      <ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                    </Link>
+                    <details className="mt-4">
+                      <summary className="mt-2 inline-flex items-center text-sm font-bold text-gold hover:underline cursor-pointer">
+                        Read Update
+                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                      </summary>
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                        {n.content}
+                      </p>
+                    </details>
                   </article>
                 ))}
               </div>
@@ -681,55 +685,6 @@ function HomePage() {
       ) : null}
 
       <SectionDivider variant="draft" />
-
-      {/* ---------- COMMUNITY SCENE ---------- */}
-      <section className="relative overflow-hidden border-y-2 border-border bg-card/60">
-        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-11 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-          <div className="relative mx-auto w-full max-w-xs">
-            {/* subtle grounding: blueprint pad + rock base under the duo */}
-            <div
-              aria-hidden="true"
-              className="absolute inset-x-6 bottom-4 top-10 rounded-3xl border-2 border-dashed border-border blueprint opacity-70"
-            />
-            <GameArt
-              kind="duo"
-              alt="Two chibi Civil Craft engineers standing together"
-              className="relative mx-auto w-36 sm:w-40"
-            />
-            <GameArt
-              kind="rocks"
-              alt=""
-              className="relative mx-auto -mt-5 w-32 opacity-90 sm:w-36"
-            />
-          </div>
-
-          <div className="min-w-0">
-            <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">Community</p>
-            <h2 className="mt-3 text-3xl sm:text-4xl">Build Together</h2>
-            <p className="mt-4 max-w-lg text-muted-foreground">
-              Civil Craft isn't only about building bridges — share progress, discover updates and
-              see what other players are creating.
-            </p>
-            {lead ? (
-              <div className="mt-6 flex items-start gap-3">
-                <Sparkles className="mt-1 h-5 w-5 shrink-0 text-gold" aria-hidden="true" />
-                <p className="min-w-0 text-sm">
-                  <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
-                    Latest community update
-                  </span>
-                  <span className="font-display">{lead.title}</span>
-                </p>
-              </div>
-            ) : null}
-            <Button asChild variant="gold" className="mt-7">
-              <Link to="/community">
-                Explore Community
-                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </section>
 
       {/* ---------- TEAM TEASER ---------- */}
       <section className="border-y-2 border-border bg-background py-11">
