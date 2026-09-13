@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Hammer, Star, Target, Zap } from "lucide-react";
+import { Hammer, Star, Target, Zap } from "lucide-react";
 import { DemoBadge, IntegrationNotice } from "@/components/common/DemoBadge";
 import { SectionHeading } from "@/components/common/PageHeader";
 import { StatCard } from "@/components/common/StatCard";
@@ -112,7 +112,7 @@ function ProfilePage() {
         {stats.isPending ? (
           <LoadingState rows={2} />
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               icon={Star}
               label="Engineering score"
@@ -132,11 +132,6 @@ function ProfilePage() {
               icon={Zap}
               label="Best build score"
               value={statValue(stats.data, "BestSingleBuildScore")}
-            />
-            <StatCard
-              icon={AlertTriangle}
-              label="Structural failures"
-              value={statValue(stats.data, "StructuralFailures")}
             />
           </div>
         )}

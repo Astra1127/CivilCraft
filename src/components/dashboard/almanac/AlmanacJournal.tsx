@@ -1,5 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Check, CircleDot, Compass, Lock, MapPin, Trophy } from "lucide-react";
+import {
+  BookOpen,
+  Cable,
+  Check,
+  CircleDot,
+  Columns3,
+  Compass,
+  Layers,
+  Lock,
+  MapPin,
+  Trees,
+  Trophy,
+  Wrench,
+} from "lucide-react";
 import { useState } from "react";
 import { DemoBadge } from "@/components/common/DemoBadge";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/States";
@@ -15,6 +28,8 @@ import { bridgeTypes, engineeringConcepts, getBridgeType, materials } from "@/li
 import { useAuth } from "@/lib/auth";
 import { almanacService, profileService, type AlmanacLevel } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
+
+const materialIcons = { wood: Trees, steel: Wrench, cable: Cable, support: Columns3, deck: Layers };
 
 const tabs = [
   { value: "journey", label: "My Journey" },
@@ -43,6 +58,9 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
 
   const j = journey.data;
   const p = profile.data;
+  const discoveredBridges = bridgeTypes.filter((b) =>
+    j.discoveredBridgeTypeIds.includes(b.bridgeTypeId),
+  );
 
   return (
     <div className="space-y-8">
@@ -80,7 +98,7 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
               </div>
               <div className="flex justify-between gap-6">
                 <dt className="text-muted-foreground">Bridge types discovered</dt>
-                <dd className="font-display">{j.discoveredBridgeTypeIds.length}</dd>
+                <dd className="font-display">{discoveredBridges.length}</dd>
               </div>
               <div className="flex justify-between gap-6">
                 <dt className="text-muted-foreground">Journey complete</dt>
@@ -179,61 +197,59 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
 
         {/* -------------------------------------------------- bridge types */}
         <TabsContent value="bridges" className="mt-6">
-          <ul className="grid gap-5 [&>li]:min-w-0 lg:grid-cols-2">
-            {bridgeTypes.map((b) => {
-              const discovered = j.discoveredBridgeTypeIds.includes(b.bridgeTypeId);
-              return (
-                <li key={b.bridgeTypeId} className="panel p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-display text-xl">{b.name}</h3>
-                    {discovered ? (
-                      <span className="stamp px-2 py-0.5 text-[10px]">✓ Discovered</span>
-                    ) : (
-                      <Badge variant="secondary">Not yet encountered</Badge>
-                    )}
-                  </div>
-                  {!discovered ? (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Not yet encountered in your Civil Craft journey — the engineering notes below
-                      are still yours to read.
-                    </p>
-                  ) : null}
-                  <p className="mt-2 text-sm text-muted-foreground">{b.description}</p>
-                  <dl className="mt-3 space-y-2 text-sm">
-                    <div>
-                      <dt className="font-display">How it works</dt>
-                      <dd className="text-muted-foreground">{b.howItWorks}</dd>
+          {discoveredBridges.length === 0 ? (
+            <EmptyState
+              title="No bridge types discovered yet"
+              description="Complete contracts in Civil Craft to unlock bridge entries in your Almanac."
+            />
+          ) : (
+            <ul className="grid gap-5 [&>li]:min-w-0 lg:grid-cols-2">
+              {discoveredBridges.map((b) => {
+                return (
+                  <li key={b.bridgeTypeId} className="panel p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-display text-xl">{b.name}</h3>
+                      <span className="stamp flex items-center gap-1 px-2 py-0.5 text-[10px]">
+                        <Check className="h-3 w-3" aria-hidden="true" /> Discovered
+                      </span>
                     </div>
-                    <div>
-                      <dt className="font-display">Strengths</dt>
-                      <dd className="text-muted-foreground">{b.strengths}</dd>
+                    <p className="mt-2 text-sm text-muted-foreground">{b.description}</p>
+                    <dl className="mt-3 space-y-2 text-sm">
+                      <div>
+                        <dt className="font-display">How it works</dt>
+                        <dd className="text-muted-foreground">{b.howItWorks}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-display">Strengths</dt>
+                        <dd className="text-muted-foreground">{b.strengths}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-display">In Civil Craft</dt>
+                        <dd className="text-muted-foreground">{b.inGame}</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {b.conceptIds.map((cid) => (
+                        <Badge key={cid} variant="outline" className="border-gold/50 text-gold">
+                          {engineeringConcepts.find((c) => c.id === cid)?.name ?? cid}
+                        </Badge>
+                      ))}
                     </div>
-                    <div>
-                      <dt className="font-display">In Civil Craft</dt>
-                      <dd className="text-muted-foreground">{b.inGame}</dd>
-                    </div>
-                  </dl>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {b.conceptIds.map((cid) => (
-                      <Badge key={cid} variant="outline" className="border-gold/50 text-gold">
-                        {engineeringConcepts.find((c) => c.id === cid)?.name ?? cid}
-                      </Badge>
-                    ))}
-                  </div>
-                  {b.realWorld ? (
-                    <div className="mt-4 rounded-xl border-2 border-border bg-secondary/40 p-3">
-                      <p className="font-display text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                        In the real world
-                      </p>
-                      <p className="mt-1 font-display">{b.realWorld.name}</p>
-                      <p className="text-xs text-muted-foreground">{b.realWorld.location}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{b.realWorld.why}</p>
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+                    {b.realWorld ? (
+                      <div className="mt-4 rounded-xl border-2 border-border bg-secondary/40 p-3">
+                        <p className="font-display text-xs uppercase tracking-[0.16em] text-muted-foreground">
+                          In the real world
+                        </p>
+                        <p className="mt-1 font-display">{b.realWorld.name}</p>
+                        <p className="text-xs text-muted-foreground">{b.realWorld.location}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{b.realWorld.why}</p>
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </TabsContent>
 
         {/* --------------------------------------------------- engineering */}
@@ -258,13 +274,26 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
 
         {/* ----------------------------------------------------- materials */}
         <TabsContent value="materials" className="mt-6">
-          <ul className="panel divide-y-2 divide-border overflow-hidden">
-            {materials.map((m) => (
-              <li key={m.id} className="px-4 py-3">
-                <p className="font-display text-base">{m.name}</p>
-                <p className="text-sm text-muted-foreground">{m.note}</p>
-              </li>
-            ))}
+          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {materials.map((m) => {
+              const Icon = materialIcons[m.id as keyof typeof materialIcons] ?? Layers;
+              return (
+                <li key={m.id} className="panel min-w-0 overflow-hidden">
+                  <div
+                    className="blueprint relative flex h-28 items-center justify-center border-b-2 border-border bg-secondary/40"
+                    aria-hidden="true"
+                  >
+                    <span className="grid h-16 w-16 place-items-center rounded-2xl border-2 border-gold/40 bg-card shadow-sm">
+                      <Icon className="h-8 w-8 text-gold" strokeWidth={1.5} />
+                    </span>
+                  </div>
+                  <div className="p-5">
+                    <h3 className="font-display text-lg">{m.name}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{m.note}</p>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </TabsContent>
       </Tabs>

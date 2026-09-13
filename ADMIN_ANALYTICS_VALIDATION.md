@@ -46,7 +46,7 @@ No fake growth percentages, traffic, daily active-user trend or economy chart we
 
 ## Validation and limits
 
-Final results: production build PASS; TypeScript (`npx tsc --noEmit`) PASS; tests (`node --test tests/*.test.ts`) **43/43 PASS**; `git diff --check` PASS. The build used the approved Windows filesystem access needed by Nitro. No new dependencies, deployment, commit or push were introduced.
+Final results: production build PASS; TypeScript (`npx tsc --noEmit`) PASS; tests (`node --test tests/*.test.ts`) **45/45 PASS**; `git diff --check` PASS. The build used the approved Windows filesystem access needed by Nitro. No new dependencies, deployment, commit or push were introduced.
 
 Automated tests cover 0, 1, 5, 20, 21 and 53 players with one player in each fragment; all 10/20/50 page sizes; backend page counts; replay/Previous and separate admin sessions; invalid page sizes; existing exact backend search; cursor tampering, expiry and restart; complete snapshot analytics; zero versus missing statistics; UTC registration bins; exact 7/30-day activity boundaries; and independent module failures. These tests intercept PlayFab and create no live players, reports or analytics data.
 
@@ -66,3 +66,7 @@ No connected browser surface was available for visual verification. Live two-bro
 - `ADMIN_ANALYTICS_VALIDATION.md` (new)
 
 API reference: [PlayFab's segment export tutorial](https://learn.microsoft.com/en-us/xbox/playfab/live-service-management/game-configuration/segmentation/segmentation-export-players-in-a-segment) documents the index of TSV fragment URLs; a fragment is not a UI page.
+
+## Revalidation of repeated request
+
+The repeated attachment was checked against the current implementation. Directory and overview changes were already present; no additional application changes were needed. The current test suite passes 45/45 and TypeScript passes. The original full-population pagination fixtures remain covered. Current build result is recorded above. Live deployment/browser behavior was not verified. Existing Player Profile and Almanac edits were preserved.
