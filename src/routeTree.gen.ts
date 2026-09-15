@@ -48,6 +48,8 @@ import { Route as DashboardLeaderboardsRouteImport } from './routes/dashboard.le
 import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardTransactionsRouteImport } from './routes/dashboard.transactions'
+import { Route as UpdatesIndexRouteImport } from './routes/updates.index'
+import { Route as UpdatesSlugRouteImport } from './routes/updates.$slug'
 import { Route as CommunityNewsIndexRouteImport } from './routes/community.news.index'
 import { Route as CommunityNewsSlugRouteImport } from './routes/community.news.$slug'
 
@@ -246,6 +248,16 @@ const DashboardTransactionsRoute = DashboardTransactionsRouteImport.update({
   path: '/transactions',
   getParentRoute: () => DashboardRoute,
 } as any)
+const UpdatesIndexRoute = UpdatesIndexRouteImport.update({
+  id: '/updates/',
+  path: '/updates/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UpdatesSlugRoute = UpdatesSlugRouteImport.update({
+  id: '/updates/$slug',
+  path: '/updates/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CommunityNewsIndexRoute = CommunityNewsIndexRouteImport.update({
   id: '/news/',
   path: '/news/',
@@ -294,9 +306,11 @@ export interface FileRoutesByFullPath {
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
+  '/updates/$slug': typeof UpdatesSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/community/': typeof CommunityIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/updates/': typeof UpdatesIndexRoute
   '/community/news/$slug': typeof CommunityNewsSlugRoute
   '/community/news/': typeof CommunityNewsIndexRoute
 }
@@ -334,9 +348,11 @@ export interface FileRoutesByTo {
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
+  '/updates/$slug': typeof UpdatesSlugRoute
   '/admin': typeof AdminIndexRoute
   '/community': typeof CommunityIndexRoute
   '/dashboard': typeof DashboardIndexRoute
+  '/updates': typeof UpdatesIndexRoute
   '/community/news/$slug': typeof CommunityNewsSlugRoute
   '/community/news': typeof CommunityNewsIndexRoute
 }
@@ -378,9 +394,11 @@ export interface FileRoutesById {
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
+  '/updates/$slug': typeof UpdatesSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/community/': typeof CommunityIndexRoute
   '/dashboard/': typeof DashboardIndexRoute
+  '/updates/': typeof UpdatesIndexRoute
   '/community/news/$slug': typeof CommunityNewsSlugRoute
   '/community/news/': typeof CommunityNewsIndexRoute
 }
@@ -423,9 +441,11 @@ export interface FileRouteTypes {
     | '/dashboard/profile'
     | '/dashboard/settings'
     | '/dashboard/transactions'
+    | '/updates/$slug'
     | '/admin/'
     | '/community/'
     | '/dashboard/'
+    | '/updates/'
     | '/community/news/$slug'
     | '/community/news/'
   fileRoutesByTo: FileRoutesByTo
@@ -463,9 +483,11 @@ export interface FileRouteTypes {
     | '/dashboard/profile'
     | '/dashboard/settings'
     | '/dashboard/transactions'
+    | '/updates/$slug'
     | '/admin'
     | '/community'
     | '/dashboard'
+    | '/updates'
     | '/community/news/$slug'
     | '/community/news'
   id:
@@ -506,9 +528,11 @@ export interface FileRouteTypes {
     | '/dashboard/profile'
     | '/dashboard/settings'
     | '/dashboard/transactions'
+    | '/updates/$slug'
     | '/admin/'
     | '/community/'
     | '/dashboard/'
+    | '/updates/'
     | '/community/news/$slug'
     | '/community/news/'
   fileRoutesById: FileRoutesById
@@ -530,6 +554,8 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   SignupRoute: typeof SignupRoute
   TermsRoute: typeof TermsRoute
+  UpdatesSlugRoute: typeof UpdatesSlugRoute
+  UpdatesIndexRoute: typeof UpdatesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -807,6 +833,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardTransactionsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/updates/': {
+      id: '/updates/'
+      path: '/updates'
+      fullPath: '/updates/'
+      preLoaderRoute: typeof UpdatesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/updates/$slug': {
+      id: '/updates/$slug'
+      path: '/updates/$slug'
+      fullPath: '/updates/$slug'
+      preLoaderRoute: typeof UpdatesSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/community/news/': {
       id: '/community/news/'
       path: '/news'
@@ -919,6 +959,8 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   SignupRoute: SignupRoute,
   TermsRoute: TermsRoute,
+  UpdatesSlugRoute: UpdatesSlugRoute,
+  UpdatesIndexRoute: UpdatesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

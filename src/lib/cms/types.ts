@@ -1,4 +1,4 @@
-/** Website-only CMS data. Never stored in PlayFab. */
+/** Website CMS types. Gallery and updates use server-backed content storage. */
 
 export type NewsCategory =
   "Game Updates" | "Development" | "Patch Notes" | "Announcements" | "Community";

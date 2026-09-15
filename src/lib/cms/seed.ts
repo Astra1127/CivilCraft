@@ -6,93 +6,8 @@ import type { CmsState } from "./types";
  * official Civil Craft information.
  */
 export const seedState: CmsState = {
-  news: [
-    {
-      id: "n1",
-      slug: "prototype-version-released",
-      title: "Civil Craft Prototype Version Released",
-      category: "Announcements",
-      coverAlt: "Civil Craft prototype build announcement",
-      excerpt:
-        "The first playable prototype build of Civil Craft: Bridge Edition is available for testing.",
-      content:
-        "The first playable prototype of Civil Craft: Bridge Edition is now available for testing.\n\nThis build focuses on the core loop: design a bridge, place your materials within budget and run a load test to see whether the structure holds.",
-      publishedAt: "2026-08-10T09:00:00.000Z",
-      status: "published",
-    },
-    {
-      id: "n2",
-      slug: "bridge-almanac-expanded",
-      title: "Bridge Almanac Expanded",
-      category: "Game Updates",
-      coverAlt: "Bridge Almanac update artwork",
-      excerpt:
-        "Additional Almanac entries covering the game's bridge types and structural mechanics.",
-      content:
-        "The Bridge Almanac now covers more bridge types and the structural principles behind them, so players can look up how each design carries load before building it.",
-      publishedAt: "2026-07-28T09:00:00.000Z",
-      status: "published",
-    },
-    {
-      id: "n3",
-      slug: "physics-tuning-patch-notes",
-      title: "Physics Tuning — Patch Notes",
-      category: "Patch Notes",
-      coverAlt: "Physics tuning patch notes artwork",
-      excerpt:
-        "Load simulation tuning and clearer structural failure feedback.",
-      content: "Improved load simulation feedback\nAdjusted structural failure feedback\nGeneral gameplay improvements",
-      publishedAt: "2026-07-05T09:00:00.000Z",
-      status: "published",
-    },
-    {
-      id: "n4",
-      slug: "development-update-regions",
-      title: "Development Update: Regions",
-      category: "Development",
-      coverAlt: "Regions development update artwork",
-      excerpt: "A look at how the game's regions and build sites are being created.",
-      content: "Each region is built as a distinct engineering problem: the canyon rewards long spans, the town river limits anchor points and the industrial zone raises the load requirements.",
-      publishedAt: "2026-06-20T09:00:00.000Z",
-      status: "published",
-    },
-    {
-      id: "n5",
-      slug: "community-build-showcase",
-      title: "Community Build Showcase",
-      category: "Community",
-      coverAlt: "Community build showcase artwork",
-      excerpt: "Bridge designs shared by Civil Craft playtesters.",
-      content: "A look at the bridge designs playtesters have been sharing, and the different ways they solved the same crossing.",
-      publishedAt: "2026-06-02T09:00:00.000Z",
-      status: "published",
-    },
-    {
-      id: "n6",
-      slug: "upcoming-features-draft",
-      title: "Upcoming Features (Draft)",
-      category: "Development",
-      coverAlt: "Upcoming features artwork",
-      excerpt: "A preview of the features being planned for the next build.",
-      content: "Draft notes for the upcoming feature set.",
-      publishedAt: "2026-08-18T09:00:00.000Z",
-      status: "draft",
-    },
-  ],
-  gallery: [
-    { id: "g2", caption: "Canyon Crossing", category: "Maps", visible: true, createdAt: "2026-08-01" },
-    { id: "g11", caption: "Engineer Character", category: "Characters", visible: true, createdAt: "2026-08-01" },
-    { id: "g5", caption: "Truss Bridge", category: "Bridges", visible: true, createdAt: "2026-08-01" },
-    { id: "g12", caption: "Bridge Construction", category: "Gameplay", visible: true, createdAt: "2026-08-01" },
-    { id: "g3", caption: "Desert Construction Site", category: "Maps", visible: true, createdAt: "2026-08-01" },
-    { id: "g6", caption: "Beam Bridge", category: "Bridges", visible: true, createdAt: "2026-08-01" },
-    { id: "g10", caption: "Load Testing", category: "Gameplay", visible: true, createdAt: "2026-08-01" },
-    { id: "g7", caption: "Arch Bridge", category: "Bridges", visible: true, createdAt: "2026-08-01" },
-    { id: "g14", caption: "NPC Engineer", category: "Characters", visible: true, createdAt: "2026-08-01" },
-    { id: "g9", caption: "Build Interface", category: "UI", visible: true, createdAt: "2026-08-01" },
-    { id: "g8", caption: "Suspension Bridge", category: "Bridges", visible: true, createdAt: "2026-08-01" },
-    { id: "g15", caption: "Challenge Interface", category: "UI", visible: true, createdAt: "2026-08-01" },
-  ],
+  news: [],
+  gallery: [],
 
   faq: [
     {
@@ -115,7 +30,8 @@ export const seedState: CmsState = {
     {
       id: "f3",
       question: "What Android version is required?",
-      answer: "See the minimum requirements on the Download page for the currently published build.",
+      answer:
+        "See the minimum requirements on the Download page for the currently published build.",
       category: "Download",
       order: 3,
       published: true,
@@ -178,8 +94,7 @@ export const seedState: CmsState = {
   about: {
     story: {
       heading: "One canyon at a time.",
-      shortDescription:
-        "A region divided by deep canyons, and an engineer sent to reconnect it.",
+      shortDescription: "A region divided by deep canyons, and an engineer sent to reconnect it.",
       fullStory:
         "Civil Craft takes place across a region divided by deep canyons and difficult terrain. Communities that once depended on one another have become separated, leaving important routes incomplete.\n\nThe player arrives as an engineer tasked with restoring these connections.\n\nEach new region presents a different engineering problem. Wider gaps, heavier loads, limited materials and tighter budgets require the player to rethink how each bridge should be designed.\n\nEvery successful crossing brings another part of the region back together.",
       imageUrl: null,

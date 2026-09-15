@@ -1,4 +1,5 @@
 import { getAdminAnalytics } from "./analytics.server.ts";
+import { contentRequest } from "../cms/content.server.ts";
 import { smallBody } from "./request-body.server.ts";
 import { listBugReports, changeBugReport } from "./bug-reports.server.ts";
 import { getAdminAuthConfig } from "../admin-auth/config.server.ts";
@@ -40,6 +41,8 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     )
       return json({ error: "This request is not permitted." }, 403);
 
+    const contentResponse = await contentRequest(request, true);
+    if (contentResponse) return contentResponse;
     if (path === "/api/admin/analytics" && request.method === "GET")
       return json(await getAdminAnalytics(config, session.user.id));
     if (path === "/api/admin/bug-reports") {

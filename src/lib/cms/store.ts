@@ -3,11 +3,11 @@ import { seedState } from "./seed";
 import type { CmsState } from "./types";
 
 /**
- * Website CMS store.
+ * Legacy website settings store; gallery and updates use the content API.
  *
  * Persisted in localStorage so that admin CRUD genuinely changes what the
- * public site renders during review. This is the single seam to swap for a
- * real database later: keep the same read/write API.
+ * public site renders during review. Gallery/news are explicitly excluded to
+ * prevent old browser seed records from re-entering public content.
  */
 
 const KEY = "civilcraft.cms.v3";
@@ -24,7 +24,7 @@ function hydrate() {
     if (raw) {
       const saved = JSON.parse(raw);
       delete saved.bugs;
-      state = { ...seedState, ...saved };
+      state = { ...seedState, ...saved, news: [], gallery: [] };
     }
   } catch {
     /* ignore corrupt storage */
@@ -51,7 +51,7 @@ export function getCmsState(): CmsState {
 
 export function setCmsState(updater: (prev: CmsState) => CmsState) {
   hydrate();
-  state = updater(state);
+  state = { ...updater(state), news: [], gallery: [] };
   persist();
   emit();
 }

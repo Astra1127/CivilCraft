@@ -176,12 +176,25 @@ function MemberPortrait({ member }: { member: TeamMember }) {
   );
 }
 
+import { isRealText } from "@/lib/cms/content-types";
+
 function AboutPage() {
   useHashScroll();
   const { isAuthenticated } = useAuth();
   const about = useCms((s) => s.about);
   const team = [...(about?.team ?? [])]
-    .filter((m) => m.published)
+    .filter(
+      (m) =>
+        m.published &&
+        isRealText(m.fullName) &&
+        m.roles.some(isRealText) &&
+        isRealText(m.responsibilities),
+    )
+    .map((m) => ({
+      ...m,
+      roles: m.roles.filter(isRealText),
+      contribution: isRealText(m.contribution) ? m.contribution : "",
+    }))
     .sort((a, b) => a.order - b.order);
   const story = about?.story;
   const academic = about?.academic;
@@ -578,7 +591,7 @@ function AboutPage() {
               ["Academic Year", academic?.academicYear],
               ["Project Adviser", academic?.adviser],
             ].map(([k, v]) =>
-              v ? (
+              isRealText(v) ? (
                 <div key={k} className="min-w-0">
                   <dt className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
                     {k}

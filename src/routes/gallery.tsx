@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { BrandedCover } from "@/components/common/BrandedCover";
 import { Lightbox } from "@/components/common/Lightbox";
 import { PageHeader } from "@/components/common/PageHeader";
 import { EmptyState } from "@/components/common/States";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { Button } from "@/components/ui/button";
-import { useCms } from "@/lib/cms/store";
+import { useContent } from "@/lib/cms/content";
 import type { GalleryCategory } from "@/lib/cms/types";
 
 export const Route = createFileRoute("/gallery")({
@@ -57,7 +56,8 @@ const rhythm = [
 ];
 
 function GalleryPage() {
-  const gallery = useCms((s) => s.gallery.filter((g) => g.visible && g.category !== "Videos"));
+  const query = useContent();
+  const gallery = query.data?.gallery ?? [];
   const [category, setCategory] = useState<GalleryCategory | "All">("All");
   const [visible, setVisible] = useState(9);
   const [index, setIndex] = useState<number | null>(null);
@@ -99,10 +99,19 @@ function GalleryPage() {
           ))}
         </div>
 
-        {items.length === 0 ? (
+        {query.isPending ? (
+          <p role="status">Loading gallery...</p>
+        ) : query.isError ? (
+          <div role="alert">
+            <p>Unable to load the gallery.</p>
+            <Button variant="outline" onClick={() => query.refetch()}>
+              Retry
+            </Button>
+          </div>
+        ) : items.length === 0 ? (
           <EmptyState
-            title="No screenshots yet"
-            description="Gallery images added in the admin dashboard will appear here."
+            title="No gallery items yet."
+            description="Screenshots and development media from Civil Craft will appear here."
           />
         ) : (
           <>
@@ -118,20 +127,12 @@ function GalleryPage() {
                       aria-label={`Open ${item.caption}`}
                     >
                       <span className="block overflow-hidden rounded-xl border-2 border-border bg-card">
-                        {item.url ? (
-                          <img
-                            src={item.url}
-                            alt={item.caption}
-                            loading="lazy"
-                            className={`w-full object-cover transition-transform duration-200 group-hover:scale-[1.03] ${shape.split(" ")[1]}`}
-                          />
-                        ) : (
-                          <BrandedCover
-                            ratio={shape.split(" ")[1] ?? "aspect-video"}
-                            compact
-                            label={item.caption}
-                          />
-                        )}
+                        <img
+                          src={item.url}
+                          alt={item.caption}
+                          loading="lazy"
+                          className={`w-full object-cover transition-transform duration-200 group-hover:scale-[1.03] ${shape.split(" ")[1]}`}
+                        />
                       </span>
                       <span className="mt-2 block text-sm font-bold">{item.caption}</span>
                       <span className="block text-xs text-muted-foreground">
@@ -168,4 +169,3 @@ function GalleryPage() {
     </PublicLayout>
   );
 }
-

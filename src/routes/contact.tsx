@@ -51,12 +51,27 @@ const schema = z.object({
   message: z.string().trim().min(10, "Please write at least 10 characters").max(1000),
 });
 
-const inquiryTypes = ["General", "Technical Support", "Bug Report", "Feedback", "Partnership", "Educational"];
+const inquiryTypes = [
+  "General",
+  "Technical Support",
+  "Bug Report",
+  "Feedback",
+  "Partnership",
+  "Educational",
+];
+
+import { isRealText } from "@/lib/cms/content-types";
 
 function ContactPage() {
   const settings = useCms((s) => s.settings);
+  const socials = (["facebook", "youtube", "discord"] as const).filter(
+    (k) => isRealText(settings.social[k]) && /^https?:\/\//.test(settings.social[k]),
+  );
   const faq = useCms((s) =>
-    s.faq.filter((f) => f.published).sort((a, b) => a.order - b.order).slice(0, 6),
+    s.faq
+      .filter((f) => f.published)
+      .sort((a, b) => a.order - b.order)
+      .slice(0, 6),
   );
   const [values, setValues] = useState({
     name: "",
@@ -98,7 +113,7 @@ function ContactPage() {
     { icon: Mail, title: "Email", value: settings.supportEmail },
     { icon: Phone, title: "Phone", value: settings.phone },
     { icon: Clock, title: "Office Hours", value: settings.officeHours },
-  ].filter((c) => Boolean(c.value));
+  ].filter((c) => isRealText(c.value));
 
   return (
     <PublicLayout>
@@ -119,7 +134,9 @@ function ContactPage() {
           ))}
         </ul>
 
-        <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
+        <div
+          className={`mt-10 grid gap-6 ${socials.length ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]" : "mx-auto max-w-3xl"}`}
+        >
           <form onSubmit={submit} noValidate className="panel space-y-4 p-6">
             <SectionHeading title="Send us a message" />
             <div className="grid gap-4 sm:grid-cols-2">
@@ -131,7 +148,9 @@ function ContactPage() {
                   maxLength={100}
                   onChange={(e) => setValues((v) => ({ ...v, name: e.target.value }))}
                 />
-                {errors['name'] ? <p className="text-xs text-destructive">{errors['name']}</p> : null}
+                {errors["name"] ? (
+                  <p className="text-xs text-destructive">{errors["name"]}</p>
+                ) : null}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="email">Email</Label>
@@ -142,7 +161,9 @@ function ContactPage() {
                   maxLength={255}
                   onChange={(e) => setValues((v) => ({ ...v, email: e.target.value }))}
                 />
-                {errors['email'] ? <p className="text-xs text-destructive">{errors['email']}</p> : null}
+                {errors["email"] ? (
+                  <p className="text-xs text-destructive">{errors["email"]}</p>
+                ) : null}
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -154,8 +175,8 @@ function ContactPage() {
                   maxLength={150}
                   onChange={(e) => setValues((v) => ({ ...v, subject: e.target.value }))}
                 />
-                {errors['subject'] ? (
-                  <p className="text-xs text-destructive">{errors['subject']}</p>
+                {errors["subject"] ? (
+                  <p className="text-xs text-destructive">{errors["subject"]}</p>
                 ) : null}
               </div>
               <div className="space-y-1.5">
@@ -186,43 +207,35 @@ function ContactPage() {
                 value={values.message}
                 onChange={(e) => setValues((v) => ({ ...v, message: e.target.value }))}
               />
-              {errors['message'] ? <p className="text-xs text-destructive">{errors['message']}</p> : null}
+              {errors["message"] ? (
+                <p className="text-xs text-destructive">{errors["message"]}</p>
+              ) : null}
             </div>
             <Button type="submit" variant="gold" size="lg">
               Send Message
             </Button>
           </form>
 
-          <div className="space-y-6">
-            <div className="panel p-6">
+          {socials.length ? (
+            <aside className="panel self-start p-6">
               <Share2 className="h-5 w-5 text-gold" aria-hidden="true" />
               <h2 className="mt-3 font-display text-lg">Social Media</h2>
-              <ul className="mt-2 space-y-1 text-sm">
-                {(["facebook", "youtube", "discord"] as const).map((k) => (
-                  <li key={k} className="capitalize text-muted-foreground">
-                    {k}:{" "}
-                    {settings.social[k] ? (
-                      <a
-                        href={settings.social[k]}
-                        className="text-gold underline-offset-4 hover:underline"
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      >
-                        {settings.social[k]}
-                      </a>
-                    ) : (
-                      "Not set (add from Admin → Settings)"
-                    )}
+              <ul className="mt-2 space-y-2 text-sm">
+                {socials.map((k) => (
+                  <li key={k}>
+                    <a
+                      href={settings.social[k]}
+                      className="capitalize text-gold hover:underline"
+                      target="_blank"
+                      rel="noreferrer noopener"
+                    >
+                      {k}
+                    </a>
                   </li>
                 ))}
               </ul>
-            </div>
-            <div className="panel overflow-hidden">
-              <div className="blueprint grid aspect-video place-items-center bg-secondary/60 text-center text-sm text-muted-foreground">
-                Map placeholder — add the official location from Admin → Settings
-              </div>
-            </div>
-          </div>
+            </aside>
+          ) : null}
         </div>
       </section>
 

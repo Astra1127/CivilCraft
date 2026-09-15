@@ -16,7 +16,8 @@ import { SectionDivider } from "@/components/site/SectionDivider";
 import { GameProp, GameArt } from "@/components/site/GameProp";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useCms, formatDate } from "@/lib/cms/store";
+import { useContent } from "@/lib/cms/content";
+import { UpdateCard } from "@/components/site/UpdateCard";
 import { useAuth } from "@/lib/auth";
 import heroKeyart from "@/assets/hero-keyart.jpg";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
@@ -138,14 +139,9 @@ function Checks({ items }: { items: string[] }) {
 function HomePage() {
   const { player } = useAuth();
   const [active, setActive] = useState<string>("explore");
-  const [showAllUpdates, setShowAllUpdates] = useState(false);
-  const news = useCms((s) =>
-    s.news
-      .filter((n) => n.status === "published")
-      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
-  );
+  const updates = useContent();
+  const news = updates.data?.updates.slice(0, 3) ?? [];
   const shot = shots.find((s) => s.id === active) ?? shots[0];
-  const [lead, ...rest] = news;
 
   return (
     <PublicLayout>
@@ -607,82 +603,41 @@ function HomePage() {
       </div>
 
       {/* ---------- WHAT'S HAPPENING (asymmetric updates) ---------- */}
-      {lead ? (
-        <section id="updates" className="scroll-mt-24 bg-background py-12">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <h2 className="text-3xl sm:text-4xl">What's Happening in Civil Craft?</h2>
-              <Button asChild variant="outline" size="sm">
-                <a href="#updates-list" onClick={() => setShowAllUpdates(true)}>
-                  View All Updates
-                  <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-                </a>
+      <section id="updates" className="scroll-mt-24 bg-background py-12">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="text-3xl sm:text-4xl">What's Happening in Civil Craft?</h2>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/updates">
+                View All Updates
+                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+          {updates.isPending ? (
+            <p className="mt-8" role="status">
+              Loading updates...
+            </p>
+          ) : updates.isError ? (
+            <div className="mt-8" role="alert">
+              <p>Unable to load updates.</p>
+              <Button variant="outline" onClick={() => updates.refetch()}>
+                Retry
               </Button>
             </div>
-
-            <div
-              id="updates-list"
-              className="scroll-mt-24 mt-8 grid gap-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,4fr)]"
-            >
-              <article className="min-w-0">
-                <div className="overflow-hidden rounded-3xl border-2 border-border shadow-[var(--shadow-lift)]">
-                  <img
-                    src={heroKeyart}
-                    alt={lead.coverAlt}
-                    loading="lazy"
-                    className="aspect-[16/9] w-full object-cover"
-                  />
-                </div>
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className="border-2 border-border">
-                    {lead.category}
-                  </Badge>
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    {formatDate(lead.publishedAt)}
-                  </span>
-                </div>
-                <h3 className="mt-2 font-display text-2xl sm:text-3xl">{lead.title}</h3>
-                <p className="mt-2 max-w-xl text-muted-foreground">{lead.excerpt}</p>
-                <details className="mt-4">
-                  <summary className="mt-4 inline-flex items-center font-display text-sm text-gold hover:underline cursor-pointer">
-                    Read Update
-                    <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
-                  </summary>
-                  <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                    {lead.content}
-                  </p>
-                </details>
-              </article>
-
-              <div className="min-w-0 space-y-6">
-                {(showAllUpdates ? rest : rest.slice(0, 2)).map((n) => (
-                  <article key={n.id} className="border-b-2 border-border pb-5 last:border-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="border-2 border-border text-xs">
-                        {n.category}
-                      </Badge>
-                      <span className="text-xs font-semibold text-muted-foreground">
-                        {formatDate(n.publishedAt)}
-                      </span>
-                    </div>
-                    <h3 className="mt-2 font-display text-lg">{n.title}</h3>
-                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{n.excerpt}</p>
-                    <details className="mt-4">
-                      <summary className="mt-2 inline-flex items-center text-sm font-bold text-gold hover:underline cursor-pointer">
-                        Read Update
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                      </summary>
-                      <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-                        {n.content}
-                      </p>
-                    </details>
-                  </article>
-                ))}
-              </div>
+          ) : news.length ? (
+            <div className="mt-8 grid items-start gap-6 md:grid-cols-3">
+              {news.map((article) => (
+                <UpdateCard key={article.id} article={article} />
+              ))}
             </div>
-          </div>
-        </section>
-      ) : null}
+          ) : (
+            <p className="mt-8 text-muted-foreground">
+              No updates yet. News from Civil Craft will appear here.
+            </p>
+          )}
+        </div>
+      </section>
 
       <SectionDivider variant="draft" />
 
