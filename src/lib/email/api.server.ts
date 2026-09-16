@@ -15,6 +15,24 @@ export const recoveryMessage =
 const prefix = "civilcraft.email.preference.";
 const cursorKey = "civilcraft.email.dispatch.cursor";
 const prefSchema = z.object({ emailUpdates: z.boolean(), subscribedAt: z.string().datetime() });
+// Only known symbolic names enter logs; arbitrary provider strings may contain user data.
+const recoveryErrorNames = new Set([
+  "EmailRecipientBlacklisted",
+  "InvalidEmailAddress",
+  "NoContactEmailAddressFound",
+  "SmtpAddonNotEnabled",
+  "AccountNotFound",
+  "UserNotFound",
+  "InvalidParams",
+  "InvalidTitleId",
+  "EmailTemplateNotFound",
+  "InvalidEmailTemplate",
+  "EmailTemplateTypeMismatch",
+  "APIRequestLimitExceeded",
+  "ServiceUnavailable",
+  "InternalServerError",
+  "DownstreamServiceUnavailable",
+]);
 const json = (data: unknown, status = 200) =>
   Response.json(data, {
     status,
@@ -47,6 +65,7 @@ export async function recoverAccount(email: unknown) {
   if (!parsed.success) throw new AdminApiError(400, "Enter a valid email address.");
   const { titleId } = adminGameConfig();
   const template = process.env["PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID"]?.trim();
+  console.info("[email/recovery] configuration", { templateConfigured: Boolean(template) });
   if (!template) {
     console.error(
       "[email/recovery] Custom account recovery template is not configured; request not sent.",
@@ -54,19 +73,39 @@ export async function recoverAccount(email: unknown) {
     return { message: recoveryMessage };
   }
   try {
-    await fetch(`https://${titleId}.playfabapi.com/Client/SendAccountRecoveryEmail`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        Email: parsed.data,
-        TitleId: titleId,
-        EmailTemplateId: template,
-      }),
-      signal: AbortSignal.timeout(12_000),
-      redirect: "error",
+    const response = await fetch(
+      `https://${titleId}.playfabapi.com/Client/SendAccountRecoveryEmail`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          Email: parsed.data,
+          TitleId: titleId,
+          EmailTemplateId: template,
+        }),
+        signal: AbortSignal.timeout(12_000),
+        redirect: "error",
+      },
+    );
+    const result = object(await response.json().catch(() => null));
+    const code = result["errorCode"];
+    const name = result["error"];
+    console.info("[email/recovery] PlayFab response", {
+      httpStatus: response.status,
+      errorCode: typeof code === "number" && Number.isSafeInteger(code) ? code : null,
+      errorName:
+        typeof name === "string"
+          ? recoveryErrorNames.has(name)
+            ? name
+            : "UnrecognizedError"
+          : null,
     });
   } catch {
-    /* Same acknowledgement for transport and account-specific failures. */
+    console.warn("[email/recovery] PlayFab transport failure", {
+      httpStatus: null,
+      errorCode: null,
+      errorName: null,
+    });
   }
   return { message: recoveryMessage };
 }
@@ -185,6 +224,7 @@ export async function handleEmailRequest(request: Request): Promise<Response | n
       return json(await dispatchNotifications());
     }
     if (path === "/api/email/recovery") {
+      console.info("[email/recovery] endpoint called");
       if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
       return json(await recoverAccount((await smallBody(request))["email"]));
     }

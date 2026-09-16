@@ -231,6 +231,68 @@ test("missing or blank recovery template logs safely and never requests a defaul
     console.error = originalError;
   }
 });
+test("recovery diagnostics log only safe status fields and preserve the generic response", async () => {
+  const saved = { info: console.info, warn: console.warn };
+  const logs: unknown[][] = [];
+  console.info = (...args) => {
+    logs.push(args);
+  };
+  console.warn = (...args) => {
+    logs.push(args);
+  };
+  const privateData =
+    "player@example.test recovery-token-canary smtp-password-canary " +
+    env.PLAYFAB_SECRET_KEY +
+    " " +
+    env.PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID;
+  try {
+    globalThis.fetch = async () =>
+      Response.json(
+        {
+          errorCode: 1341,
+          error: "SmtpAddonNotEnabled",
+          errorMessage: privateData,
+          errorDetails: { secret: privateData },
+        },
+        { status: 400 },
+      );
+    const response = await handleEmailRequest(
+      new Request("https://site.test/api/email/recovery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "player@example.test" }),
+      }),
+    );
+    assert.deepEqual(await response!.json(), { message: recoveryMessage });
+    assert.deepEqual(logs, [
+      ["[email/recovery] endpoint called"],
+      ["[email/recovery] configuration", { templateConfigured: true }],
+      [
+        "[email/recovery] PlayFab response",
+        { httpStatus: 400, errorCode: 1341, errorName: "SmtpAddonNotEnabled" },
+      ],
+    ]);
+    globalThis.fetch = async () =>
+      Response.json({ error: privateData, errorCode: privateData }, { status: 500 });
+    await recoverAccount("player@example.test");
+    assert.deepEqual(logs.at(-1), [
+      "[email/recovery] PlayFab response",
+      { httpStatus: 500, errorCode: null, errorName: "UnrecognizedError" },
+    ]);
+    globalThis.fetch = async () => {
+      throw new Error(privateData);
+    };
+    assert.deepEqual(await recoverAccount("player@example.test"), { message: recoveryMessage });
+    assert.deepEqual(logs.at(-1), [
+      "[email/recovery] PlayFab transport failure",
+      { httpStatus: null, errorCode: null, errorName: null },
+    ]);
+    for (const value of privateData.split(" ")) assert.ok(!JSON.stringify(logs).includes(value));
+  } finally {
+    console.info = saved.info;
+    console.warn = saved.warn;
+  }
+});
 async function pref(ticket: string, value?: unknown) {
   return (await handleEmailRequest(
     new Request("https://site.test/api/player/email-preference", {
