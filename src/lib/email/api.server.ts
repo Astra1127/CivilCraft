@@ -47,6 +47,12 @@ export async function recoverAccount(email: unknown) {
   if (!parsed.success) throw new AdminApiError(400, "Enter a valid email address.");
   const { titleId } = adminGameConfig();
   const template = process.env["PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID"]?.trim();
+  if (!template) {
+    console.error(
+      "[email/recovery] Custom account recovery template is not configured; request not sent.",
+    );
+    return { message: recoveryMessage };
+  }
   try {
     await fetch(`https://${titleId}.playfabapi.com/Client/SendAccountRecoveryEmail`, {
       method: "POST",
@@ -54,7 +60,7 @@ export async function recoverAccount(email: unknown) {
       body: JSON.stringify({
         Email: parsed.data,
         TitleId: titleId,
-        ...(template ? { EmailTemplateId: template } : {}),
+        EmailTemplateId: template,
       }),
       signal: AbortSignal.timeout(12_000),
       redirect: "error",

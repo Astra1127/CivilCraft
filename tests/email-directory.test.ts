@@ -190,14 +190,46 @@ after(() => {
   }
 });
 test("recovery relays Client API title/email/template without a secret and conceals account existence", async () => {
+  process.env["PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID"] = "  recovery-test  ";
   assert.deepEqual(await recoverAccount("player@example.test"), { message: recoveryMessage });
   recoveryCode = 400;
   assert.deepEqual(await recoverAccount("missing@example.test"), { message: recoveryMessage });
   assert.equal(recoveryCalls[0]!.body["TitleId"], "17FA03");
   assert.equal(recoveryCalls[0]!.body["EmailTemplateId"], "recovery-test");
+  assert.equal(recoveryCalls[0]!.body["Email"], "player@example.test");
+  assert.ok(recoveryCalls.every((call) => call.body["EmailTemplateId"] === "recovery-test"));
   assert.equal(recoveryCalls[0]!.headers.has("X-SecretKey"), false);
   await assert.rejects(recoverAccount(""), /valid email/);
   assert.equal(recoveryCalls.length, 2);
+});
+test("missing or blank recovery template logs safely and never requests a default email", async () => {
+  const originalError = console.error;
+  const logs: unknown[][] = [];
+  console.error = (...args) => {
+    logs.push(args);
+  };
+  try {
+    for (const template of [undefined, "", "   "]) {
+      if (template === undefined) delete process.env["PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID"];
+      else process.env["PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID"] = template;
+      const response = await handleEmailRequest(
+        new Request("https://site.test/api/email/recovery", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "player@example.test" }),
+        }),
+      );
+      assert.equal(response?.status, 200);
+      assert.deepEqual(await response!.json(), { message: recoveryMessage });
+    }
+    assert.equal(recoveryCalls.length, 0);
+    assert.equal(logs.length, 3);
+    assert.match(JSON.stringify(logs), /not configured/);
+    assert.ok(!JSON.stringify(logs).includes("player@example.test"));
+    assert.ok(!JSON.stringify(logs).includes(env.PLAYFAB_SECRET_KEY));
+  } finally {
+    console.error = originalError;
+  }
 });
 async function pref(ticket: string, value?: unknown) {
   return (await handleEmailRequest(

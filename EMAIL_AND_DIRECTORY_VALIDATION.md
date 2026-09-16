@@ -4,7 +4,7 @@
 
 Email delivery uses **PlayFab's SMTP add-on and reusable PlayFab email templates**. The website does not implement a second SMTP client. The team mailbox's credentials belong in PlayFab Game Manager, never React, `VITE_` settings or source control.
 
-Player recovery posts to `/api/email/recovery`. The server relays `Email`, the configured title ID and optional `PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID` to **Client/SendAccountRecoveryEmail**, which requires no privileged authentication header. No custom password/reset tokens are created. All syntactically valid requests get the same acknowledgement, including nonexistent accounts and upstream failures. Invalid/missing email syntax receives a validation error without an account lookup. The existing client cooldown remains; PlayFab also owns provider throttling. This acknowledgement confirms submission, not inbox delivery. [PlayFab recovery API](https://learn.microsoft.com/en-us/rest/api/playfab/client/account-management/send-account-recovery-email?view=playfab-rest).
+Player recovery posts to `/api/email/recovery`. The server relays `Email`, the configured title ID and required `PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID` to **Client/SendAccountRecoveryEmail**, which requires no privileged authentication header. No custom password/reset tokens are created. All syntactically valid requests get the same acknowledgement, including nonexistent accounts and upstream failures. Invalid/missing email syntax receives a validation error without an account lookup. The existing client cooldown remains; PlayFab also owns provider throttling. This acknowledgement confirms submission, not inbox delivery. [PlayFab recovery API](https://learn.microsoft.com/en-us/rest/api/playfab/client/account-management/send-account-recovery-email?view=playfab-rest).
 
 `GET/POST /api/player/email-preference` authenticates the player's session ticket and stores `emailUpdates` plus subscription time in PlayFab Title Internal Data at `civilcraft.email.preference.<PlayFabID>`. Missing/unreadable preferences default to false. A caller-supplied player ID cannot change another account's preference. The Email Updates control now reads and writes this source. Recovery does not consult this optional-email preference. Other existing Settings controls were not redesigned in this task.
 
@@ -23,7 +23,7 @@ Each worker invocation considers at most 25 recipients and stops starting new wo
 ## Manual PlayFab and scheduler setup still required
 
 1. In the Civil Craft title's Game Manager, enable/configure the **SMTP add-on** using the team's existing sender account. Obtain host, port, login, provider-approved password/app credential and TLS settings from the mailbox provider. Verify the allowed From address/domain.
-2. Create a **Password Recovery** template, retaining PlayFab's recovery link mechanism and correct callback settings. Save its ID in `PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID`. If omitted, the Client recovery API uses its supported default behavior.
+2. Create an **Account Recovery** template, retaining PlayFab's recovery link mechanism and correct callback settings. Save its ID in `PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID`. If missing or blank, the server logs a safe configuration error and returns the generic confirmation without calling PlayFab; there is no default-template fallback.
 3. Create an **Email Verification** template. Set up the documented `player_updated_contact_email` rule to send it when the game/account flow calls `AddOrUpdateContactEmail`. Use PlayFab's confirmation link and callback; do not create a website token system. This is manual PlayFab configuration, not a new contact-editing screen in this task. [Verification setup](https://learn.microsoft.com/en-us/xbox/playfab/live-service-management/game-configuration/title-communications/emails/using-a-rule-to-verify-a-contact-email-address).
 4. Create a **Game Update / New Release** template with real branding, sender, site links and a preference-management link. Save its ID in `PLAYFAB_RELEASE_EMAIL_TEMPLATE_ID`.
 5. Important account notices/future acknowledgements should use additional reusable PlayFab templates from trusted server-side triggers. The `emailDelivery.send` service can be reused independently of the optional-news preference; no invented account events were added here.
@@ -35,7 +35,7 @@ Each worker invocation considers at most 25 recipients and stops starting new wo
 | --- | --- |
 | `VITE_PLAYFAB_TITLE_ID` | Existing public title identifier, not a secret |
 | `PLAYFAB_SECRET_KEY` | Existing server-only PlayFab administrative calls |
-| `PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID` | Optional recovery template ID, read server-side |
+| `PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID` | Required custom Account Recovery template ID, read server-side |
 | `PLAYFAB_RELEASE_EMAIL_TEMPLATE_ID` | Release/update template ID, read server-side |
 | `BLOB_READ_WRITE_TOKEN` | Existing private Blob store, also used for delivery claims |
 | `CRON_SECRET` | Server-only worker authentication |

@@ -1,4 +1,5 @@
 import { handleEmailRequest } from "./lib/email/api.server";
+import { handlePasswordReset } from "./lib/playfab/reset-password.server";
 import { handleLeaderboardRequest } from "./lib/playfab/leaderboard.server";
 import { contentRequest } from "./lib/cms/content.server";
 import { handlePlayerBugRequest } from "./lib/playfab/bug-reports.server";
@@ -53,6 +54,8 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const resetResponse = await handlePasswordReset(request);
+      if (resetResponse) return resetResponse;
       const emailResponse = await handleEmailRequest(request);
       if (emailResponse) return emailResponse;
       const publicContentResponse = await contentRequest(request);
@@ -67,6 +70,11 @@ export default {
       if (authResponse) return authResponse;
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
+      if (new URL(request.url).pathname === "/reset-password") {
+        response.headers.set("Cache-Control", "no-store, private");
+        response.headers.set("Referrer-Policy", "no-referrer");
+        response.headers.set("X-Robots-Tag", "noindex, nofollow");
+      }
       if (new URL(request.url).pathname.startsWith("/admin")) {
         response.headers.set("Cache-Control", "no-store, private");
         response.headers.append("Vary", "Cookie");

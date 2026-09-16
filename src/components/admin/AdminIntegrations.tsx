@@ -91,7 +91,7 @@ export function AdminIntegrations() {
       <Panel title="Email" icon={Globe}>
         <DataRow label="Provider" value="PlayFab SMTP / email templates" />
         <DataRow
-          label="Recovery template override"
+          label="Account Recovery template"
           value={status?.services.recoveryTemplate ?? "Unavailable"}
         />
         <DataRow
@@ -104,8 +104,8 @@ export function AdminIntegrations() {
         />
         <p className="mt-3 text-xs text-muted-foreground">
           SMTP is managed in PlayFab. These statuses reflect website configuration only; SMTP
-          delivery and the external worker schedule are not verified here. Recovery can use the
-          default PlayFab template when no override is configured.
+          delivery and the external worker schedule are not verified here. Password recovery
+          requires a custom Account Recovery template; no email is requested when it is missing.
         </p>
       </Panel>
       <Panel title="Website content" icon={Globe} bodyClassName="p-4 space-y-3">
