@@ -5,15 +5,23 @@ import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/cms/store";
 import type { NewsArticle } from "@/lib/cms/types";
 
-export function UpdateCard({ article }: { article: NewsArticle }) {
+export function UpdateCard({
+  article,
+  compact = false,
+}: {
+  article: NewsArticle;
+  compact?: boolean;
+}) {
   return (
-    <article className="overflow-hidden rounded-2xl border-2 border-border bg-card">
+    <article
+      className={`overflow-hidden rounded-2xl border-2 border-border bg-card ${compact && article.coverUrl ? "sm:grid sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" : ""}`}
+    >
       {article.coverUrl ? (
         <img
           src={article.coverUrl}
           alt={article.coverAlt || article.title}
           loading="lazy"
-          className="aspect-video w-full object-cover"
+          className={`aspect-video w-full object-cover ${compact ? "sm:h-full" : ""}`}
         />
       ) : null}
       <div className="space-y-3 p-5">
@@ -23,7 +31,7 @@ export function UpdateCard({ article }: { article: NewsArticle }) {
             {formatDate(article.publishedAt)}
           </time>
         </div>
-        <h3 className="font-display text-xl">{article.title}</h3>
+        <h3 className={`font-display ${compact ? "text-lg" : "text-2xl"}`}>{article.title}</h3>
         <p className="text-sm text-muted-foreground">{article.excerpt}</p>
         <Button asChild variant="outline" size="sm">
           <Link to="/updates/$slug" params={{ slug: article.slug }}>

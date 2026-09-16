@@ -61,7 +61,7 @@ function ForgotPasswordPage() {
       await requestPasswordReset(parsed.data);
       setSent(true);
       setCooldown(COOLDOWN_SECONDS);
-      toast.success("Recovery email sent");
+      toast.success("Recovery request received");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not send the recovery email");
     } finally {
@@ -93,10 +93,10 @@ function ForgotPasswordPage() {
               <div className="mt-6 space-y-4">
                 <div className="panel flex flex-col items-center gap-2 border-gold/60 px-5 py-8 text-center">
                   <MailCheck className="h-9 w-9 text-gold" aria-hidden="true" />
-                  <h2 className="font-display text-xl">Recovery email sent</h2>
+                  <h2 className="font-display text-xl">Recovery request received</h2>
                   <p className="max-w-sm text-sm text-muted-foreground">
-                    If an account exists for <strong>{email}</strong>, a password recovery link is
-                    on its way. Check your spam folder if it doesn't arrive.
+                    If an account exists for that email, password recovery instructions have been
+                    sent.
                   </p>
                 </div>
                 <Button
@@ -123,11 +123,15 @@ function ForgotPasswordPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
-                  {error ? (
-                    <p className="text-xs font-semibold text-destructive">{error}</p>
-                  ) : null}
+                  {error ? <p className="text-xs font-semibold text-destructive">{error}</p> : null}
                 </div>
-                <Button type="submit" variant="gold" size="lg" className="w-full" disabled={pending}>
+                <Button
+                  type="submit"
+                  variant="gold"
+                  size="lg"
+                  className="w-full"
+                  disabled={pending}
+                >
                   <KeyRound className="mr-2 h-5 w-5" aria-hidden="true" />
                   {pending ? "Sending…" : "Send Recovery Email"}
                 </Button>
@@ -144,7 +148,6 @@ function ForgotPasswordPage() {
               Recovery emails are sent by the Civil Craft account service to the address on your
               game account.
             </IntegrationNotice>
-
           </div>
         </div>
       </div>

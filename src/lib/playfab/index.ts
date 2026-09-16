@@ -156,10 +156,6 @@ export const authService = {
   /** PlayFab SendAccountRecoveryEmail. Players only. */
   async requestPasswordReset(email: string): Promise<void> {
     if (!email.trim()) throw new Error("Enter the email address on your account.");
-    if (demoMode) {
-      await latency(400);
-      return;
-    }
     await sendRecoveryEmail(email);
   },
 
@@ -248,7 +244,10 @@ export const achievementsService = {
 
 /* ---------------------------------------------------------- leaderboards */
 
-export const leaderboardService = { getLeaderboard: fetchLeaderboard, getPlayerRank: fetchPlayerRank };
+export const leaderboardService = {
+  getLeaderboard: fetchLeaderboard,
+  getPlayerRank: fetchPlayerRank,
+};
 
 /* ------------------------------------------------------------- almanac  */
 

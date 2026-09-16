@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bell, Eye, Globe } from "lucide-react";
 import { SectionHeading } from "@/components/common/PageHeader";
-import { DemoBadge } from "@/components/common/DemoBadge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/lib/auth";
+import { requireSessionTicket } from "@/lib/playfab/client";
 
 export const Route = createFileRoute("/dashboard/settings")({
   head: () => ({
@@ -20,12 +22,33 @@ export const Route = createFileRoute("/dashboard/settings")({
 });
 
 function SettingsPage() {
-  const [emailUpdates, setEmailUpdates] = useState(true);
+  const { player } = useAuth();
+  const [emailUpdates, setEmailUpdates] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const preferences = useQuery({
+    queryKey: ["email-preference", player?.playFabId],
+    enabled: !!player,
+    queryFn: () => emailPreference(),
+    retry: false,
+    staleTime: 0,
+  });
+  useEffect(() => {
+    if (preferences.data) setEmailUpdates(preferences.data.emailUpdates);
+  }, [preferences.data]);
   const [publicProfile, setPublicProfile] = useState(false);
   const [compactMode, setCompactMode] = useState(false);
 
-  const save = () => {
-    toast.success("Settings saved (demo mode)");
+  const save = async () => {
+    setSaving(true);
+    try {
+      await emailPreference(emailUpdates);
+      await preferences.refetch();
+      toast.success("Email preference saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save your preference.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -33,7 +56,6 @@ function SettingsPage() {
       <SectionHeading
         title="Settings"
         description="Dashboard preferences for your Civil Craft account."
-        action={<DemoBadge />}
       />
 
       <div className="panel space-y-6 p-6">
@@ -47,7 +69,12 @@ function SettingsPage() {
             </div>
             <p className="text-sm text-muted-foreground">Receive news and patch-note summaries.</p>
           </div>
-          <Switch id="email-updates" checked={emailUpdates} onCheckedChange={setEmailUpdates} />
+          <Switch
+            id="email-updates"
+            checked={emailUpdates}
+            disabled={preferences.isPending || preferences.isError || saving}
+            onCheckedChange={setEmailUpdates}
+          />
         </div>
 
         <div className="flex items-start justify-between gap-4">
@@ -58,7 +85,9 @@ function SettingsPage() {
                 Public profile
               </Label>
             </div>
-            <p className="text-sm text-muted-foreground">Show your display name on public leaderboards.</p>
+            <p className="text-sm text-muted-foreground">
+              Show your display name on public leaderboards.
+            </p>
           </div>
           <Switch id="public-profile" checked={publicProfile} onCheckedChange={setPublicProfile} />
         </div>
@@ -71,14 +100,34 @@ function SettingsPage() {
                 Compact dashboard
               </Label>
             </div>
-            <p className="text-sm text-muted-foreground">Use denser spacing for tables and lists.</p>
+            <p className="text-sm text-muted-foreground">
+              Use denser spacing for tables and lists.
+            </p>
           </div>
           <Switch id="compact-mode" checked={compactMode} onCheckedChange={setCompactMode} />
         </div>
 
-        <Button variant="gold" onClick={save}>
-          Save preferences
+        {preferences.isPending ? (
+          <p role="status">Loading email preference...</p>
+        ) : preferences.isError ? (
+          <div role="alert">
+            <p>Unable to load your email preference.</p>
+            <Button variant="outline" onClick={() => preferences.refetch()}>
+              Retry
+            </Button>
+          </div>
+        ) : null}
+        <Button
+          variant="gold"
+          disabled={preferences.isPending || preferences.isError || saving}
+          onClick={save}
+        >
+          {saving ? "Saving..." : "Save email preference"}
         </Button>
+        <p className="text-xs text-muted-foreground">
+          Password recovery and important account messages are sent independently of this
+          preference.
+        </p>
       </div>
 
       <p className="text-sm text-muted-foreground">
@@ -87,4 +136,19 @@ function SettingsPage() {
       </p>
     </div>
   );
+}
+
+async function emailPreference(emailUpdates?: boolean): Promise<{ emailUpdates: boolean }> {
+  const response = await fetch("/api/player/email-preference", {
+    method: emailUpdates === undefined ? "GET" : "POST",
+    headers: {
+      Authorization: "Bearer " + requireSessionTicket(),
+      "Content-Type": "application/json",
+    },
+    ...(emailUpdates === undefined ? {} : { body: JSON.stringify({ emailUpdates }) }),
+    cache: "no-store",
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Unable to save preference.");
+  return result;
 }

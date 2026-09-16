@@ -28,13 +28,45 @@ const articleFields = z.object({
   coverUrl: z
     .string()
     .max(500)
-    .refine((v) => !v || /^https:\/\//.test(v), "Use an HTTPS image URL."),
+    .refine((v) => {
+      if (!v) return true;
+      try {
+        const url = new URL(v);
+        return (
+          url.protocol === "https:" &&
+          !url.username &&
+          !url.password &&
+          !/\/api\/(?:admin\/)?content\/(?:update-images|images)\//.test(url.pathname) &&
+          !url.hostname.endsWith(".private.blob.vercel-storage.com")
+        );
+      } catch {
+        return false;
+      }
+    }, "Use a public HTTPS image URL or upload an image."),
   coverAlt: z.string().trim().max(200),
 });
+const storedHeroSchema = z.object({
+  storagePath: z.string().regex(/^civilcraft\/updates\/[a-f0-9-]+\.(png|jpeg|webp)$/),
+  contentType: z.enum(["image/png", "image/jpeg", "image/webp"]),
+});
 const articleSchema = articleFields.extend({
+  hero: storedHeroSchema.optional(),
+  notificationPublishedAt: z.string().datetime().optional(),
+  retiredHeroes: z.array(storedHeroSchema).optional(),
   id: idSchema,
   slug: z.string().regex(/^[a-z0-9-]+$/),
 });
+
+type StoredArticle = z.infer<typeof articleSchema>;
+const isPublished = (n: StoredArticle) =>
+  n.status === "published" && Date.parse(n.publishedAt) <= Date.now();
+function articleImageUrl(article: StoredArticle, admin: boolean) {
+  return `${admin ? "/api/admin/content" : "/api/content"}/update-images/${article.id}?v=${article.hero?.storagePath.split("/").pop()}`;
+}
+function publicArticle(article: StoredArticle, admin: boolean): NewsArticle {
+  const { hero, retiredHeroes, notificationPublishedAt, ...fields } = article;
+  return { ...fields, coverUrl: hero ? articleImageUrl(article, admin) : fields.coverUrl };
+}
 
 async function records() {
   return object((await playFabAdmin("Admin/GetTitleInternalData"))["Data"]);
@@ -79,8 +111,9 @@ export async function listContent(admin = false) {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id))
       .map((g) => publicImage(g, admin)),
     updates: parseRows(data, "updates", articleSchema)
-      .filter((n) => admin || n.status === "published")
-      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.id.localeCompare(b.id)),
+      .filter((n) => admin || isPublished(n))
+      .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.id.localeCompare(b.id))
+      .map((n) => publicArticle(n, admin)),
   };
 }
 async function readUpload(request: Request) {
@@ -121,19 +154,15 @@ export async function uploadGallery(request: Request) {
     .parse(Object.fromEntries(form));
   const file = form.get("file");
   if (!(file instanceof File)) throw new AdminApiError(400, "Choose an image file.");
-  const image = await validateImage(new Uint8Array(await file.arrayBuffer()), file.type);
   const id = randomUUID();
-  const storagePath = await imageStorage.write(
-    `civilcraft/gallery/${id}.${image.extension}`,
-    image.bytes,
-    image.mime,
-  );
+  const image = await storeUpload(file, "gallery");
+  const storagePath = image.storagePath;
   const record: StoredImage = {
     ...fields,
     id,
     visible: fields.visible === "true",
     storagePath,
-    contentType: image.mime as StoredImage["contentType"],
+    contentType: image.contentType,
     createdAt: new Date().toISOString(),
   };
   try {
@@ -166,36 +195,107 @@ export async function changeGallery(body: Record<string, unknown>) {
   }
   return { success: true };
 }
-export async function changeUpdate(body: Record<string, unknown>) {
+/** Both Gallery and article images share bounded multipart parsing, Sharp and Blob. */
+async function storeUpload(file: File, kind: "gallery" | "updates") {
+  const image = await validateImage(new Uint8Array(await file.arrayBuffer()), file.type);
+  const storagePath = await imageStorage.write(
+    `civilcraft/${kind}/${randomUUID()}.${image.extension}`,
+    image.bytes,
+    image.mime,
+  );
+  return { storagePath, contentType: image.mime as "image/png" | "image/jpeg" | "image/webp" };
+}
+/** Retired images remain recorded for retry if object storage is unavailable. */
+async function cleanRetired(article: StoredArticle) {
+  const remaining: NonNullable<StoredArticle["retiredHeroes"]> = [];
+  for (const image of article.retiredHeroes ?? []) {
+    try {
+      await imageStorage.remove(image.storagePath);
+    } catch {
+      remaining.push(image);
+    }
+  }
+  return { ...article, retiredHeroes: remaining };
+}
+export async function changeUpdate(body: Record<string, unknown>, file?: File) {
   const action = z.enum(["save", "delete"]).parse(body["action"]);
   const id = body["id"] ? idSchema.parse(body["id"]) : randomUUID();
   const existing = parseRows(await records(), "updates", articleSchema).find((n) => n.id === id);
   if (body["id"] && !existing) throw new AdminApiError(404, "Update not found.");
   if (action === "delete") {
+    if (!existing) throw new AdminApiError(404, "Update not found.");
+    // Revoke public article/image access before object deletion, allowing safe retries.
+    await save("updates", id, { ...existing, status: "draft" });
+    for (const image of [
+      ...(existing.retiredHeroes ?? []),
+      ...(existing.hero ? [existing.hero] : []),
+    ])
+      await imageStorage.remove(image.storagePath);
     await save("updates", id, null);
     return { success: true };
   }
-  const fields = articleFields.parse(body);
+  const keepHero =
+    !file &&
+    !!existing?.hero &&
+    [articleImageUrl(existing, true), articleImageUrl(existing, false)].includes(
+      String(body["coverUrl"]),
+    );
+  const fields = articleFields.parse({
+    ...body,
+    coverUrl: keepHero || file ? "" : body["coverUrl"],
+  });
   const base =
     fields.title
       .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
-      .slice(0, 80) || "update";
-  const article: NewsArticle = {
+      .slice(0, 80)
+      .replace(/-$/g, "") || "update";
+  const hero = file ? await storeUpload(file, "updates") : keepHero ? existing?.hero : undefined;
+  const retiredHeroes = existing ? (await cleanRetired(existing)).retiredHeroes : [];
+  if (existing?.hero && !keepHero) retiredHeroes.push(existing.hero);
+  const article: StoredArticle = {
     ...fields,
     id,
-    slug: existing?.slug ?? `${base}-${id.slice(0, 8)}`,
+    slug: existing?.slug ?? `${base}-${id}`,
+    ...(existing?.notificationPublishedAt
+      ? { notificationPublishedAt: existing.notificationPublishedAt }
+      : fields.status === "published" && existing?.status !== "published"
+        ? {
+            notificationPublishedAt: new Date(
+              Math.max(Date.now(), Date.parse(fields.publishedAt)),
+            ).toISOString(),
+          }
+        : {}),
+    ...(hero ? { hero } : {}),
+    retiredHeroes,
   };
-  await save("updates", id, article);
-  return article;
+  try {
+    await save("updates", id, article);
+  } catch (error) {
+    if (file && hero) await imageStorage.remove(hero.storagePath).catch(() => undefined);
+    throw error;
+  }
+  // Unique upload paths are owned by one article, never shared or accepted from clients.
+  if (retiredHeroes.length) {
+    // Do not write the article again after slow object cleanup: that could
+    // overwrite a newer edit or resurrect an article another admin deleted.
+    // References are pruned on the next save; deletion is idempotent.
+    await cleanRetired(article);
+  }
+  return publicArticle(article, true);
 }
-async function imageResponse(id: string, admin: boolean) {
+async function updateImageResponse(id: string, admin: boolean) {
   if (!idSchema.safeParse(id).success) throw new AdminApiError(404, "Image not found.");
-  const image = parseRows(await records(), "gallery", gallerySchema).find(
-    (g) => g.id === id && (admin || g.visible),
+  const article = parseRows(await records(), "updates", articleSchema).find(
+    (n) => n.id === id && (admin || isPublished(n)),
   );
-  if (!image) throw new AdminApiError(404, "Image not found.");
+  if (!article?.hero) throw new AdminApiError(404, "Image not found.");
+  return storedImageResponse(article.hero);
+}
+async function storedImageResponse(image: { storagePath: string; contentType: string }) {
   const result = await imageStorage.read(image.storagePath);
   if (!result || result.statusCode !== 200) throw new AdminApiError(404, "Image not found.");
   return new Response(result.stream, {
@@ -205,6 +305,14 @@ async function imageResponse(id: string, admin: boolean) {
       "X-Content-Type-Options": "nosniff",
     },
   });
+}
+async function imageResponse(id: string, admin: boolean) {
+  if (!idSchema.safeParse(id).success) throw new AdminApiError(404, "Image not found.");
+  const image = parseRows(await records(), "gallery", gallerySchema).find(
+    (g) => g.id === id && (admin || g.visible),
+  );
+  if (!image) throw new AdminApiError(404, "Image not found.");
+  return storedImageResponse(image);
 }
 const json = (data: unknown, status = 200) =>
   Response.json(data, {
@@ -223,13 +331,29 @@ export async function contentRequest(request: Request, admin = false): Promise<R
   try {
     if (request.method === "GET") {
       if (path === root) return json(await listContent(admin));
+      if (path.startsWith(root + "/update-images/"))
+        return await updateImageResponse(path.slice((root + "/update-images/").length), admin);
       if (path.startsWith(root + "/images/"))
         return await imageResponse(path.slice((root + "/images/").length), admin);
     }
     if (request.method === "POST" && admin) {
       if (path === root + "/upload") return json(await uploadGallery(request), 201);
       if (path === root + "/gallery") return json(await changeGallery(await smallBody(request)));
-      if (path === root + "/updates") return json(await changeUpdate(await smallBody(request)));
+      if (path === root + "/updates") {
+        if (request.headers.get("content-type")?.startsWith("multipart/form-data")) {
+          const form = await readUpload(request);
+          let body: Record<string, unknown>;
+          try {
+            body = object(JSON.parse(String(form.get("article"))));
+          } catch {
+            throw new AdminApiError(400, "The article could not be read.");
+          }
+          const file = form.get("file");
+          if (!(file instanceof File)) throw new AdminApiError(400, "Choose an image file.");
+          return json(await changeUpdate(body, file));
+        }
+        return json(await changeUpdate(await smallBody(request)));
+      }
     }
     return json({ error: "Endpoint not found." }, 404);
   } catch (error) {

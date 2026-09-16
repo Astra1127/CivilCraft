@@ -29,7 +29,14 @@ export const Route = createFileRoute("/admin/players")({
   component: AdminPlayers,
 });
 
+import {
+  directorySorts,
+  defaultDirectoryOptions,
+  type DirectoryOptions,
+} from "@/lib/playfab/directory-filters";
+
 function AdminPlayers() {
+  const [filters, setFilters] = useState<DirectoryOptions>(defaultDirectoryOptions);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<AdminPlayerDetail | null>(null);
   const [submitted, setSubmitted] = useState("");
@@ -51,9 +58,16 @@ function AdminPlayers() {
   const [pollCursor, setPollCursor] = useState<string | null>(null);
 
   const q = useQuery({
-    queryKey: ["admin-players", submitted, kind, cursor, generation, page, pageSize],
+    queryKey: ["admin-players", submitted, kind, cursor, generation, page, pageSize, filters],
     queryFn: () =>
-      adminPlayerService.searchPlayers(submitted, kind, pollCursor ?? cursor, pageSize, page + 1),
+      adminPlayerService.searchPlayers(
+        submitted,
+        kind,
+        pollCursor ?? cursor,
+        pageSize,
+        page + 1,
+        filters,
+      ),
     retry: false,
     refetchOnWindowFocus: false,
     refetchInterval: (result) => (result.state.data?.pending ? 5000 : false),
@@ -96,16 +110,22 @@ function AdminPlayers() {
         }
       />
 
-      {q.data?.totalPlayers !== undefined ? (
-        <p className="text-sm font-semibold">Total players: {q.data.totalPlayers}</p>
-      ) : null}
       <Panel
         title="Player directory"
         icon={Users}
         bodyClassName="p-0"
         actions={
+          q.data?.totalPlayers !== undefined ? (
+            <span className="text-xs font-semibold text-muted-foreground">
+              {q.data.totalPlayers.toLocaleString()}{" "}
+              {q.data.totalPlayers === 1 ? "player" : "players"}
+            </span>
+          ) : null
+        }
+      >
+        <div className="space-y-3 border-b border-border p-4">
           <form
-            className="flex flex-wrap items-center gap-2"
+            className="grid min-w-0 grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center"
             onSubmit={(e) => {
               e.preventDefault();
               resetPage();
@@ -114,7 +134,7 @@ function AdminPlayers() {
           >
             <select
               aria-label="Search identifier"
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-sm"
               value={kind}
               onChange={(e) => {
                 resetPage();
@@ -126,7 +146,7 @@ function AdminPlayers() {
               <option value="TitleDisplayName">Display name</option>
               <option value="Username">Username</option>
             </select>
-            <div className="relative">
+            <div className="relative min-w-0 sm:flex-1">
               <Search
                 className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                 aria-hidden="true"
@@ -136,7 +156,7 @@ function AdminPlayers() {
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Enter exact identifier"
                 aria-label="Search players"
-                className="h-8 w-56 pl-8 text-sm"
+                className="h-8 w-full min-w-0 pl-8 text-sm"
               />
             </div>
             <Button size="sm" type="submit">
@@ -156,8 +176,81 @@ function AdminPlayers() {
               Directory
             </Button>
           </form>
-        }
-      >
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+            <label className="min-w-0">
+              <select
+                aria-label="Sort by"
+                className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm sm:w-auto"
+                value={filters.sort}
+                onChange={(e) => {
+                  resetPage();
+                  setFilters((v) => ({ ...v, sort: e.target.value as DirectoryOptions["sort"] }));
+                }}
+              >
+                {Object.entries(directorySorts).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    Sort: {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="min-w-0">
+              <select
+                aria-label="Activity"
+                className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm sm:w-auto"
+                value={filters.activity}
+                onChange={(e) => {
+                  resetPage();
+                  setFilters((v) => ({
+                    ...v,
+                    activity: e.target.value as DirectoryOptions["activity"],
+                  }));
+                }}
+              >
+                <option value="all">Activity: All</option>
+                <option value="recent">Activity: Recently Active</option>
+                <option value="inactive">Activity: Inactive</option>
+              </select>
+            </label>
+            <label className="min-w-0">
+              <select
+                aria-label="Account status"
+                className="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm sm:w-auto"
+                value={filters.status}
+                onChange={(e) => {
+                  resetPage();
+                  setFilters((v) => ({
+                    ...v,
+                    status: e.target.value as DirectoryOptions["status"],
+                  }));
+                }}
+              >
+                <option value="all">Status: All</option>
+                <option value="active">Status: Active</option>
+                <option value="banned">Status: Banned</option>
+              </select>
+            </label>
+            {(filters.sort !== defaultDirectoryOptions.sort ||
+              filters.activity !== defaultDirectoryOptions.activity ||
+              filters.status !== defaultDirectoryOptions.status) && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  resetPage();
+                  setFilters(defaultDirectoryOptions);
+                }}
+              >
+                Reset filters
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Recently Active: last login within 7 days. Inactive: over 30 days ago or never logged
+            in. Account status indicates bans, not presence.
+          </p>
+        </div>
         {q.isPending || q.data?.pending ? (
           <div className="p-4">
             <LoadingState label="Loading real players…" rows={4} />

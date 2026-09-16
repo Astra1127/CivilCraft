@@ -626,10 +626,13 @@ function HomePage() {
               </Button>
             </div>
           ) : news.length ? (
-            <div className="mt-8 grid items-start gap-6 md:grid-cols-3">
-              {news.map((article) => (
-                <UpdateCard key={article.id} article={article} />
-              ))}
+            <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+              <UpdateCard article={news[0]!} />
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+                {news.slice(1).map((article) => (
+                  <UpdateCard key={article.id} article={article} compact />
+                ))}
+              </div>
             </div>
           ) : (
             <p className="mt-8 text-muted-foreground">

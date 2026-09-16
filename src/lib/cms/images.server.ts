@@ -5,7 +5,7 @@ import { imageTypes, maxImageBytes } from "./content-types.ts";
 
 function options() {
   const token = process.env["BLOB_READ_WRITE_TOKEN"]?.trim();
-  if (!token) throw new AdminApiError(503, "Gallery image storage is not configured.");
+  if (!token) throw new AdminApiError(503, "Image storage is not configured.");
   return { token };
 }
 

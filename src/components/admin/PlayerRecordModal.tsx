@@ -132,7 +132,10 @@ export function PlayerRecordModal({
                       label="Player ID"
                       value={<span className="font-mono text-xs">{player.playFabId}</span>}
                     />
-                    <DataRow label="Member since" value={formatDate(player.createdAt)} />
+                    <DataRow label="Account created" value={formatDate(player.createdAt)} />
+                    {player.firstLogin ? (
+                      <DataRow label="First login" value={formatDate(player.firstLogin)} />
+                    ) : null}
                     <DataRow label="Last login" value={formatDate(player.lastActive)} />
                     <DataRow
                       label="Account status"

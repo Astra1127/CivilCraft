@@ -278,6 +278,33 @@ test("missing secret is a safe partial state; live probe checks PlayFab", async 
   assert.match(down, /Unavailable/);
   assert.ok(!down.includes(env.PLAYFAB_SECRET_KEY));
 });
+test("integration configuration reports safe statuses without exposing service credentials", async () => {
+  const names = [
+    "BLOB_READ_WRITE_TOKEN",
+    "PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID",
+    "PLAYFAB_RELEASE_EMAIL_TEMPLATE_ID",
+    "CRON_SECRET",
+  ];
+  const previous = names.map((name) => process.env[name]);
+  try {
+    const cookie = await session();
+    for (const name of names) delete process.env[name];
+    const missing = await (await request("/api/admin/playfab/status", cookie)).json();
+    assert.deepEqual(Object.values(missing.services), Array(4).fill("Not configured"));
+    for (const name of names) process.env[name] = "private-integration-canary-" + name;
+    const response = await request("/api/admin/playfab/status", cookie);
+    const text = await response.text();
+    assert.deepEqual(Object.values(JSON.parse(text).services), Array(4).fill("Configured"));
+    assert.ok(!text.includes("private-integration-canary"));
+    assert.ok(!text.includes(env.PLAYFAB_SECRET_KEY));
+    assert.ok(!text.includes(env.ADMIN_SESSION_SECRET));
+  } finally {
+    names.forEach((name, index) => {
+      if (previous[index] === undefined) delete process.env[name];
+      else process.env[name] = previous[index];
+    });
+  }
+});
 test("transactions distinguish missing access, empty history and provider failure", async () => {
   const cookie = await session();
   delete process.env["PLAYFAB_SECRET_KEY"];
@@ -755,4 +782,42 @@ test("leaderboard supports 10, 20 and 50 backend entries per page", async () => 
     ))!.json();
     assert.equal(second.entries[0].rank, size + 1);
   }
+});
+
+test("directory filters and sorts the full 53-player snapshot before pagination without per-row calls", async () => {
+  const time = Date.now();
+  fragmentFiles = [
+    "PlayerId\tDisplayName\tCreated\tLastLogin\tisBanned\n" +
+      Array.from({ length: 53 }, (_, i) =>
+        [
+          (i + 1).toString(16).toUpperCase(),
+          "Engineer " + String(52 - i).padStart(2, "0"),
+          new Date(time - i * 86400000).toISOString(),
+          new Date(time - i * 86400000).toISOString(),
+          String(i % 2 === 0),
+        ].join("\t"),
+      )
+        .reverse()
+        .join("\n") +
+      "\n",
+  ];
+  const auth = await session();
+  const first = await (
+    await request("/api/admin/players?sort=newest&status=banned&pageSize=20&page=1", auth)
+  ).json();
+  assert.equal(first.totalPlayers, 27);
+  assert.equal(first.players.length, 20);
+  assert.equal(first.players[0].playFabId, "1");
+  const second = await (
+    await request(
+      "/api/admin/players?sort=newest&status=banned&pageSize=20&page=2&cursor=" +
+        encodeURIComponent(first.snapshotCursor),
+      auth,
+    )
+  ).json();
+  assert.equal(second.players.length, 7);
+  assert.equal(second.players[0].playFabId, "29");
+  assert.ok(calls.every((call) => call.operation !== "Admin/GetUserAccountInfo"));
+  const oldest = await (await request("/api/admin/players?sort=oldest&pageSize=10", auth)).json();
+  assert.equal(oldest.players[0].playFabId, "35");
 });

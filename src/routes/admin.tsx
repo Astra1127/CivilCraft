@@ -7,7 +7,6 @@ import {
 } from "@tanstack/react-router";
 import {
   Bug,
-  Gauge,
   Image,
   Newspaper,
   HelpCircle,
@@ -58,7 +57,6 @@ const items: DashboardNavItem[] = [
   { to: "/admin/faq", label: "FAQ", icon: HelpCircle, section: "Content" },
   { to: "/admin/messages", label: "Messages", icon: Mail, section: "Communication" },
   { to: "/admin/bugs", label: "Bug Reports", icon: Bug, section: "Communication" },
-  { to: "/admin/integration", label: "Integration", icon: Gauge, section: "System" },
   { to: "/admin/settings", label: "Settings", icon: Settings, section: "System" },
 ];
 

@@ -1,3 +1,4 @@
+import { filterSortPlayers, directorySorts, type DirectoryOptions } from "./directory-filters.ts";
 import { getAdminAnalytics } from "./analytics.server.ts";
 import { contentRequest } from "../cms/content.server.ts";
 import { smallBody } from "./request-body.server.ts";
@@ -51,7 +52,15 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     }
     if (path === "/api/admin/playfab/status" && request.method === "GET") {
       const { titleId, secret } = adminGameConfig();
+      const configured = (name: string) =>
+        process.env[name]?.trim() ? ("Configured" as const) : ("Not configured" as const);
       const status: AdminIntegrationStatus = {
+        services: {
+          imageStorage: configured("BLOB_READ_WRITE_TOKEN"),
+          recoveryTemplate: configured("PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID"),
+          releaseTemplate: configured("PLAYFAB_RELEASE_EMAIL_TEMPLATE_ID"),
+          emailWorker: configured("CRON_SECRET"),
+        },
         titleId,
         mode: "Live",
         connection: "Partially configured",
@@ -86,6 +95,17 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
       // Configuration is checked even when an export snapshot is cached.
       if (!adminGameConfig().secret)
         throw new AdminApiError(503, "Administrative PlayFab access is not configured.");
+      const options = {
+        sort: url.searchParams.get("sort") ?? "recent",
+        activity: url.searchParams.get("activity") ?? "all",
+        status: url.searchParams.get("status") ?? "all",
+      } as DirectoryOptions;
+      if (
+        !Object.hasOwn(directorySorts, options.sort) ||
+        !["all", "recent", "inactive"].includes(options.activity) ||
+        !["all", "active", "banned"].includes(options.status)
+      )
+        throw new AdminApiError(400, "Choose valid player filters.");
       const query = (url.searchParams.get("q") ?? "").trim();
       if (query.length > 100)
         throw new AdminApiError(400, "Search must be 100 characters or fewer.");
@@ -100,7 +120,7 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
         try {
           const player = await lookupPlayer(query, kind as PlayerSearchKind);
           return json({
-            players: [await getAdminPlayer(player.playFabId)],
+            players: filterSortPlayers([await getAdminPlayer(player.playFabId)], options),
             pending: false,
             nextCursor: null,
             snapshotAt: null,
@@ -126,6 +146,8 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
           process.env["NODE_ENV"] === "development" && url.searchParams.get("fresh") === "1",
           pageSize,
           page,
+          false,
+          options,
         ),
       );
     }

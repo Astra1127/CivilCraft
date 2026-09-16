@@ -13,6 +13,8 @@ export function adminGameConfig() {
   return { titleId, secret: process.env["PLAYFAB_SECRET_KEY"]?.trim() || "" };
 }
 type Operation =
+  | "Server/GetPlayerProfile"
+  | "Server/SendEmailFromTemplate"
   | "Server/GetLeaderboard"
   | "Server/GetLeaderboardAroundUser"
   | "Server/AuthenticateSessionTicket"

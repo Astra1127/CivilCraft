@@ -12,6 +12,12 @@ import {
 import { mapIdentity } from "./admin-players.server.ts";
 import type { AdminPlayer, AdminPlayerPage } from "./admin-types.ts";
 
+import {
+  filterSortPlayers,
+  defaultDirectoryOptions,
+  type DirectoryOptions,
+} from "./directory-filters.ts";
+
 const PAGE_SIZE = 20;
 const RANGE_BYTES = 1024 * 1024;
 const TTL = 15 * 60;
@@ -124,11 +130,25 @@ export function readExportPage(
           LastLogin: timestamp("LastLogin"),
         },
       });
+      const banned = value("isBanned") ?? value("IsBanned");
+      if (banned === "true" || banned === "True") player.accountStatus = "banned";
+      if (banned === "false" || banned === "False") player.accountStatus = "active";
+      if (banned === undefined && columns.includes("BannedUntil")) {
+        const until = timestamp("BannedUntil");
+        player.accountStatus = !until
+          ? "active"
+          : Number.isFinite(Date.parse(until))
+            ? Date.parse(until) > Date.now()
+              ? "banned"
+              : "active"
+            : null;
+      }
       try {
         const stats: unknown = JSON.parse(value("PlayerStatistics") ?? "null");
         if (Array.isArray(stats)) {
           const stat = (name: string) =>
             numberValue(object(stats.find((s) => object(s)["Name"] === name))["StatisticValue"]);
+          player.level = stat("CurrentLevel");
           player.totalScore = stat(LEADERBOARD_STATISTIC);
           player.bridgesCompleted = stat("BridgesCompleted");
           player.challengesCompleted = stat("ChallengesCompleted");
@@ -151,6 +171,7 @@ export async function directoryPage(
   pageSize = 20,
   requestedPage?: number,
   includeAll = false,
+  options: DirectoryOptions = defaultDirectoryOptions,
 ): Promise<AdminPlayerPage> {
   const title = adminGameConfig().titleId;
   const cacheKey = createHmac("sha256", config.sessionSecret)
@@ -266,7 +287,23 @@ export async function directoryPage(
   }
   if (typeof exported["IndexUrl"] !== "string")
     throw new AdminApiError(502, "The player directory index is unavailable.");
-  const all = await readSnapshot(state.exportId, title, String(exported["IndexUrl"]), snapshotTime);
+  const rawPlayers = await readSnapshot(
+    state.exportId,
+    title,
+    String(exported["IndexUrl"]),
+    snapshotTime,
+  );
+  if (options.status !== "all") {
+    const complete = await enrichStatuses(rawPlayers);
+    if (!complete)
+      return {
+        players: [],
+        pending: true,
+        nextCursor: await save(state),
+        snapshotAt: state.snapshotAt,
+      };
+  }
+  const all = includeAll ? rawPlayers : filterSortPlayers(rawPlayers, options, snapshotTime);
   const start = requestedPage === undefined ? state.offset : (requestedPage - 1) * pageSize;
   const end = Math.min(start + pageSize, all.length);
   return {
@@ -353,4 +390,40 @@ async function readSnapshot(
     });
   }
   return cached.value;
+}
+
+const statusCache = new Map<string, { expires: number; value: Promise<"active" | "banned"> }>();
+async function enrichStatuses(players: AdminPlayer[]) {
+  const now = Date.now();
+  for (const [key, value] of statusCache) if (value.expires <= now) statusCache.delete(key);
+  const missing = players.filter((p) => p.accountStatus === null);
+  // Bounded enrichment only when the export omitted ban information and a status filter needs it.
+  for (let i = 0; i < Math.min(missing.length, 20); i += 4) {
+    await Promise.all(
+      missing.slice(i, i + 4).map(async (p) => {
+        const key = adminGameConfig().titleId + ":" + p.playFabId;
+        let cached = statusCache.get(key);
+        if (!cached) {
+          if (statusCache.size >= 50000)
+            throw new AdminApiError(503, "Account status cache is full. Retry later.");
+          const value = playFabAdmin("Admin/GetUserAccountInfo", { PlayFabId: p.playFabId }).then(
+            (result) => {
+              const banned = object(object(result["UserInfo"])["TitleInfo"])["isBanned"];
+              if (typeof banned !== "boolean")
+                throw new AdminApiError(
+                  503,
+                  "PlayFab account status is unavailable. Use All account statuses or retry.",
+                );
+              return banned ? ("banned" as const) : ("active" as const);
+            },
+          );
+          cached = { expires: now + 5 * 60_000, value };
+          statusCache.set(key, cached);
+          value.catch(() => statusCache.delete(key));
+        }
+        p.accountStatus = await cached.value;
+      }),
+    );
+  }
+  return players.every((p) => p.accountStatus !== null);
 }

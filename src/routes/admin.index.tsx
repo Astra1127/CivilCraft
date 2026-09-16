@@ -346,6 +346,13 @@ function AdminOverview() {
           </Module>
         </Panel>
         <Panel title="Backend status" icon={Activity} tone="blueprint">
+          <Link
+            to="/admin/settings"
+            search={{ tab: "integrations" }}
+            className="mb-3 inline-block text-sm underline underline-offset-4"
+          >
+            Settings &rarr; Integrations
+          </Link>
           {q.isPending ? (
             <LoadingState rows={3} />
           ) : q.isError ? (

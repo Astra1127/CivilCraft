@@ -1,3 +1,4 @@
+import { handleEmailRequest } from "./lib/email/api.server";
 import { handleLeaderboardRequest } from "./lib/playfab/leaderboard.server";
 import { contentRequest } from "./lib/cms/content.server";
 import { handlePlayerBugRequest } from "./lib/playfab/bug-reports.server";
@@ -52,6 +53,8 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const emailResponse = await handleEmailRequest(request);
+      if (emailResponse) return emailResponse;
       const publicContentResponse = await contentRequest(request);
       if (publicContentResponse) return publicContentResponse;
       const leaderboardResponse = await handleLeaderboardRequest(request);

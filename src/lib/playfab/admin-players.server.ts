@@ -32,8 +32,10 @@ export function mapIdentity(raw: unknown): AdminPlayer {
     displayName: textValue(title["DisplayName"]),
     username: textValue(info["Username"]),
     createdAt: dateValue(title["Created"]) ?? dateValue(info["Created"]),
+    firstLogin: dateValue(title["FirstLogin"]),
     lastActive: dateValue(title["LastLogin"]),
-    accountStatus: null,
+    accountStatus:
+      typeof title["isBanned"] === "boolean" ? (title["isBanned"] ? "banned" : "active") : null,
     level: null,
     xp: null,
     xpToNextLevel: null,
@@ -147,7 +149,8 @@ export async function getAdminPlayer(id: string): Promise<AdminPlayerDetail> {
     currentRegion: textValue(value("CurrentRegion")),
     achievements: mapAchievements(value("AchievementProgress")),
     statistics,
-    accountStatus: bans ? (bans.some((b) => b.active) ? "banned" : "active") : null,
+    accountStatus:
+      player.accountStatus ?? (bans ? (bans.some((b) => b.active) ? "banned" : "active") : null),
     bans,
     unavailable,
     currencies: economy

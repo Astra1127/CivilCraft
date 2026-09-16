@@ -1,3 +1,4 @@
+import { defaultDirectoryOptions, type DirectoryOptions } from "./directory-filters";
 import type {
   AdminIntegrationStatus,
   AdminPlayerDetail,
@@ -38,8 +39,10 @@ export const adminPlayerService = {
     cursor: string | null = null,
     pageSize = 20,
     page?: number,
+    options: DirectoryOptions = defaultDirectoryOptions,
   ) {
     const params = new URLSearchParams({ q: query, kind, pageSize: String(pageSize) });
+    for (const [key, value] of Object.entries(options)) params.set(key, value);
     if (cursor) params.set("cursor", cursor);
     if (page !== undefined) params.set("page", String(page));
     return request<AdminPlayerPage>(`players?${params}`);

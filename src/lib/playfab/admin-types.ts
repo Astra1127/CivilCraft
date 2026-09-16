@@ -4,6 +4,7 @@ export interface AdminPlayer {
   displayName: string | null;
   username: string | null;
   createdAt: string | null;
+  firstLogin?: string | null;
   lastActive: string | null;
   accountStatus: "active" | "banned" | null;
   level: number | null;
@@ -42,6 +43,12 @@ export interface AdminPlayerPage {
   snapshotAt: string | null;
 }
 export interface AdminIntegrationStatus {
+  services: {
+    imageStorage: "Configured" | "Not configured";
+    recoveryTemplate: "Configured" | "Not configured";
+    releaseTemplate: "Configured" | "Not configured";
+    emailWorker: "Configured" | "Not configured";
+  };
   titleId: string;
   mode: "Live";
   connection: "Connected" | "Partially configured" | "Unavailable";

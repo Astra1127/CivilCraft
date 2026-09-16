@@ -1,3 +1,4 @@
+import { showContentError } from "@/components/admin/content-error";
 import { createFileRoute } from "@tanstack/react-router";
 import { Eye, EyeOff, Image as ImageIcon, Plus, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -73,7 +74,7 @@ function AdminGallery() {
       await refresh();
       toast.success(message);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save gallery changes.");
+      showContentError(error, "Unable to save gallery changes.");
     } finally {
       setBusy(false);
     }

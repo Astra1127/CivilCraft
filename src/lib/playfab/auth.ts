@@ -22,10 +22,20 @@ interface LoginResult {
     AccountInfo?: {
       Created?: string;
       Username?: string;
-      TitleInfo?: { DisplayName?: string; Created?: string; LastLogin?: string; AvatarUrl?: string };
+      TitleInfo?: {
+        DisplayName?: string;
+        Created?: string;
+        LastLogin?: string;
+        AvatarUrl?: string;
+      };
       PrivateInfo?: { Email?: string };
     };
-    PlayerProfile?: { DisplayName?: string; AvatarUrl?: string; Created?: string; LastLogin?: string };
+    PlayerProfile?: {
+      DisplayName?: string;
+      AvatarUrl?: string;
+      Created?: string;
+      LastLogin?: string;
+    };
   };
 }
 
@@ -36,7 +46,6 @@ const INFO_REQUEST = {
   GetPlayerProfile: true,
   ProfileConstraints: { ShowDisplayName: true },
 };
-
 
 function toIdentity(result: LoginResult, fallbackEmail?: string): PlayerIdentity {
   const account = result.InfoResultPayload?.AccountInfo;
@@ -117,9 +126,13 @@ export async function registerPlayer({
   // Registration must not grant a session: the account is verified by PlayFab.
   if (result?.SessionTicket) {
     try {
-      await callPlayFab("/Client/UpdateUserTitleDisplayName", {
-        DisplayName: username.trim(),
-      }, { sessionTicket: result.SessionTicket });
+      await callPlayFab(
+        "/Client/UpdateUserTitleDisplayName",
+        {
+          DisplayName: username.trim(),
+        },
+        { sessionTicket: result.SessionTicket },
+      );
     } catch {
       /* display name already taken or restricted — the account still exists */
     }
@@ -130,7 +143,12 @@ export async function registerPlayer({
 
 /** Client/SendAccountRecoveryEmail */
 export async function requestPasswordReset(email: string): Promise<void> {
-  await callPlayFab("/Client/SendAccountRecoveryEmail", { Email: email.trim() });
+  const response = await fetch("/api/email/recovery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim() }),
+  });
+  if (!response.ok) throw new Error("Unable to process the request. Please try again later.");
 }
 
 export function getStoredPlayer(): PlayerIdentity | null {

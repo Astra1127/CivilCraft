@@ -232,3 +232,150 @@ test("placeholder values are excluded without inventing replacements", () => {
     assert.equal(isRealText(value), false);
   assert.equal(isRealText("Civil Craft"), true);
 });
+
+const updateFields = {
+  action: "save",
+  title: "Civil Craft Prototype Version Released",
+  category: "Announcements",
+  excerpt: "A real release article",
+  content: "Full release article.\n\nSecond paragraph.",
+  coverUrl: "",
+  coverAlt: "A bridge crossing the canyon",
+  status: "draft",
+  publishedAt: "2026-09-01T00:00:00.000Z",
+};
+async function saveHero(
+  format: "png" | "jpeg" | "webp",
+  fields: Record<string, unknown> = updateFields,
+) {
+  const bytes = await sharp({ create: { width: 3, height: 2, channels: 3, background: "#aa6633" } })
+    .toFormat(format)
+    .toBuffer();
+  const body = new FormData();
+  body.set("article", JSON.stringify(fields));
+  body.set(
+    "file",
+    new File([bytes], format === "jpeg" ? "hero.jpg" : `hero.${format}`, {
+      type: `image/${format}`,
+    }),
+  );
+  return admin("/updates", body);
+}
+for (const format of ["png", "jpeg", "webp"] as const) {
+  test(`${format} update hero: draft preview, publish, replace, remove and delete preserve identity`, async () => {
+    const created = await saveHero(format);
+    assert.equal(created.status, 200);
+    const draft = await created.json();
+    assert.equal(blobs.size, 1);
+    assert.equal((await (await publicRead())!.json()).updates.length, 0);
+    assert.equal((await publicRead(`/update-images/${draft.id}`))!.status, 404);
+    assert.equal((await admin(`/update-images/${draft.id}`)).status, 200);
+    assert.equal(draft.coverAlt, updateFields.coverAlt);
+    assert.ok(!JSON.stringify(draft).includes("storagePath"));
+    const edited = await (
+      await change("/updates", {
+        ...draft,
+        action: "save",
+        title: "Edited draft",
+        content: "Updated draft body",
+      })
+    ).json();
+    assert.equal(edited.id, draft.id);
+    assert.equal(edited.slug, draft.slug);
+    assert.equal(blobs.size, 1);
+    assert.equal((await (await publicRead())!.json()).updates.length, 0);
+    await change("/updates", { ...edited, action: "save", status: "published" });
+    const article = (await (await publicRead())!.json()).updates[0];
+    assert.equal(article.id, draft.id);
+    assert.match(article.coverUrl, /^\/api\/content\/update-images\//);
+    const publicImage = (await publicRead(`/update-images/${draft.id}`))!;
+    assert.equal(publicImage.status, 200);
+    assert.equal(publicImage.headers.get("content-type"), `image/${format}`);
+    const replaced = await (
+      await saveHero(format, { ...article, action: "save", content: "Edited published body" })
+    ).json();
+    assert.notEqual(replaced.coverUrl.split("?v=")[1], article.coverUrl.split("?v=")[1]);
+    assert.equal(blobs.size, 1);
+    assert.equal(replaced.id, draft.id);
+    assert.equal(replaced.slug, draft.slug);
+    await change("/updates", { ...replaced, action: "save", coverUrl: "" });
+    assert.equal(blobs.size, 0);
+    assert.equal((await publicRead(`/update-images/${draft.id}`))!.status, 404);
+    await saveHero(format, { ...replaced, action: "save" });
+    assert.equal(blobs.size, 1);
+    assert.equal((await change("/updates", { id: draft.id, action: "delete" })).status, 200);
+    assert.equal(blobs.size, 0);
+    assert.equal((await (await publicRead())!.json()).updates.length, 0);
+  });
+}
+test("future publications and their hero images stay private, published lists sort newest first", async () => {
+  const future = await (
+    await saveHero("png", {
+      ...updateFields,
+      status: "published",
+      publishedAt: "2099-01-01T00:00:00.000Z",
+    })
+  ).json();
+  assert.equal((await (await publicRead())!.json()).updates.length, 0);
+  assert.equal((await publicRead(`/update-images/${future.id}`))!.status, 404);
+  assert.equal((await admin(`/update-images/${future.id}`)).status, 200);
+  for (const publishedAt of [
+    "2026-01-01T00:00:00.000Z",
+    "2026-03-01T00:00:00.000Z",
+    "2026-02-01T00:00:00.000Z",
+  ])
+    await change("/updates", { ...updateFields, status: "published", publishedAt });
+  const articles = (await (await publicRead())!.json()).updates;
+  assert.deepEqual(
+    articles.map((a: { publishedAt: string }) => a.publishedAt.slice(5, 7)),
+    ["03", "02", "01"],
+  );
+});
+test("concurrent duplicate titles get distinct URL-safe slugs", async () => {
+  const responses = await Promise.all(
+    Array.from({ length: 3 }, () => change("/updates", updateFields)),
+  );
+  const articles = await Promise.all(responses.map((r) => r.json()));
+  assert.equal(new Set(articles.map((a) => a.slug)).size, 3);
+  for (const article of articles)
+    assert.match(article.slug, /^civil-craft-prototype-version-released-[a-f0-9-]+$/);
+  assert.equal((await (await admin()).json()).updates.length, 3);
+});
+test("failed replacement preserves the saved article and draft image routes reject visitors", async () => {
+  const article = await (await saveHero("png")).json();
+  const body = new FormData();
+  body.set("article", JSON.stringify({ ...article, action: "save" }));
+  body.set("file", new File(["not an image"], "fake.png", { type: "image/png" }));
+  assert.equal((await admin("/updates", body)).status, 400);
+  assert.equal(blobs.size, 1);
+  assert.equal((await (await admin()).json()).updates[0].coverUrl, article.coverUrl);
+  assert.equal(
+    (await admin(`/update-images/${article.id}`, undefined, undefined, false)).status,
+    401,
+  );
+  assert.equal((await publicRead(`/update-images/${article.id}`))!.status, 404);
+});
+test("retired hero deletion failures are recorded and retried without exposing old images", async () => {
+  const article = await (await saveHero("png")).json();
+  const remove = imageStorage.remove;
+  imageStorage.remove = async () => {
+    throw new Error("storage offline");
+  };
+  const replaced = await (await saveHero("webp", { ...article, action: "save" })).json();
+  assert.equal(blobs.size, 2);
+  assert.ok(!JSON.stringify(replaced).includes("retiredHeroes"));
+  imageStorage.remove = remove;
+  await change("/updates", { ...replaced, action: "save" });
+  assert.equal(blobs.size, 1);
+});
+
+test("slow hero cleanup cannot resurrect an article deleted by another administrator", async () => {
+  const article = await (await saveHero("png")).json();
+  const remove = imageStorage.remove;
+  imageStorage.remove = async (path) => {
+    delete metadata[`civilcraft.website.v1.updates.${article.id}`];
+    await remove(path);
+  };
+  await saveHero("webp", { ...article, action: "save" });
+  assert.equal((await (await admin()).json()).updates.length, 0);
+});

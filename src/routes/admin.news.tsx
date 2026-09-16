@@ -1,13 +1,24 @@
+import { showContentError } from "@/components/admin/content-error";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AdminHeading, AdminPage, Panel, ConfirmDialog } from "@/components/admin/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { contentMutation, useContent, useRefreshContent } from "@/lib/cms/content";
+import { contentFetch, contentMutation, useContent, useRefreshContent } from "@/lib/cms/content";
 import { updateCategories } from "@/lib/cms/content-types";
+import { UpdateHeroInput } from "@/components/admin/UpdateHeroInput";
+import { UpdateArticle } from "@/components/site/UpdateArticle";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { formatDate } from "@/lib/cms/store";
 import type { NewsArticle } from "@/lib/cms/types";
 
 export const Route = createFileRoute("/admin/news")({ component: AdminUpdates });
@@ -28,6 +39,22 @@ function AdminUpdates() {
     refresh = useRefreshContent();
   const [form, setForm] = useState(blank),
     [busy, setBusy] = useState(false);
+  const [heroFile, setHeroFile] = useState<File | null>(null);
+  const [heroPreview, setHeroPreview] = useState("");
+  const [preview, setPreview] = useState<NewsArticle | null>(null);
+  useEffect(() => {
+    if (!heroFile) {
+      setHeroPreview("");
+      return;
+    }
+    const url = URL.createObjectURL(heroFile);
+    setHeroPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [heroFile]);
+  const reset = () => {
+    setForm(blank());
+    setHeroFile(null);
+  };
   const [confirm, setConfirm] = useState<NewsArticle | null>(null);
   const update = (key: keyof NewsArticle, value: string) =>
     setForm((old) => ({ ...old, [key]: value }));
@@ -38,7 +65,7 @@ function AdminUpdates() {
       await refresh();
       toast.success("Update saved");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to save update.");
+      showContentError(error, "Unable to save update.");
     } finally {
       setBusy(false);
     }
@@ -55,12 +82,14 @@ function AdminUpdates() {
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
-              await contentMutation("updates", {
-                ...form,
-                id: form.id || undefined,
-                action: "save",
-              });
-              setForm(blank());
+              const article = { ...form, id: form.id || undefined, action: "save" };
+              if (heroFile) {
+                const body = new FormData();
+                body.set("article", JSON.stringify(article));
+                body.set("file", heroFile);
+                await contentFetch("/api/admin/content/updates", { method: "POST", body });
+              } else await contentMutation("updates", article);
+              reset();
             });
           }}
         >
@@ -138,16 +167,22 @@ function AdminUpdates() {
                 maxLength={5000}
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="update-cover">Hero image URL (optional, HTTPS)</Label>
-                <Input
-                  id="update-cover"
-                  type="url"
-                  value={form.coverUrl ?? ""}
-                  onChange={(e) => update("coverUrl", e.target.value)}
-                />
-              </div>
+            <UpdateHeroInput
+              key={form.id || "new"}
+              url={heroFile ? heroPreview : form.coverUrl || ""}
+              description={form.coverAlt}
+              file={heroFile}
+              onFile={setHeroFile}
+              onUrl={(url) => {
+                setHeroFile(null);
+                update("coverUrl", url);
+              }}
+              onRemove={() => {
+                setHeroFile(null);
+                update("coverUrl", "");
+              }}
+            />
+            <div>
               <div>
                 <Label htmlFor="update-alt">Image description</Label>
                 <Input
@@ -158,11 +193,20 @@ function AdminUpdates() {
                 />
               </div>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <Button variant="gold" type="submit">
                 {busy ? "Saving..." : "Save update"}
               </Button>
-              <Button type="button" variant="outline" onClick={() => setForm(blank())}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  setPreview({ ...form, coverUrl: heroFile ? heroPreview : form.coverUrl || "" })
+                }
+              >
+                Preview
+              </Button>
+              <Button type="button" variant="outline" onClick={reset}>
                 Clear
               </Button>
             </div>
@@ -189,10 +233,21 @@ function AdminUpdates() {
                 <h2 className="font-display">{article.title}</h2>
                 <p className="text-xs capitalize text-muted-foreground">
                   {article.category} / {article.status}
+                  <span className="ml-3">
+                    <time dateTime={article.publishedAt}>{formatDate(article.publishedAt)}</time>
+                  </span>
                 </p>
               </div>
-              <div className="flex gap-2">
-                {article.status === "published" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => setPreview(article)}
+                >
+                  Preview
+                </Button>
+                {article.status === "published" && Date.parse(article.publishedAt) <= Date.now() ? (
                   <Button asChild size="sm" variant="outline">
                     <Link to="/updates/$slug" params={{ slug: article.slug }}>
                       View
@@ -205,6 +260,7 @@ function AdminUpdates() {
                   disabled={busy}
                   onClick={() => {
                     setForm(article);
+                    setHeroFile(null);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
                 >
@@ -223,16 +279,27 @@ function AdminUpdates() {
           ))}
         </ul>
       )}
+      <Dialog open={!!preview} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Update preview</DialogTitle>
+            <DialogDescription>
+              Only visible here. Previewing does not publish or save this update.
+            </DialogDescription>
+          </DialogHeader>
+          {preview ? <UpdateArticle article={preview} preview /> : null}
+        </DialogContent>
+      </Dialog>
       <ConfirmDialog
         open={!!confirm}
         onOpenChange={(open) => !open && setConfirm(null)}
-        title="Delete update?"
+        title="Delete this update?"
         description="This article will be removed from the public updates list."
         onConfirm={() =>
           confirm &&
           run(async () => {
             await contentMutation("updates", { action: "delete", id: confirm.id });
-            if (form.id === confirm.id) setForm(blank());
+            if (form.id === confirm.id) reset();
             setConfirm(null);
           })
         }
