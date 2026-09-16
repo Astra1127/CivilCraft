@@ -8,6 +8,7 @@
  */
 import { callPlayFab, clearSession, readSession, writeSession, PlayFabError } from "./client";
 import type { PlayerIdentity, RegisterInput, RegisterResult } from "./types";
+import { syncContactEmail } from "./contact-email";
 
 interface EntityTokenResponse {
   EntityToken?: string;
@@ -31,6 +32,8 @@ interface LoginResult {
       PrivateInfo?: { Email?: string };
     };
     PlayerProfile?: {
+      PlayerId?: string;
+      ContactEmailAddresses?: { EmailAddress?: string }[];
       DisplayName?: string;
       AvatarUrl?: string;
       Created?: string;
@@ -85,6 +88,12 @@ export async function loginWithEmail(email: string, password: string): Promise<P
   });
   const identity = toIdentity(result, email.trim());
   persist(result, identity);
+  await syncContactEmail(callPlayFab, {
+    playFabId: result.PlayFabId,
+    sessionTicket: result.SessionTicket,
+    accountEmail: identity.email,
+    profile: result.InfoResultPayload?.PlayerProfile,
+  });
   return identity;
 }
 
@@ -100,6 +109,12 @@ export async function loginWithUsername(
   });
   const identity = toIdentity(result);
   persist(result, identity);
+  await syncContactEmail(callPlayFab, {
+    playFabId: result.PlayFabId,
+    sessionTicket: result.SessionTicket,
+    accountEmail: identity.email,
+    profile: result.InfoResultPayload?.PlayerProfile,
+  });
   return identity;
 }
 
@@ -123,8 +138,14 @@ export async function registerPlayer({
     DisplayName: username.trim(),
     RequireBothUsernameAndEmail: true,
   });
-  // Registration must not grant a session: the account is verified by PlayFab.
+  // Use the returned ticket for setup without persisting a signed-in browser session.
   if (result?.SessionTicket) {
+    await syncContactEmail(callPlayFab, {
+      playFabId: result.PlayFabId,
+      sessionTicket: result.SessionTicket,
+      accountEmail: email.trim(),
+      newAccount: true,
+    });
     try {
       await callPlayFab(
         "/Client/UpdateUserTitleDisplayName",
