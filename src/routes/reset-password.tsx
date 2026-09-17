@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  expiredResetLink,
   invalidResetLink,
   resetFailure,
   resetFormSchema,
@@ -32,16 +33,33 @@ export const Route = createFileRoute("/reset-password")({
 
 function ResetPasswordPage() {
   const { token } = Route.useSearch();
-  return <ResetPasswordForm key={token ?? "missing"} token={token} />;
+  // This state must outlive the token-keyed form when URL cleanup remounts it.
+  const [success, setSuccess] = useState(false);
+  return (
+    <ResetPasswordForm
+      key={token ?? "missing"}
+      token={token}
+      success={success}
+      onSuccess={() => setSuccess(true)}
+    />
+  );
 }
 
-function ResetPasswordForm({ token }: { token?: string | undefined }) {
+function ResetPasswordForm({
+  token,
+  success,
+  onSuccess,
+}: {
+  token?: string | undefined;
+  success: boolean;
+  onSuccess: () => void;
+}) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [visible, setVisible] = useState({ password: false, confirm: false });
   const [pending, setPending] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [expired, setExpired] = useState(false);
   const submitting = useRef(false);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -60,10 +78,14 @@ function ResetPasswordForm({ token }: { token?: string | undefined }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: parsed.data.token, password: parsed.data.password }),
       });
+      if (response.status === 410) {
+        setExpired(true);
+        return;
+      }
       if (!response.ok || (await response.json()).success !== true) throw new Error();
       setPassword("");
       setConfirm("");
-      setSuccess(true);
+      onSuccess();
       // Remove the used token from this history entry without persisting it elsewhere.
       window.history.replaceState(window.history.state, "", window.location.pathname);
     } catch {
@@ -86,23 +108,27 @@ function ResetPasswordForm({ token }: { token?: string | undefined }) {
           </div>
           <div className="panel p-6 sm:p-8">
             <BrandMark />
-            <h1 className="mt-6 text-3xl">Reset Your Password</h1>
+            <h1 className="mt-6 text-3xl">
+              {success ? "Password Updated" : "Reset Your Password"}
+            </h1>
             {success ? (
               <div role="status" className="mt-6 space-y-4">
                 <div className="panel flex flex-col items-center gap-2 border-gold/60 px-5 py-8 text-center">
                   <CheckCircle2 className="h-9 w-9 text-gold" aria-hidden="true" />
-                  <h2 className="font-display text-xl">Password updated</h2>
                   <p className="text-sm text-muted-foreground">
-                    Your Civil Craft password has been reset successfully.
+                    Your Civil Craft password has been successfully changed.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    You can now sign in using your new password.
                   </p>
                 </div>
                 <Button asChild variant="gold" className="w-full">
                   <Link to="/login">Return to Login</Link>
                 </Button>
               </div>
-            ) : !token ? (
+            ) : !token || expired ? (
               <div className="mt-6 space-y-4">
-                <p role="alert">{invalidResetLink}</p>
+                <p role="alert">{expired ? expiredResetLink : invalidResetLink}</p>
                 <Button asChild variant="gold" className="w-full">
                   <Link to="/forgot-password">Request a new recovery email</Link>
                 </Button>

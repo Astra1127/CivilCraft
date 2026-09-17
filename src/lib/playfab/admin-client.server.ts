@@ -48,6 +48,16 @@ export async function playFabAdmin(
     });
     const value = (await response.json()) as Record<string, unknown>;
     if (!response.ok || value["code"] !== 200) {
+      if (
+        operation === "Admin/ResetPassword" &&
+        [
+          "AuthTokenExpired",
+          "InvalidAuthToken",
+          "AuthTokenDoesNotExist",
+          "AuthTokenAlreadyUsedToResetPassword",
+        ].includes(String(value["error"]))
+      )
+        throw new AdminApiError(410, "Password reset link is no longer valid.");
       if (["AccountNotFound", "UserNotFound", "UserisNotValid"].includes(String(value["error"])))
         throw new AdminApiError(404, "Player could not be found.");
       if (response.status === 429 || value["error"] === "AsyncExportRateLimitExceeded")

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 import { handlePasswordReset } from "../src/lib/playfab/reset-password.server.ts";
-import { resetFailure, resetFormSchema } from "../src/lib/playfab/reset-password.ts";
+import {
+  expiredResetLink,
+  resetFailure,
+  resetFormSchema,
+} from "../src/lib/playfab/reset-password.ts";
 
 const originalFetch = globalThis.fetch;
 const env = { VITE_PLAYFAB_TITLE_ID: "17FA03", PLAYFAB_SECRET_KEY: "reset-test-secret-canary" };
@@ -99,13 +103,14 @@ test("expired, invalid, used tokens and provider/password failures never leak ra
     "InvalidAuthToken",
     "AuthTokenDoesNotExist",
     "AuthTokenAlreadyUsedToResetPassword",
-    "InvalidPassword",
   ]) {
     providerError = error;
     const response = (await reset())!;
-    assert.notEqual(response.status, 200);
-    assert.deepEqual(await response.json(), { error: resetFailure });
+    assert.equal(response.status, 410);
+    assert.deepEqual(await response.json(), { error: expiredResetLink });
   }
+  providerError = "InvalidPassword";
+  assert.deepEqual(await (await reset())!.json(), { error: resetFailure });
   failNetwork = true;
   assert.deepEqual(await (await reset())!.json(), { error: resetFailure });
   delete process.env["PLAYFAB_SECRET_KEY"];

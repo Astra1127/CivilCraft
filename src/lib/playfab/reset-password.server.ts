@@ -1,6 +1,6 @@
-import { playFabAdmin } from "./admin-client.server.ts";
+import { AdminApiError, playFabAdmin } from "./admin-client.server.ts";
 import { smallBody } from "./request-body.server.ts";
-import { resetFailure, resetPasswordSchema } from "./reset-password.ts";
+import { expiredResetLink, resetFailure, resetPasswordSchema } from "./reset-password.ts";
 
 const json = (body: unknown, status = 200) =>
   Response.json(body, {
@@ -27,8 +27,10 @@ export async function handlePasswordReset(request: Request): Promise<Response | 
       Password: parsed.data.password,
     });
     return json({ success: true });
-  } catch {
+  } catch (error) {
     // Never log or echo the token, password, credentials or raw provider response.
+    if (error instanceof AdminApiError && error.status === 410)
+      return json({ error: expiredResetLink }, 410);
     return json({ error: resetFailure }, 503);
   }
 }

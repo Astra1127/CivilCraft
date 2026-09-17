@@ -2,7 +2,8 @@ import { z } from "zod";
 import { passwordRules } from "./password-rules.ts";
 
 export const resetFailure = "Unable to reset your password. Please request a new recovery email.";
-export const invalidResetLink = "Password reset link is invalid or incomplete.";
+export const invalidResetLink = "This password reset link is incomplete.";
+export const expiredResetLink = "This password reset link has expired or has already been used.";
 export const resetTokenSchema = z
   .string()
   .min(1)
