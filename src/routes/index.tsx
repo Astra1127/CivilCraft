@@ -16,8 +16,6 @@ import { SectionDivider } from "@/components/site/SectionDivider";
 import { GameProp, GameArt } from "@/components/site/GameProp";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useContent } from "@/lib/cms/content";
-import { UpdateCard } from "@/components/site/UpdateCard";
 import { useAuth } from "@/lib/auth";
 import heroKeyart from "@/assets/hero-keyart.jpg";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
@@ -147,8 +145,6 @@ function Checks({ items }: { items: string[] }) {
 function HomePage() {
   const { player } = useAuth();
   const [active, setActive] = useState<string>("explore");
-  const updates = useContent();
-  const news = updates.data?.updates.slice(0, 3) ?? [];
   const shot = shots.find((s) => s.id === active) ?? shots[0];
 
   return (
@@ -611,43 +607,20 @@ function HomePage() {
         />
       </div>
 
-      {/* ---------- WHAT'S HAPPENING (asymmetric updates) ---------- */}
-      <section id="updates" className="scroll-mt-24 bg-background py-12">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <h2 className="text-3xl sm:text-4xl">What's Happening in Civil Craft?</h2>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/updates">
-                View All Updates
-                <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-              </Link>
-            </Button>
+      <section className="bg-background py-12">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 sm:px-6">
+          <div>
+            <h2 className="text-3xl sm:text-4xl">What's New in Civil Craft?</h2>
+            <p className="mt-3 text-muted-foreground">
+              Find the current build and release notes on the Download page.
+            </p>
           </div>
-          {updates.isPending ? (
-            <p className="mt-8" role="status">
-              Loading updates...
-            </p>
-          ) : updates.isError ? (
-            <div className="mt-8" role="alert">
-              <p>Unable to load updates.</p>
-              <Button variant="outline" onClick={() => updates.refetch()}>
-                Retry
-              </Button>
-            </div>
-          ) : news.length ? (
-            <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-              <UpdateCard article={news[0]!} />
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
-                {news.slice(1).map((article) => (
-                  <UpdateCard key={article.id} article={article} compact />
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="mt-8 text-muted-foreground">
-              No updates yet. News from Civil Craft will appear here.
-            </p>
-          )}
+          <Button asChild variant="outline" size="sm">
+            <Link to="/download" hash="whats-new">
+              View release notes
+              <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
+            </Link>
+          </Button>
         </div>
       </section>
 

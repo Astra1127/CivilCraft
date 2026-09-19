@@ -8,7 +8,6 @@ import {
 import {
   Bug,
   Image,
-  Newspaper,
   HelpCircle,
   LayoutDashboard,
   Mail,
@@ -52,7 +51,6 @@ const items: DashboardNavItem[] = [
   { to: "/admin/leaderboard", label: "Leaderboard", icon: Trophy, section: "Game" },
   { to: "/admin/releases", label: "Game & Download", icon: Package, section: "Game" },
   { to: "/admin/transactions", label: "Transactions", icon: Receipt, section: "Game" },
-  { to: "/admin/news", label: "Updates", icon: Newspaper, section: "Content" },
   { to: "/admin/gallery", label: "Gallery", icon: Image, section: "Content" },
   { to: "/admin/faq", label: "FAQ", icon: HelpCircle, section: "Content" },
   { to: "/admin/messages", label: "Messages", icon: Mail, section: "Communication" },

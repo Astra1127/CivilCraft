@@ -51,7 +51,11 @@ function AdminReleases() {
       ...prev,
       settings: { ...prev.settings, installSteps: parsed },
     }));
-    logActivity({ area: "Releases", action: "Installation guide updated", target: "Download page" });
+    logActivity({
+      area: "Releases",
+      action: "Installation guide updated",
+      target: "Download page",
+    });
     toast.success("Installation guide updated");
   };
 
@@ -91,6 +95,32 @@ function AdminReleases() {
           />
         </div>
       </Panel>
+
+      <section id="whats-new" className="scroll-mt-24">
+        <Panel title="What's New" icon={ListChecks} bodyClassName="p-4 space-y-3">
+          {current ? (
+            <>
+              <Label htmlFor="current-release-notes">
+                Release notes for v{current.version} · build {current.build}
+              </Label>
+              <Textarea
+                id="current-release-notes"
+                rows={6}
+                value={current.notes}
+                placeholder="No release notes yet."
+                onChange={(e) => update(current.id, { notes: e.target.value })}
+              />
+              <p className="text-sm text-muted-foreground">
+                Shown under the current build information on the public Download page.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Set a build as current to edit its release notes.
+            </p>
+          )}
+        </Panel>
+      </section>
 
       <ul className="space-y-3">
         {releases.map((r) => (
@@ -166,15 +196,17 @@ function AdminReleases() {
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor={`n-${r.id}`}>Release notes</Label>
-                <Textarea
-                  id={`n-${r.id}`}
-                  rows={3}
-                  value={r.notes}
-                  onChange={(e) => update(r.id, { notes: e.target.value })}
-                />
-              </div>
+              {r.status !== "current" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor={`n-${r.id}`}>Release notes</Label>
+                  <Textarea
+                    id={`n-${r.id}`}
+                    rows={3}
+                    value={r.notes}
+                    onChange={(e) => update(r.id, { notes: e.target.value })}
+                  />
+                </div>
+              ) : null}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">

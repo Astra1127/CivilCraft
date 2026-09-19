@@ -95,9 +95,7 @@ function DownloadPage() {
                   <Badge variant="outline" className="border-gold/60 bg-gold/10 text-gold">
                     {release.platform}
                   </Badge>
-                  <span className="min-w-0">
-                    {release.title ?? `Version ${release.version}`} — {release.notes}
-                  </span>
+                  <span className="min-w-0">{release.title ?? `Version ${release.version}`}</span>
                 </div>
 
                 {!release.fileUrl ? (
@@ -132,6 +130,22 @@ function DownloadPage() {
           ) : null}
         </div>
       </section>
+
+      {release ? (
+        <section id="whats-new" className="scroll-mt-24 bg-background py-12">
+          <div className="mx-auto max-w-6xl px-4 sm:px-6">
+            <div className="panel p-6 sm:p-8">
+              <h2 className="text-3xl">What's New</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                v{release.version} · build {release.build}
+              </p>
+              <p className="mt-4 whitespace-pre-wrap break-words text-muted-foreground">
+                {release.notes.trim() ? release.notes : "No release notes yet."}
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <SectionDivider variant="beam" />
 
