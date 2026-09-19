@@ -67,7 +67,7 @@ const roleSteps = [
     n: "01",
     icon: ClipboardList,
     title: "Receive the Contract",
-    text: "Understand the location, required span, available budget and expected load.",
+    text: "Meet the contractor and review the project requirements, span, budget and expected load.",
   },
   {
     n: "02",
@@ -79,13 +79,13 @@ const roleSteps = [
     n: "03",
     icon: Hammer,
     title: "Build",
-    text: "Construct the bridge while working within the level's restrictions.",
+    text: "Construct and inspect your bridge while working within the contract requirements.",
   },
   {
     n: "04",
     icon: Weight,
     title: "Test",
-    text: "Run the load simulation and determine whether the structure succeeds or fails.",
+    text: "Simulate the crossing, improve your design and complete the project. Record your progress in the Almanac.",
   },
 ];
 
@@ -227,13 +227,13 @@ function AboutPage() {
             Building bridges. Inspiring future engineers.
           </h1>
           <p className="mt-4 max-w-xl text-sm text-muted-foreground sm:text-base">
-            Civil Craft: Bridge Edition is an educational 3D bridge-building game where players take
-            on the role of an engineer tasked with reconnecting communities separated by challenging
-            terrain.
+            Civil Craft: Bridge Edition is a 3D educational bridge-construction game centered on
+            learning through practical engineering challenges. Step into Arcadia as an aspiring
+            civil engineer and build new connections.
           </p>
           <p className="mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">
-            Players design, construct and test bridges while learning structural concepts through
-            actual gameplay rather than simply reading lessons.
+            Review construction contracts, build bridges and test your designs as structural and
+            environmental conditions become more demanding.
           </p>
           <nav aria-label="On this page" className="mt-6 flex flex-wrap gap-2">
             {[
@@ -312,12 +312,16 @@ function AboutPage() {
               </p>
             ))}
             <div className="mt-6 flex flex-wrap items-center gap-2 font-display text-sm">
-              {["Discover", "Contract", "Build", "Reconnect"].map((s, i) => (
-                <span key={s} className="flex items-center gap-2">
-                  {i > 0 ? <ArrowRight className="h-4 w-4 text-gold" aria-hidden="true" /> : null}
-                  <span className="rounded-full border-2 border-border bg-card px-3 py-1">{s}</span>
-                </span>
-              ))}
+              {["Meet & review", "Build & inspect", "Test & complete", "Record progress"].map(
+                (s, i) => (
+                  <span key={s} className="flex items-center gap-2">
+                    {i > 0 ? <ArrowRight className="h-4 w-4 text-gold" aria-hidden="true" /> : null}
+                    <span className="rounded-full border-2 border-border bg-card px-3 py-1">
+                      {s}
+                    </span>
+                  </span>
+                ),
+              )}
             </div>
           </div>
 
@@ -400,9 +404,9 @@ function AboutPage() {
               <Label>Engineering through play</Label>
               <h2 className="mt-2 text-3xl sm:text-4xl">The physics is the teacher.</h2>
               <p className="mt-3 text-muted-foreground">
-                Civil Craft introduces engineering concepts through bridge-building challenges.
-                Every idea below is something the player meets directly in the game — in the build
-                screen, in the budget, or in the moment a structure gives way.
+                Civil Craft introduces basic structural mechanics through construction and
+                simulation. Observe loads, materials and structural behavior, then apply what you
+                learn to the next bridge-building challenge.
               </p>
             </div>
           </div>
@@ -425,9 +429,8 @@ function AboutPage() {
                 <h3 className="font-display text-xl">Revisit what you discovered in the game</h3>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Learning happens as you build, test, observe and improve. Your Bridge Almanac
-                records completed bridges and provides a reference for the bridge types, materials
-                and engineering concepts you encounter along the way.
+                Your Bridge Almanac is your personal engineering record: projects, discoveries,
+                engineering lessons, materials, bridge types and progress throughout your journey.
               </p>
             </div>
             <Button asChild variant="gold" className="shrink-0">
@@ -446,7 +449,7 @@ function AboutPage() {
       <section id="modes" className="scroll-mt-20 bg-background py-14 sm:py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="max-w-xl">
-            <Label>Game modes</Label>
+            <Label>Story Mode</Label>
             <h2 className="mt-2 text-3xl sm:text-4xl">How you play.</h2>
           </div>
 
@@ -478,14 +481,14 @@ function AboutPage() {
               </div>
               <div className="p-6">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h3 className="font-display text-2xl">Multiplayer</h3>
+                  <h3 className="font-display text-2xl">Construction contracts</h3>
                   <span className="rounded-full border-2 border-border bg-secondary px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
-                    In development
+                    Across Arcadia
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">
-                  A multiplayer Civil Craft experience is planned. The exact multiplayer gameplay
-                  system is still being designed by the development team.
+                  Professor Bhan guides your early projects. As you gain experience, regional
+                  contractors provide new construction projects while Bhan remains your mentor.
                 </p>
               </div>
             </article>

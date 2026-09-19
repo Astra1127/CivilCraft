@@ -213,6 +213,8 @@ export interface AlmanacJourney {
   journeyPercent: number;
   /** Bridge type ids the player has actually used to complete a level. */
   discoveredBridgeTypeIds: string[];
+  /** Stable material IDs written by the game in AlmanacProgress. Never granted by the website. */
+  discoveredMaterials: string[];
 }
 
 /* --------------------------------------------------------- notifications */

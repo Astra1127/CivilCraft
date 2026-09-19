@@ -15,14 +15,15 @@ export const EMPTY_JOURNEY: AlmanacJourney = {
   levelsTotal: 0,
   journeyPercent: 0,
   discoveredBridgeTypeIds: [],
+  discoveredMaterials: [],
 };
 
 export async function getJourney(): Promise<AlmanacJourney> {
   const data = await getPlayerData(["AlmanacProgress", "MapProgress"]);
   const journey = jsonFrom<Partial<AlmanacJourney>>(data, "AlmanacProgress");
-  if (!journey || !Array.isArray(journey.regions)) return EMPTY_JOURNEY;
+  if (!journey || typeof journey !== "object" || Array.isArray(journey)) return EMPTY_JOURNEY;
 
-  const regions = journey.regions as AlmanacRegion[];
+  const regions = Array.isArray(journey.regions) ? (journey.regions as AlmanacRegion[]) : [];
   const levels = regions.flatMap((r) => r.levels ?? []);
   const completed = levels.filter((l) => l.completion).length;
   return {
@@ -31,8 +32,15 @@ export async function getJourney(): Promise<AlmanacJourney> {
     levelsTotal: journey.levelsTotal ?? levels.length,
     journeyPercent:
       journey.journeyPercent ?? (levels.length ? Math.round((completed / levels.length) * 100) : 0),
-    discoveredBridgeTypeIds:
-      journey.discoveredBridgeTypeIds ??
-      [...new Set(levels.map((l) => l.completion?.bridgeTypeId).filter(Boolean) as string[])],
+    discoveredBridgeTypeIds: journey.discoveredBridgeTypeIds ?? [
+      ...new Set(levels.map((l) => l.completion?.bridgeTypeId).filter(Boolean) as string[]),
+    ],
+    discoveredMaterials: Array.isArray(journey.discoveredMaterials)
+      ? [
+          ...new Set(
+            journey.discoveredMaterials.filter((id): id is string => typeof id === "string"),
+          ),
+        ]
+      : [],
   };
 }

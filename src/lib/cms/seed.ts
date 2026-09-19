@@ -48,9 +48,37 @@ export const seedState: CmsState = {
     {
       id: "f5",
       question: "How do I report a bug?",
-      answer: "Use the Contact page and choose the Game Support inquiry type.",
+      answer:
+        "Use the Contact page and choose Bug Report. Describe what happened and the steps that caused the issue. Signed-in players can also use Report a Bug from their dashboard.",
       category: "General",
       order: 5,
+      published: true,
+    },
+    {
+      id: "f6",
+      question: "How do I install Civil Craft?",
+      answer:
+        "Open the Download page and follow the installation guide for the current Android build. Check the published requirements before installing the APK.",
+      category: "Download",
+      order: 6,
+      published: true,
+    },
+    {
+      id: "f7",
+      question: "How do I reset my password?",
+      answer:
+        "Choose Forgot password on the Login page, enter your account email and request a recovery email. Open its reset link, set a new password and return to Login.",
+      category: "Account",
+      order: 7,
+      published: true,
+    },
+    {
+      id: "f8",
+      question: "Are my game and website accounts the same?",
+      answer:
+        "Yes. Civil Craft and this website use the same PlayFab player account. Sign in with the account you use in the game to view your available progress.",
+      category: "Account",
+      order: 8,
       published: true,
     },
   ],
@@ -94,9 +122,9 @@ export const seedState: CmsState = {
   about: {
     story: {
       heading: "One canyon at a time.",
-      shortDescription: "A region divided by deep canyons, and an engineer sent to reconnect it.",
+      shortDescription: "An aspiring civil engineer builds new connections across Arcadia.",
       fullStory:
-        "Civil Craft takes place across a region divided by deep canyons and difficult terrain. Communities that once depended on one another have become separated, leaving important routes incomplete.\n\nThe player arrives as an engineer tasked with restoring these connections.\n\nEach new region presents a different engineering problem. Wider gaps, heavier loads, limited materials and tighter budgets require the player to rethink how each bridge should be designed.\n\nEvery successful crossing brings another part of the region back together.",
+        "Arcadia is divided into three regions where canyons, waterways, and difficult terrain make direct transportation challenging. The player arrives as an aspiring civil engineer with theoretical knowledge but limited practical experience.\n\nGuided at first by Professor Bhan, the player begins completing bridge projects and gradually works more independently with contractors throughout Arcadia.",
       imageUrl: null,
       published: true,
     },
@@ -160,7 +188,7 @@ export const seedState: CmsState = {
     maintenanceMode: false,
     metaTitle: "Civil Craft: Bridge Edition",
     metaDescription:
-      "An educational 3D bridge-building game where players design, build and load-test bridges while learning structural engineering.",
+      "Build. Test. Learn. A 3D educational bridge-construction game where aspiring engineers take on contracts across Arcadia and apply basic structural mechanics.",
     installSteps: [
       "Download the Civil Craft APK.",
       "Install the application on your Android device.",

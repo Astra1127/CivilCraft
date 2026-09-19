@@ -38,24 +38,26 @@ function PrivacyPage() {
         <section className="paper-panel space-y-2 p-5">
           <h2 className="font-display text-xl text-foreground">Player accounts</h2>
           <p>
-            Player accounts are created and managed inside the Civil Craft mobile game through its
-            game backend. This website only displays account and gameplay information supplied by
-            that backend; it never creates progress, scores or purchases on its own.
+            Civil Craft uses PlayFab to handle player accounts. The game and website use the same
+            player account for sign-in. The website also supports registration and password recovery
+            and displays account information supplied by the game backend.
           </p>
         </section>
         <section className="paper-panel space-y-2 p-5">
           <h2 className="font-display text-xl text-foreground">Gameplay data</h2>
           <p>
-            Level completions, achievements, leaderboard entries and in-game currency balances are
-            recorded by the game. The website shows them read-only so you can review your progress
-            on a larger screen.
+            Gameplay progress, achievements, leaderboard data, in-game currency balances and
+            transaction records may be handled through PlayFab. The player dashboard displays the
+            records supplied by the backend so you can review your progress and items.
           </p>
         </section>
         <section className="paper-panel space-y-2 p-5">
           <h2 className="font-display text-xl text-foreground">Messages and bug reports</h2>
           <p>
-            Contact messages and bug reports you submit are stored so the student development team
-            can respond. Please avoid sending sensitive personal information.
+            Contact forms handle the name, email address and message you provide. Contact messages
+            are currently saved in this browser. Submitted bug reports are stored for the team to
+            review and linked to your signed-in player account. Please avoid including sensitive
+            personal information in either.
           </p>
         </section>
         <section className="paper-panel space-y-2 p-5">

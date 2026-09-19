@@ -152,7 +152,7 @@ function PlayerOverview() {
         ) : (achievements.data ?? []).filter((a) => a.unlocked).length === 0 ? (
           <EmptyState
             title="No achievements yet"
-            description="Complete levels in the game and your unlocked achievements will appear here."
+            description="Complete projects in the game and your unlocked achievements will appear here."
           />
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -172,7 +172,7 @@ function PlayerOverview() {
       <section>
         <SectionHeading
           title="Recent builds"
-          description="Your latest successfully completed levels."
+          description="Your latest successfully completed projects."
           action={
             <Button asChild variant="outline" size="sm">
               <Link to="/dashboard/almanac">Open Almanac</Link>
@@ -185,7 +185,7 @@ function PlayerOverview() {
             .length === 0 ? (
           <EmptyState
             title="No completed builds yet"
-            description="Finish a level in Civil Craft and your successful bridge will be recorded here."
+            description="Complete a project in Civil Craft and your successful bridge will be recorded here."
           />
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

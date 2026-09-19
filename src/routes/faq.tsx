@@ -47,7 +47,7 @@ function FaqPage() {
         {faq.length === 0 ? (
           <EmptyState
             title="No questions published yet"
-            description="FAQ entries added in the admin dashboard will appear here."
+            description="Answers to common Civil Craft questions will appear here."
           />
         ) : (
           groups

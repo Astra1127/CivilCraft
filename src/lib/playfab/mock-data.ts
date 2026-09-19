@@ -183,7 +183,6 @@ export const mockAchievements: Achievement[] = [
   },
 ];
 
-
 /* ----------------------------------------------------------- almanac ---- */
 
 /**
@@ -310,5 +309,6 @@ export const mockJourney: AlmanacJourney = (() => {
     discoveredBridgeTypeIds: Array.from(
       new Set(completed.map((l) => l.completion?.bridgeTypeId).filter((b): b is string => !!b)),
     ),
+    discoveredMaterials: [],
   };
 })();

@@ -88,7 +88,7 @@ function DownloadPage() {
                   )}
                   <Button size="lg" variant="outline" disabled>
                     <Smartphone className="mr-2 h-5 w-5" aria-hidden="true" />
-                    Google Play (coming soon)
+                    Google Play unavailable
                   </Button>
                 </div>
                 <div className="mt-4 flex max-w-lg flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -150,7 +150,10 @@ function DownloadPage() {
                   ["Minimum", release.minRequirements],
                   ["Recommended", release.recommendedRequirements],
                 ].map(([label, list]) => (
-                  <div key={label as string} className="min-w-0 border-t-2 border-dashed border-current/40 pt-4">
+                  <div
+                    key={label as string}
+                    className="min-w-0 border-t-2 border-dashed border-current/40 pt-4"
+                  >
                     <h3 className="font-display text-lg text-current">{label as string}</h3>
                     <ul className="mt-2 space-y-1.5 text-sm opacity-90">
                       {(list as string[]).map((r) => (
@@ -203,7 +206,9 @@ function DownloadPage() {
                 {faq.map((f) => (
                   <AccordionItem key={f.id} value={f.id}>
                     <AccordionTrigger className="font-display">{f.question}</AccordionTrigger>
-                    <AccordionContent className="text-muted-foreground">{f.answer}</AccordionContent>
+                    <AccordionContent className="text-muted-foreground">
+                      {f.answer}
+                    </AccordionContent>
                   </AccordionItem>
                 ))}
               </Accordion>

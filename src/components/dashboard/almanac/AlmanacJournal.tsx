@@ -29,7 +29,19 @@ import { useAuth } from "@/lib/auth";
 import { almanacService, profileService, type AlmanacLevel } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
 
-const materialIcons = { wood: Trees, steel: Wrench, cable: Cable, support: Columns3, deck: Layers };
+const materialIcons = {
+  wood_beam: Trees,
+  wood_road: Layers,
+  wood_support: Columns3,
+  rope: Cable,
+  concrete_road: Layers,
+  concrete_member: Columns3,
+  concrete_support: Columns3,
+  steel_beam: Wrench,
+  steel_road: Layers,
+  steel_support: Columns3,
+  steel_cable: Cable,
+};
 
 const tabs = [
   { value: "journey", label: "My Journey" },
@@ -58,8 +70,25 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
 
   const j = journey.data;
   const p = profile.data;
+  const completedRegions = j.regions.filter((region) => region.status === "completed").length;
+  const regionPercent = j.regions.length
+    ? Math.round((completedRegions / j.regions.length) * 100)
+    : 0;
+  const discoveredMaterials = materials.filter((material) =>
+    (j.discoveredMaterials ?? []).includes(material.id),
+  );
   const discoveredBridges = bridgeTypes.filter((b) =>
     j.discoveredBridgeTypeIds.includes(b.bridgeTypeId),
+  );
+  const discoveredConceptIds = new Set(
+    j.regions.flatMap((region) =>
+      region.levels
+        .filter((level) => level.status === "completed" && level.completion)
+        .flatMap((level) => level.engineeringConceptIds ?? []),
+    ),
+  );
+  const discoveredConcepts = engineeringConcepts.filter((concept) =>
+    discoveredConceptIds.has(concept.id),
   );
 
   return (
@@ -73,8 +102,8 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
             </p>
             <h1 className="mt-2 text-3xl sm:text-4xl">Bridge Almanac</h1>
             <p className="mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">
-              Your personal record of the bridges, challenges and engineering concepts you&apos;ve
-              encountered throughout Civil Craft.
+              Your personal engineering record of projects, discoveries, lessons, materials and
+              bridge types encountered throughout your Civil Craft journey.
             </p>
           </div>
 
@@ -91,18 +120,18 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
             </div>
             <dl className="grid w-full gap-1 text-sm sm:w-auto">
               <div className="flex justify-between gap-6">
-                <dt className="text-muted-foreground">Levels completed</dt>
-                <dd className="font-display">
-                  {j.levelsCompleted} / {j.levelsTotal}
-                </dd>
+                <dt className="text-muted-foreground">Projects completed</dt>
+                <dd className="font-display">{j.levelsCompleted}</dd>
               </div>
               <div className="flex justify-between gap-6">
                 <dt className="text-muted-foreground">Bridge types discovered</dt>
                 <dd className="font-display">{discoveredBridges.length}</dd>
               </div>
               <div className="flex justify-between gap-6">
-                <dt className="text-muted-foreground">Journey complete</dt>
-                <dd className="font-display">{j.journeyPercent}%</dd>
+                <dt className="text-muted-foreground">Regions completed</dt>
+                <dd className="font-display">
+                  {completedRegions} / {j.regions.length}
+                </dd>
               </div>
             </dl>
           </div>
@@ -127,8 +156,8 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
         <TabsContent value="journey" className="mt-6 space-y-8">
           {j.regions.length === 0 ? (
             <EmptyState
-              title="No journey data yet"
-              description="Your regions, levels and completed bridges appear here as soon as the game reports progress for this account."
+              title="Your Almanac is waiting."
+              description="Bridges, engineering concepts and materials you discover in Civil Craft will be recorded here."
             />
           ) : null}
           {j.regions.length === 0 ? null : (
@@ -170,10 +199,10 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
               </ol>
               <div className="mt-6">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Journey progress</span>
-                  <span className="font-display">{j.journeyPercent}%</span>
+                  <span className="text-muted-foreground">Recorded region completion</span>
+                  <span className="font-display">{regionPercent}%</span>
                 </div>
-                <Progress value={j.journeyPercent} className="mt-2" />
+                <Progress value={regionPercent} className="mt-2" />
               </div>
             </section>
           )}
@@ -199,7 +228,7 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
         <TabsContent value="bridges" className="mt-6">
           {discoveredBridges.length === 0 ? (
             <EmptyState
-              title="No bridge types discovered yet"
+              title="Your Almanac is waiting."
               description="Complete contracts in Civil Craft to unlock bridge entries in your Almanac."
             />
           ) : (
@@ -254,47 +283,61 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
 
         {/* --------------------------------------------------- engineering */}
         <TabsContent value="engineering" className="mt-6">
-          <ul className="grid gap-4 [&>li]:min-w-0 sm:grid-cols-2 lg:grid-cols-3">
-            {engineeringConcepts.map((c) => (
-              <li key={c.id} className="panel hover-lift p-5">
-                <span className="grid h-10 w-10 place-items-center rounded-2xl border-2 border-border bg-gold/15 text-gold">
-                  <Compass className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <h3 className="mt-3 font-display text-lg">{c.name}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{c.summary}</p>
-                {c.diagram ? (
-                  <pre className="blueprint mt-3 overflow-x-auto rounded-xl border-2 border-border p-2 font-mono text-[11px] text-primary/75">
-                    {c.diagram}
-                  </pre>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          {discoveredConcepts.length === 0 ? (
+            <EmptyState
+              title="Your Almanac is waiting."
+              description="Engineering concepts recorded in your completed Civil Craft projects will appear here."
+            />
+          ) : (
+            <ul className="grid gap-4 [&>li]:min-w-0 sm:grid-cols-2 lg:grid-cols-3">
+              {discoveredConcepts.map((c) => (
+                <li key={c.id} className="panel hover-lift p-5">
+                  <span className="grid h-10 w-10 place-items-center rounded-2xl border-2 border-border bg-gold/15 text-gold">
+                    <Compass className="h-5 w-5" aria-hidden="true" />
+                  </span>
+                  <h3 className="mt-3 font-display text-lg">{c.name}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{c.summary}</p>
+                  {c.diagram ? (
+                    <pre className="blueprint mt-3 overflow-x-auto rounded-xl border-2 border-border p-2 font-mono text-[11px] text-primary/75">
+                      {c.diagram}
+                    </pre>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </TabsContent>
 
         {/* ----------------------------------------------------- materials */}
         <TabsContent value="materials" className="mt-6">
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {materials.map((m) => {
-              const Icon = materialIcons[m.id as keyof typeof materialIcons] ?? Layers;
-              return (
-                <li key={m.id} className="panel min-w-0 overflow-hidden">
-                  <div
-                    className="blueprint relative flex h-28 items-center justify-center border-b-2 border-border bg-secondary/40"
-                    aria-hidden="true"
-                  >
-                    <span className="grid h-16 w-16 place-items-center rounded-2xl border-2 border-gold/40 bg-card shadow-sm">
-                      <Icon className="h-8 w-8 text-gold" strokeWidth={1.5} />
-                    </span>
-                  </div>
-                  <div className="p-5">
-                    <h3 className="font-display text-lg">{m.name}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{m.note}</p>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          {discoveredMaterials.length === 0 ? (
+            <EmptyState
+              title="Your Almanac is waiting."
+              description="Materials you discover in Civil Craft will be recorded here."
+            />
+          ) : (
+            <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {discoveredMaterials.map((m) => {
+                const Icon = materialIcons[m.id as keyof typeof materialIcons] ?? Layers;
+                return (
+                  <li key={m.id} className="panel min-w-0 overflow-hidden">
+                    <div
+                      className="blueprint relative flex h-28 items-center justify-center border-b-2 border-border bg-secondary/40"
+                      aria-hidden="true"
+                    >
+                      <span className="grid h-16 w-16 place-items-center rounded-2xl border-2 border-gold/40 bg-card shadow-sm">
+                        <Icon className="h-8 w-8 text-gold" strokeWidth={1.5} />
+                      </span>
+                    </div>
+                    <div className="p-5">
+                      <h3 className="font-display text-lg">{m.name}</h3>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{m.note}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </TabsContent>
       </Tabs>
 

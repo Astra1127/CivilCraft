@@ -31,12 +31,12 @@ export const Route = createFileRoute("/contact")({
       {
         name: "description",
         content:
-          "Get in touch with the Civil Craft: Bridge Edition team for support, feedback, partnerships or educational enquiries.",
+          "Contact the Civil Craft: Bridge Edition team with questions, feedback or technical issues.",
       },
       { property: "og:title", content: "Contact the Civil Craft team" },
       {
         property: "og:description",
-        content: "Support, feedback, partnership and educational enquiries.",
+        content: "Questions, feedback and technical support for Civil Craft.",
       },
     ],
   }),
@@ -120,7 +120,7 @@ function ContactPage() {
       <PageHeader
         eyebrow="Contact"
         title="Contact Us"
-        description="Questions, feedback or partnership enquiries — we'd love to hear from you."
+        description="Contact the Civil Craft team with questions, feedback or technical issues. To report a bug, choose Bug Report below."
       />
 
       <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6">

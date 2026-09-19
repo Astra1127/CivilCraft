@@ -78,7 +78,7 @@ function GalleryPage() {
       <PageHeader
         eyebrow="Field Photos"
         title="Civil Craft Gallery"
-        description="Screenshots straight from the build site — bridges under load, canyon environments and the chibi engineers who put them together."
+        description="Official Civil Craft screenshots and media: bridge designs, gameplay and the world of Arcadia."
       />
 
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
@@ -111,7 +111,7 @@ function GalleryPage() {
         ) : items.length === 0 ? (
           <EmptyState
             title="No gallery items yet."
-            description="Screenshots and development media from Civil Craft will appear here."
+            description="Official Civil Craft screenshots and media will appear here."
           />
         ) : (
           <>

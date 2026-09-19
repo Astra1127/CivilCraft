@@ -33,13 +33,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Explore a low-poly canyon world, build bridges, run physics load tests and learn engineering in Civil Craft: Bridge Edition, a 3D educational game for Android.",
+          "Travel across Arcadia as an aspiring civil engineer. Build and test bridges while learning basic structural mechanics in this 3D educational game for Android.",
       },
       { property: "og:title", content: "Civil Craft: Bridge Edition — Build. Test. Learn." },
       {
         property: "og:description",
         content:
-          "Explore, build, test and learn. The official site of Civil Craft: Bridge Edition, a chibi low-poly bridge-building game.",
+          "Build. Test. Learn. Take on construction contracts across Arcadia in Civil Craft: Bridge Edition, a 3D educational bridge-construction game.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -60,17 +60,17 @@ const pillars = [
   {
     icon: Hammer,
     title: "Build",
-    text: "Start with a design that answers the bridge challenge.",
+    text: "Design bridges using different structural forms and construction materials.",
   },
   {
     icon: Gauge,
     title: "Test",
-    text: "Run the simulation and observe how your structure carries the load.",
+    text: "Simulate vehicles, loads and environmental conditions to observe how your bridge responds.",
   },
   {
     icon: BookOpen,
     title: "Learn",
-    text: "Understand the result, then refine your next design.",
+    text: "Apply basic structural mechanics through construction, observation and problem-solving.",
   },
 ];
 
@@ -112,13 +112,21 @@ const journey = [
 
 const features = [
   { icon: Hammer, title: "Bridge Building", text: "Beam, truss, arch and suspension systems." },
-  { icon: Gauge, title: "Physics Simulation", text: "Real load paths, stress and failure." },
+  {
+    icon: Gauge,
+    title: "Physics Simulation",
+    text: "Observe loads, forces and structural behavior.",
+  },
   {
     icon: BookOpen,
     title: "Engineering Learning",
-    text: "Concepts taught by playing, not lecturing.",
+    text: "Learn through building, testing and improving your designs.",
   },
-  { icon: Target, title: "Challenges", text: "Budgets, terrain and safety margins to beat." },
+  {
+    icon: Target,
+    title: "Challenges",
+    text: "Work with contract requirements, terrain and budgets.",
+  },
 ];
 
 function Checks({ items }: { items: string[] }) {
@@ -157,7 +165,7 @@ function HomePage() {
               variant="outline"
               className="border-2 border-gold/60 bg-gold/10 text-[11px] font-extrabold uppercase tracking-[0.16em] text-gold"
             >
-              Chibi low-poly engineering game
+              3D educational bridge-construction game
             </Badge>
             <h1 className="mt-4 text-4xl leading-[1.02] sm:text-5xl lg:text-6xl">
               Civil Craft:
@@ -165,8 +173,9 @@ function HomePage() {
             </h1>
             <p className="mt-3 font-display text-xl">Build. Test. Learn.</p>
             <p className="mt-4 max-w-lg text-muted-foreground">
-              Step into a low-poly desert canyon, take an engineering contract, draft your bridge
-              and send the truck across to find out whether your structure holds.
+              Step into Arcadia as an aspiring civil engineer. Take on construction contracts,
+              design bridges and test them under different loads and conditions as you learn basic
+              structural mechanics.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button asChild size="lg" variant="gold">
@@ -242,8 +251,8 @@ function HomePage() {
             </p>
             <h2 className="mt-3 text-3xl sm:text-4xl">Build. Test. Learn.</h2>
             <p className="mx-auto mt-4 max-w-2xl text-muted-foreground">
-              Explore the canyon, build the bridge, run the simulation, learn from the result, and
-              improve the next design. Each contract continues the same learning loop.
+              Review each contract, build a bridge, test your design and learn from the results. Put
+              what you discover into practice as projects become more challenging.
             </p>
           </div>
 
@@ -273,10 +282,10 @@ function HomePage() {
             <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">
               The world of Civil Craft
             </p>
-            <h2 className="mt-3 text-3xl sm:text-4xl">A canyon waiting to be connected.</h2>
+            <h2 className="mt-3 text-3xl sm:text-4xl">Build new connections across Arcadia.</h2>
             <p className="mt-4 max-w-lg text-muted-foreground">
-              Every bridge solves more than an engineering problem. Discover why your journey begins
-              in the canyons and what you're rebuilding along the way.
+              Canyons, waterways and difficult terrain stand between communities and direct routes.
+              Begin in Canyon Crossing and build bridges that help people reach one another.
             </p>
             <Button asChild variant="gold" className="mt-6">
               <Link to="/about" hash="story">
@@ -442,16 +451,16 @@ function HomePage() {
           </div>
           <div className="min-w-0">
             <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">Explore</p>
-            <h2 className="mt-3 text-3xl sm:text-4xl">Explore the World</h2>
+            <h2 className="mt-3 text-3xl sm:text-4xl">Explore Arcadia</h2>
             <p className="mt-4 max-w-lg text-muted-foreground">
-              Walk through Civil Craft's stylized environments, meet characters and discover
-              engineering challenges waiting at every canyon.
+              Travel through three regions, meet contractors and take on increasingly demanding
+              crossings. Each region brings different materials and construction challenges.
             </p>
             <Checks
               items={[
-                "Explore low-poly environments",
-                "Meet characters",
-                "Discover bridge challenges",
+                "Canyon Crossing: begin with wood, loads, supports and stability.",
+                "Town River: work with concrete, arch forms and environmental challenges.",
+                "Industrial Zone: apply your skills to steel, heavier loads and longer spans.",
               ]}
             />
           </div>
@@ -510,8 +519,8 @@ function HomePage() {
             <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">Test</p>
             <h2 className="mt-3 text-3xl sm:text-4xl">Put It to the Test</h2>
             <p className="mt-4 max-w-lg text-muted-foreground">
-              Physics decides. Watch force travel through the structure, see which members glow as
-              they approach failure, then go back and make it stronger.
+              Run a structural simulation and observe how vehicles, loads and environmental
+              conditions affect your bridge. Use the results to improve your design.
             </p>
             <Checks
               items={[
@@ -536,9 +545,9 @@ function HomePage() {
               Learn From the Result
             </h2>
             <p className="mt-4 max-w-lg text-muted-foreground">
-              Every test shows more than whether a bridge passes or fails. Observe how loads affect
-              the structure, identify weak points, and use what you discover to improve your next
-              design.
+              Civil Craft introduces bridge and structural-mechanics concepts through construction
+              and simulation. Observe how your structures respond as you build, test and improve
+              each design.
             </p>
             <Checks
               items={[

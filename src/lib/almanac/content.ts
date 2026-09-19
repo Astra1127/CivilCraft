@@ -42,8 +42,7 @@ export const bridgeTypes: BridgeTypeEntry[] = [
   {
     bridgeTypeId: "beam",
     name: "Beam Bridge",
-    description:
-      "The simplest build: a deck resting on supports at each end.",
+    description: "A straightforward bridge form used in the player's early projects.",
     howItWorks:
       "Load pushes down on the deck, which bends between its supports and passes the weight straight down into them.",
     strengths: "Cheap, fast to build, ideal for short spans.",
@@ -58,7 +57,7 @@ export const bridgeTypes: BridgeTypeEntry[] = [
   {
     bridgeTypeId: "truss",
     name: "Truss Bridge",
-    description: "A framework of triangles carrying the deck.",
+    description: "Uses connected structural members, commonly arranged in triangular forms.",
     howItWorks:
       "Triangles cannot deform without changing member length, so each member carries pure tension or compression instead of bending.",
     strengths: "Strong for its weight, efficient across medium spans.",
@@ -73,7 +72,7 @@ export const bridgeTypes: BridgeTypeEntry[] = [
   {
     bridgeTypeId: "arch",
     name: "Arch Bridge",
-    description: "A curve that pushes its load outward into the ground.",
+    description: "Uses a curved structural form to transfer loads toward its supports.",
     howItWorks:
       "The arch turns downward load into compression along the curve, which is delivered sideways into the abutments.",
     strengths: "Very strong in compression, great over canyons.",
@@ -88,7 +87,7 @@ export const bridgeTypes: BridgeTypeEntry[] = [
   {
     bridgeTypeId: "suspension",
     name: "Suspension Bridge",
-    description: "Cables hung from towers hold the deck up.",
+    description: "Uses cables or ropes to support the bridge deck across longer spans.",
     howItWorks:
       "The deck hangs from vertical hangers on a main cable; the cable pulls in tension and the towers push down in compression.",
     strengths: "The only practical way across the widest gaps.",
@@ -162,11 +161,61 @@ export const engineeringConcepts: EngineeringConcept[] = [
 
 /** Materials available in Civil Craft's build mode. */
 export const materials: MaterialEntry[] = [
-  { id: "wood", name: "Wood Beam", note: "Cheap, light, low strength. Great for short members and early contracts." },
-  { id: "steel", name: "Steel Beam", note: "Stronger in tension and compression, heavier on the budget." },
-  { id: "cable", name: "Cable", note: "Tension only. Perfect for suspension builds, useless under compression." },
-  { id: "support", name: "Support / Pier", note: "Carries load to the ground. Only buildable where terrain allows." },
-  { id: "deck", name: "Road Deck", note: "The surface vehicles drive on. Must be continuous from bank to bank." },
+  {
+    id: "wood_beam",
+    name: "Wood Beam",
+    note: "A wooden structural member used to form a bridge framework.",
+  },
+  {
+    id: "steel_beam",
+    name: "Steel Beam",
+    note: "A steel structural member used in demanding bridge projects.",
+  },
+  {
+    id: "rope",
+    name: "Rope",
+    note: "Supports a suspended bridge deck through tension.",
+  },
+  {
+    id: "wood_support",
+    name: "Wood Support / Pier",
+    note: "A wooden support that transfers bridge loads toward the ground.",
+  },
+  {
+    id: "wood_road",
+    name: "Wood Road",
+    note: "The wooden deck surface used by vehicles crossing the bridge.",
+  },
+  {
+    id: "concrete_road",
+    name: "Concrete Road",
+    note: "A concrete deck surface for a bridge crossing.",
+  },
+  {
+    id: "concrete_member",
+    name: "Concrete Structural Member",
+    note: "A concrete member used to form the bridge structure.",
+  },
+  {
+    id: "concrete_support",
+    name: "Concrete Support / Pier",
+    note: "A concrete support that transfers bridge loads toward the ground.",
+  },
+  {
+    id: "steel_road",
+    name: "Steel Road",
+    note: "A steel deck surface used by vehicles crossing the bridge.",
+  },
+  {
+    id: "steel_support",
+    name: "Steel Support",
+    note: "A steel support that carries loads from the bridge structure.",
+  },
+  {
+    id: "steel_cable",
+    name: "Steel Cable",
+    note: "A steel cable that supports a suspended deck through tension.",
+  },
 ];
 
 export function getConcepts(ids: string[]): EngineeringConcept[] {

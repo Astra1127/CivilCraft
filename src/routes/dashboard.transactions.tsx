@@ -43,6 +43,9 @@ const TYPE_META: Record<Transaction["type"], { label: string; icon: typeof Gift 
 
 function formatAmount(tx: Transaction) {
   if (tx.type === "reward" || tx.amount === 0) return "Reward";
+  const currency = tx.currency.trim().toLowerCase();
+  if (currency === "gold" || currency === "coins") return `${tx.amount.toLocaleString()} Coins`;
+  if (currency === "exp" || currency === "xp") return `${tx.amount.toLocaleString()} XP`;
   try {
     return new Intl.NumberFormat(undefined, { style: "currency", currency: tx.currency }).format(
       tx.amount,
@@ -73,7 +76,10 @@ function ItemImage({ tx, className }: { tx: Transaction; className?: string }) {
 function TransactionsPage() {
   const { player } = useAuth();
   const id = player?.playFabId ?? "";
-  const q = useQuery({ queryKey: ["transactions", id], queryFn: transactionService.getTransactions });
+  const q = useQuery({
+    queryKey: ["transactions", id],
+    queryFn: transactionService.getTransactions,
+  });
   const [filter, setFilter] = useState<"all" | Transaction["type"]>("all");
   const [selected, setSelected] = useState<Transaction | null>(null);
 
