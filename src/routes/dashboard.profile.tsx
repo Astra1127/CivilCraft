@@ -57,7 +57,7 @@ function ProfilePage() {
   const equippedBySlot = new Map((character.data?.equipped ?? []).map((i) => [i.slot, i]));
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-4 md:space-y-10">
       <SectionHeading
         title="Civil Craft Engineer Profile"
         description="Your in-game character, career record and equipped gear."
@@ -65,10 +65,14 @@ function ProfilePage() {
       />
 
       {/* ------------------------------------------------ engineer identity */}
-      <section className="grid gap-6 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
-        <CharacterPreview character={character.data} displayName={p.displayName} />
+      <section className="grid gap-3 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)] md:gap-6">
+        <CharacterPreview
+          character={character.data}
+          displayName={p.displayName}
+          className="max-md:h-[280px] max-md:[&>p]:shrink-0 max-md:[&>div:last-child]:min-h-0 max-md:[&>div:last-child]:flex-1 max-md:[&>div:last-child]:aspect-auto max-md:[&>div:last-child]:py-1"
+        />
 
-        <div className="panel flex flex-col gap-4 p-6">
+        <div className="panel flex flex-col gap-3 p-3 md:gap-4 md:p-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">Engineer</p>
             <h2 className="truncate text-2xl sm:text-3xl">{p.displayName}</h2>

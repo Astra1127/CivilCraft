@@ -55,9 +55,9 @@ export function SiteNavbar() {
     <header className="sticky top-0 z-40 border-b-2 border-border bg-card/95 backdrop-blur">
       <nav
         aria-label="Main"
-        className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-2.5 sm:px-6"
+        className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6"
       >
-        <Link to="/" className="min-w-0 shrink-0" aria-label="Civil Craft home">
+        <Link to="/" className="min-w-0 flex-1 xl:flex-none" aria-label="Civil Craft home">
           <BrandMark />
         </Link>
 
@@ -84,7 +84,7 @@ export function SiteNavbar() {
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="flex h-10 items-center gap-2 rounded-full border-2 border-border bg-card px-3 text-sm font-bold text-foreground hover:bg-accent"
+                  className="flex h-10 items-center gap-2 rounded-full border-2 border-border bg-card px-2 text-sm sm:px-3 font-bold text-foreground hover:bg-accent"
                   aria-label="Account menu"
                 >
                   <Avatar className="h-7 w-7 border border-border">
@@ -95,7 +95,10 @@ export function SiteNavbar() {
                   <span className="hidden max-w-[8rem] truncate sm:inline">
                     {account?.displayName ?? "Account"}
                   </span>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                  <ChevronDown
+                    className="hidden h-4 w-4 text-muted-foreground sm:block"
+                    aria-hidden="true"
+                  />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 border-2 border-border bg-card">

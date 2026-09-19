@@ -57,15 +57,15 @@ function PlayerOverview() {
 
   return (
     <div className="space-y-8">
-      <section className="panel flex flex-col gap-5 p-6 sm:flex-row sm:items-center">
+      <section className="panel flex flex-col items-center gap-3 p-3 sm:flex-row sm:gap-5 sm:p-6">
         <CharacterPreview
           character={character.data}
           displayName={p.displayName}
-          className="w-28 shrink-0 sm:w-32"
+          className="w-36 max-w-full shrink-0 sm:w-32"
         />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 w-full flex-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">
                 Welcome back
               </p>

@@ -114,15 +114,23 @@ export function DashboardShell({
   return (
     <div className={cn("min-h-dvh bg-background", admin ? "" : "blueprint")}>
       <header className="sticky top-0 z-40 border-b-2 border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto grid max-w-[1400px] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="mx-auto grid max-w-[1400px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-3 py-2 sm:px-6 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-3 lg:py-3">
+          <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 lg:col-span-1">
+            <Link to="/" className="min-w-0" aria-label="Civil Craft home">
+              <BrandMark />
+            </Link>
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open menu">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 lg:hidden"
+                  aria-label="Open menu"
+                >
                   <Menu className="h-5 w-5" aria-hidden="true" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-72 border-r-2 border-border bg-card p-0">
+              <SheetContent side="right" className="w-72 border-l-2 border-border bg-card p-0">
                 <SheetHeader className="border-b-2 border-border p-4">
                   <SheetTitle className="text-left font-display">{title}</SheetTitle>
                 </SheetHeader>
@@ -131,12 +139,11 @@ export function DashboardShell({
                 </nav>
               </SheetContent>
             </Sheet>
-            <Link to="/" className="min-w-0" aria-label="Civil Craft home">
-              <BrandMark />
-            </Link>
           </div>
-          <p className="truncate text-center font-display text-sm sm:text-base">{title}</p>
-          <div className="flex shrink-0 items-center gap-2">
+          <p className="min-w-0 truncate font-display text-sm sm:text-base lg:text-center">
+            {title}
+          </p>
+          <div className="flex shrink-0 items-center justify-end gap-1 sm:gap-2">
             {admin ? null : <ReportBugDialog />}
             {admin ? (
               <DropdownMenu>
@@ -192,7 +199,7 @@ export function DashboardShell({
 
       <div
         className={cn(
-          "mx-auto grid max-w-[1400px] gap-6 px-4 py-6 sm:px-6",
+          "mx-auto grid max-w-[1400px] gap-4 px-3 py-3 sm:gap-6 sm:px-6 sm:py-6",
           admin ? "lg:grid-cols-[224px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)]",
         )}
       >

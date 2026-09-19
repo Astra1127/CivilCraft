@@ -1,4 +1,13 @@
-import { HardHat, Scissors, Shirt, ShieldCheck, Hand, Footprints, Wrench, Layers } from "lucide-react";
+import {
+  HardHat,
+  Scissors,
+  Shirt,
+  ShieldCheck,
+  Hand,
+  Footprints,
+  Wrench,
+  Layers,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import chibiEngineer from "@/assets/chibi-engineer.png";
 import type { CosmeticItem, CosmeticSlot, PlayerCharacter } from "@/lib/playfab";
@@ -47,32 +56,29 @@ export function CharacterPreview({
 }) {
   const portrait = character?.portraitUrl;
   return (
-    <div
-      className={cn(
-        "panel relative flex aspect-[3/4] w-full items-end justify-center overflow-hidden p-0",
-        className,
-      )}
-    >
+    <div className={cn("panel relative flex w-full flex-col overflow-hidden p-0", className)}>
       <div className="blueprint absolute inset-0 bg-secondary/60" aria-hidden="true" />
       <span
         className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-gold/25 to-transparent"
         aria-hidden="true"
       />
-      <img
-        src={portrait ?? chibiEngineer}
-        alt={
-          portrait
-            ? `${displayName}'s Civil Craft character with their equipped cosmetics`
-            : "Generic Civil Craft engineer silhouette shown while no character snapshot is available"
-        }
-        className="relative z-10 h-[88%] w-auto object-contain drop-shadow-[0_10px_16px_rgba(74,52,40,0.35)]"
-        loading="lazy"
-      />
       {!portrait ? (
-        <p className="absolute inset-x-3 top-3 z-10 rounded-lg border border-dashed border-gold/60 bg-gold/10 px-2 py-1 text-center text-[11px] font-semibold text-foreground/80">
+        <p className="relative z-10 mx-2 mt-2 rounded-lg border border-dashed border-gold/60 bg-gold/10 px-2 py-1 text-center text-[11px] font-semibold text-foreground/80">
           Awaiting character snapshot from the game
         </p>
       ) : null}
+      <div className="relative z-10 aspect-[3/4] w-full p-2">
+        <img
+          src={portrait ?? chibiEngineer}
+          alt={
+            portrait
+              ? `${displayName}'s Civil Craft character with their equipped cosmetics`
+              : "Generic Civil Craft engineer silhouette shown while no character snapshot is available"
+          }
+          className="h-full w-full object-contain drop-shadow-[0_10px_16px_rgba(74,52,40,0.35)]"
+          loading="lazy"
+        />
+      </div>
     </div>
   );
 }
