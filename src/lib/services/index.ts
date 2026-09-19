@@ -79,11 +79,7 @@ export const downloadService = {
   },
 };
 
-export const messageService = {
-  list(): ContactMessage[] {
-    return getCmsState().messages;
-  },
-};
+export { messageService } from "@/lib/cms/messages";
 
 export const adminService = {
   settings() {

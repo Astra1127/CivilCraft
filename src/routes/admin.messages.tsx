@@ -10,7 +10,7 @@ import {
   Panel,
   StatusPill,
 } from "@/components/admin/ui";
-import { EmptyState } from "@/components/common/States";
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/States";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -19,8 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatDate, logActivity, setCmsState, useCms } from "@/lib/cms/store";
+import { formatDate, logActivity } from "@/lib/cms/store";
 import type { ContactMessage, MessageStatus } from "@/lib/cms/types";
+import { messageService, useMessages } from "@/lib/cms/messages";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/messages")({
@@ -31,11 +32,12 @@ const statuses: MessageStatus[] = ["New", "In Progress", "Resolved"];
 const filters = ["All", ...statuses] as const;
 type Filter = (typeof filters)[number];
 
-const pillTone = (s: MessageStatus) =>
-  s === "New" ? "warn" : s === "Resolved" ? "ok" : "info";
+const pillTone = (s: MessageStatus) => (s === "New" ? "warn" : s === "Resolved" ? "ok" : "info");
 
 function AdminMessages() {
-  const messages = useCms((s) => s.messages);
+  const query = useMessages();
+  const messages = query.data?.messages ?? [];
+  const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState<Filter>("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ContactMessage | null>(null);
@@ -43,23 +45,34 @@ function AdminMessages() {
   const visible = filter === "All" ? messages : messages.filter((m) => m.status === filter);
   const selected = visible.find((m) => m.id === selectedId) ?? visible[0] ?? null;
 
-  const setStatus = (message: ContactMessage, status: MessageStatus) => {
-    setCmsState((prev) => ({
-      ...prev,
-      messages: prev.messages.map((m) => (m.id === message.id ? { ...m, status } : m)),
-    }));
-    logActivity({ area: "Messages", action: `Marked ${status}`, target: message.subject });
+  const setStatus = async (message: ContactMessage, status: MessageStatus) => {
+    setSaving(true);
+    try {
+      await messageService.change({ action: "status", id: message.id, status });
+      logActivity({ area: "Messages", action: `Marked ${status}`, target: message.subject });
+      await query.refetch();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not update message.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const remove = (message: ContactMessage) => {
-    setCmsState((prev) => ({
-      ...prev,
-      messages: prev.messages.filter((m) => m.id !== message.id),
-    }));
-    logActivity({ area: "Messages", action: "Message deleted", target: message.subject });
-    setConfirm(null);
-    setSelectedId(null);
-    toast.success("Message deleted");
+  const remove = async (message: ContactMessage) => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await messageService.change({ action: "delete", id: message.id });
+      logActivity({ area: "Messages", action: "Message deleted", target: message.subject });
+      setConfirm(null);
+      setSelectedId(null);
+      toast.success("Message deleted");
+      await query.refetch();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete message.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -86,7 +99,11 @@ function AdminMessages() {
         }}
       />
 
-      {visible.length === 0 ? (
+      {query.isPending ? (
+        <LoadingState label="Loading messages..." />
+      ) : query.isError ? (
+        <ErrorState description={query.error.message} onRetry={() => query.refetch()} />
+      ) : visible.length === 0 ? (
         <Panel title="Inbox" icon={Inbox}>
           <EmptyState title="No messages" description="Nothing to review right now." />
         </Panel>
@@ -137,6 +154,7 @@ function AdminMessages() {
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Select
+                  disabled={saving}
                   value={selected.status}
                   onValueChange={(v) => setStatus(selected, v as MessageStatus)}
                 >
@@ -158,7 +176,12 @@ function AdminMessages() {
                     Reply by email
                   </a>
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => setConfirm(selected)}>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={saving}
+                  onClick={() => setConfirm(selected)}
+                >
                   <Trash2 className="mr-1 h-4 w-4" aria-hidden="true" />
                   Delete
                 </Button>

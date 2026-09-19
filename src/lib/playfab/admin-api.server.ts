@@ -1,3 +1,4 @@
+import { messageRequest } from "../cms/messages.server.ts";
 import { filterSortPlayers, directorySorts, type DirectoryOptions } from "./directory-filters.ts";
 import { getAdminAnalytics } from "./analytics.server.ts";
 import { contentRequest } from "../cms/content.server.ts";
@@ -42,6 +43,8 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     )
       return json({ error: "This request is not permitted." }, 403);
 
+    const messagesResponse = await messageRequest(request, true);
+    if (messagesResponse) return messagesResponse;
     const contentResponse = await contentRequest(request, true);
     if (contentResponse) return contentResponse;
     if (path === "/api/admin/analytics" && request.method === "GET")

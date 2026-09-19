@@ -55,9 +55,9 @@ function PrivacyPage() {
           <h2 className="font-display text-xl text-foreground">Messages and bug reports</h2>
           <p>
             Contact forms handle the name, email address and message you provide. Contact messages
-            are currently saved in this browser. Submitted bug reports are stored for the team to
-            review and linked to your signed-in player account. Please avoid including sensitive
-            personal information in either.
+            are stored securely for the team to review. Submitted bug reports are stored for the
+            team to review and linked to your signed-in player account. Please avoid including
+            sensitive personal information in either.
           </p>
         </section>
         <section className="paper-panel space-y-2 p-5">

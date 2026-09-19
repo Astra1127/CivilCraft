@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Clock, Mail, MapPin, Phone, Share2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { z } from "zod";
 import { PageHeader, SectionHeading } from "@/components/common/PageHeader";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import {
@@ -22,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { setCmsState, uid, useCms } from "@/lib/cms/store";
+import { useCms } from "@/lib/cms/store";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -43,22 +42,8 @@ export const Route = createFileRoute("/contact")({
   component: ContactPage,
 });
 
-const schema = z.object({
-  name: z.string().trim().min(2, "Please enter your name").max(100),
-  email: z.string().trim().email("Enter a valid email address").max(255),
-  subject: z.string().trim().min(3, "Please enter a subject").max(150),
-  inquiryType: z.string().min(1, "Choose an inquiry type"),
-  message: z.string().trim().min(10, "Please write at least 10 characters").max(1000),
-});
-
-const inquiryTypes = [
-  "General",
-  "Technical Support",
-  "Bug Report",
-  "Feedback",
-  "Partnership",
-  "Educational",
-];
+import { contactSchema as schema, inquiryTypes } from "@/lib/cms/message-types";
+import { messageService } from "@/lib/cms/messages";
 
 import { isRealText } from "@/lib/cms/content-types";
 
@@ -82,8 +67,10 @@ function ContactPage() {
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const submit = (e: React.FormEvent) => {
+  const [sending, setSending] = useState(false);
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (sending) return;
     const parsed = schema.safeParse(values);
     if (!parsed.success) {
       const next: Record<string, string> = {};
@@ -92,20 +79,18 @@ function ContactPage() {
       return;
     }
     setErrors({});
-    setCmsState((prev) => ({
-      ...prev,
-      messages: [
-        {
-          id: uid(),
-          ...parsed.data,
-          createdAt: new Date().toISOString(),
-          status: "New" as const,
-        },
-        ...prev.messages,
-      ],
-    }));
-    setValues({ name: "", email: "", subject: "", inquiryType: "General", message: "" });
-    toast.success("Message sent", { description: "The team will get back to you soon." });
+    setSending(true);
+    try {
+      await messageService.submit(parsed.data);
+      setValues({ name: "", email: "", subject: "", inquiryType: "General", message: "" });
+      toast.success("Message sent", { description: "The team will get back to you soon." });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Message could not be sent. Please try again.",
+      );
+    } finally {
+      setSending(false);
+    }
   };
 
   const cards = [
@@ -211,8 +196,8 @@ function ContactPage() {
                 <p className="text-xs text-destructive">{errors["message"]}</p>
               ) : null}
             </div>
-            <Button type="submit" variant="gold" size="lg">
-              Send Message
+            <Button type="submit" variant="gold" size="lg" disabled={sending}>
+              {sending ? "Sending..." : "Send Message"}
             </Button>
           </form>
 

@@ -1,3 +1,4 @@
+import { messageRequest } from "./lib/cms/messages.server";
 import { handleEmailRequest } from "./lib/email/api.server";
 import { handlePasswordReset } from "./lib/playfab/reset-password.server";
 import { handleLeaderboardRequest } from "./lib/playfab/leaderboard.server";
@@ -54,6 +55,8 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const contactResponse = await messageRequest(request);
+      if (contactResponse) return contactResponse;
       const resetResponse = await handlePasswordReset(request);
       if (resetResponse) return resetResponse;
       const emailResponse = await handleEmailRequest(request);

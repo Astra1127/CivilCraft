@@ -454,10 +454,9 @@ function AdminOverview() {
           </div>
         </div>
         <p className="mt-4 text-xs text-muted-foreground">
-          News, gallery, FAQ, contact messages, website action history, releases, settings and About
-          content remain browser-local. Their counters and sample records are excluded from this
-          overview. Economy analytics are omitted because no global transaction ledger is
-          implemented.
+          News, gallery, FAQ, website action history, releases, settings and About content remain
+          browser-local. Their counters and sample records are excluded from this overview. Economy
+          analytics are omitted because no global transaction ledger is implemented.
         </p>
       </Panel>
     </AdminPage>
