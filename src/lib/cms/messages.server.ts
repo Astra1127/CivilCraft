@@ -111,8 +111,13 @@ async function playerId(request: Request, optional = false): Promise<string | nu
     throw new AdminApiError(401, "Player sign-in is required.");
   return id.toUpperCase();
 }
-async function notify(id: string, kind: "admin" | "player", ownerId?: string | null) {
-  const status = await notifyContact(kind, ownerId);
+async function notify(
+  id: string,
+  kind: "admin" | "player",
+  content: z.infer<typeof contactSchema>,
+  ownerId?: string | null,
+) {
+  const status = await notifyContact(kind, content, ownerId);
   try {
     await save(notificationPrefix + id, status);
   } catch {
@@ -177,7 +182,7 @@ export async function messageRequest(request: Request, admin = false): Promise<R
         createdAt: new Date().toISOString(),
         status: "New",
       });
-      const notificationStatus = await notify(id, "admin");
+      const notificationStatus = await notify(id, "admin", input);
       return json({ id, notificationStatus }, 201);
     }
     const change = admin ? changeSchema.parse(body) : replyInput.parse(body);
@@ -200,6 +205,7 @@ export async function messageRequest(request: Request, admin = false): Promise<R
       const notificationStatus = await notify(
         reply.id,
         admin ? "player" : "admin",
+        { ...message, message: reply.message },
         message.ownerId,
       );
       return json({ success: true, id: reply.id, notificationStatus }, 201);

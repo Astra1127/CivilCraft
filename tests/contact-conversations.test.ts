@@ -6,9 +6,16 @@ import { handlePlayFabAdminRequest } from "../src/lib/playfab/admin-api.server.t
 import { getAdminAuthConfig } from "../src/lib/admin-auth/config.server.ts";
 import { cookieName, issueAdminSession } from "../src/lib/admin-auth/session.server.ts";
 import { hashAdminPassword } from "../src/lib/admin-auth/password.server.ts";
+import { contactSmtp, renderContactEmail } from "../src/lib/email/contact-smtp.server.ts";
+import nodemailer from "nodemailer";
 
 const origin = "https://contact.test";
 const env = {
+  SMTP_HOST: "",
+  SMTP_PORT: "",
+  SMTP_USER: "",
+  SMTP_PASSWORD: "",
+  SMTP_FROM: "",
   ADMIN_AUTH_ORIGIN: origin,
   ADMIN_SESSION_SECRET: "contact-conversation-test-session-secret",
   ADMIN_USERS_JSON: JSON.stringify([
@@ -37,6 +44,20 @@ beforeEach(() => {
   globalThis.fetch = async (url, init) => {
     const body = JSON.parse(String(init?.body));
     assert.equal(new Headers(init?.headers).get("X-SecretKey"), env.PLAYFAB_SECRET_KEY);
+    if (String(url).endsWith("GetPlayerProfile"))
+      return Response.json({
+        code: 200,
+        data: {
+          PlayerProfile: {
+            ContactEmailAddresses: [
+              {
+                EmailAddress:
+                  body.PlayFabId === "BEEF" ? "admin@example.test" : "owner@example.test",
+              },
+            ],
+          },
+        },
+      });
     if (String(url).endsWith("AuthenticateSessionTicket"))
       return Response.json({
         code: 200,
@@ -256,4 +277,135 @@ test("concurrent replies do not overwrite each other; deleted conversations cann
     404,
   );
   assert.deepEqual((await (await admin("messages")).json()).messages, []);
+});
+
+test("SMTP copies contain full submitted and reply text, route to account recipients, and send only after saving", async (t) => {
+  process.env["SMTP_HOST"] = "smtp.example.test";
+  const sent: { recipient: string; content: ReturnType<typeof renderContactEmail> }[] = [];
+  t.mock.method(
+    contactSmtp,
+    "send",
+    async (recipient: string, content: ReturnType<typeof renderContactEmail>) => {
+      assert.ok(
+        Object.values(data).some((raw) => {
+          const record = JSON.parse(raw);
+          return typeof record?.message === "string" && content.text.includes(record.message);
+        }),
+        "exact email message already persisted",
+      );
+      sent.push({ recipient, content });
+    },
+  );
+  const message = "I cannot access my account";
+  const created = await submit("ticket-a", { message, email: "different@example.test" });
+  assert.equal(created.status, 201);
+  const { id, notificationStatus } = await created.json();
+  assert.equal(notificationStatus, "sent");
+  assert.equal(sent[0]!.recipient, "admin@example.test");
+  for (const text of [
+    message,
+    "Player A",
+    "different@example.test",
+    "Conversation test",
+    "Open Admin Messages",
+    origin + "/admin/messages",
+  ]) {
+    assert.ok(sent[0]!.content.html.includes(text));
+    assert.ok(sent[0]!.content.text.includes(text));
+  }
+  const reply = "We checked your account, please try signing in again.";
+  const response = await admin("messages", { action: "reply", id, message: reply });
+  assert.equal((await response.json()).notificationStatus, "sent");
+  assert.equal(
+    sent[1]!.recipient,
+    "owner@example.test",
+    "never uses submitted email for private reply",
+  );
+  for (const text of [reply, "View Conversation", origin + "/dashboard/messages"]) {
+    assert.ok(sent[1]!.content.html.includes(text));
+    assert.ok(sent[1]!.content.text.includes(text));
+  }
+  assert.equal((await (await player("ticket-a")).json()).messages[0].replies[0].message, reply);
+  assert.equal((await player("ticket-b", undefined, id)).status, 404);
+  await player("ticket-a", { action: "reply", id, message: "Thanks for checking my account." });
+  assert.ok(sent[2]!.content.html.includes("Thanks for checking my account."));
+  assert.equal(emails.length, 0, "SMTP does not also send a generic template");
+});
+
+test("SMTP failure never loses saved messages or replies and never retries via templates", async (t) => {
+  process.env["SMTP_HOST"] = "smtp.example.test";
+  t.mock.method(contactSmtp, "send", async () => {
+    throw new Error("SMTP failed");
+  });
+  const created = await submit("ticket-a");
+  const { id, notificationStatus } = await created.json();
+  assert.equal(created.status, 201);
+  assert.equal(notificationStatus, "failed");
+  const reply = await admin("messages", { action: "reply", id, message: "Durable reply" });
+  assert.equal(reply.status, 201);
+  assert.equal((await reply.json()).notificationStatus, "failed");
+  assert.equal(
+    (await (await player("ticket-a")).json()).messages[0].replies[0].message,
+    "Durable reply",
+  );
+  assert.equal(emails.length, 0);
+});
+
+test("email HTML escapes every user field, preserves full text and rejects unsafe link origins", () => {
+  const attack = "<img src=x onerror=\"alert(1)\"> & 'quoted'\nSecond line";
+  const content = { name: attack, email: attack, subject: attack, message: attack };
+  for (const kind of ["admin", "player"] as const) {
+    const rendered = renderContactEmail(kind, content, origin);
+    assert.ok(!rendered.html.includes("<img"));
+    assert.ok(
+      rendered.html.includes(
+        "&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &#39;quoted&#39;",
+      ),
+    );
+    assert.ok(rendered.html.includes("<br>Second line"));
+    assert.ok(rendered.text.includes(attack));
+    assert.ok(!rendered.subject.includes(attack));
+    assert.throws(() => renderContactEmail(kind, content, "javascript:alert(1)"));
+  }
+});
+
+test("SMTP transport uses existing credentials, enforces TLS, sends both bodies and closes", async (t) => {
+  Object.assign(process.env, {
+    SMTP_HOST: "smtp.example.test",
+    SMTP_USER: "smtp-user",
+    SMTP_PASSWORD: "test-only-password",
+    SMTP_FROM: "notify@example.test",
+  });
+  let closed = 0;
+  const content = renderContactEmail(
+    "player",
+    { name: "Player", email: "form@example.test", subject: "Help", message: "Full reply" },
+    origin,
+  );
+  t.mock.method(nodemailer, "createTransport", (options: Record<string, unknown>) => {
+    assert.equal(options["host"], "smtp.example.test");
+    assert.equal(options["requireTLS"], true);
+    assert.equal(options["secure"], options["port"] === 465);
+    assert.deepEqual(options["auth"], { user: "smtp-user", pass: "test-only-password" });
+    assert.equal(options["disableFileAccess"], true);
+    assert.equal(options["disableUrlAccess"], true);
+    return {
+      sendMail: async (mail: unknown) => {
+        assert.deepEqual(mail, {
+          from: "notify@example.test",
+          to: "owner@example.test",
+          ...content,
+        });
+      },
+      close: () => {
+        closed++;
+      },
+    };
+  });
+  await contactSmtp.send("owner@example.test", content);
+  process.env["SMTP_PORT"] = "465";
+  await contactSmtp.send("owner@example.test", content);
+  assert.equal(closed, 2);
+  process.env["SMTP_PASSWORD"] = "";
+  await assert.rejects(contactSmtp.send("owner@example.test", content));
 });

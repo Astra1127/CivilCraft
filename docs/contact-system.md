@@ -27,29 +27,47 @@ Players cannot choose ownership or authorship, change status, or read another pl
 
 ## Email configuration
 
-The existing PlayFab SMTP add-on and `emailDelivery.send` are reused. No new provider or SMTP client is added. Configure these server-only Vercel environment variables:
+Contact notifications now support full HTML and plain-text copies through direct server-side SMTP using the SAME provider already configured in PlayFab's SMTP add-on. Nodemailer is an SMTP client, not another email provider. Recovery, verification, authentication and release notification code is unchanged.
 
-- `PLAYFAB_CONTACT_ADMIN_PLAYER_ID`: an existing PlayFab account whose contact email is the admin notification mailbox.
-- `PLAYFAB_CONTACT_ADMIN_EMAIL_TEMPLATE_ID`: generic “new contact message/reply” notification, linking to `/admin/messages`.
-- `PLAYFAB_CONTACT_REPLY_EMAIL_TEMPLATE_ID`: generic “the team replied” notification, linking to `/dashboard/messages`.
+The old sender passed only a PlayFab recipient ID and template ID, so message text never reached the email. [PlayFab SendEmailFromTemplate](https://learn.microsoft.com/en-us/rest/api/playfab/server/account-management/send-email-from-template?view=playfab-rest) has no per-request subject/body or template-variable parameter. CustomTags are request metadata, not body substitutions. Do not store temporary message text in player profile fields to populate templates.
 
-Existing `PLAYFAB_SECRET_KEY`, `VITE_PLAYFAB_TITLE_ID`, and admin authentication variables remain in use. The title ID is public; the secret key and all email configuration stay server-side. SMTP credentials remain in PlayFab's existing add-on.
+Configure these server-only Vercel variables with your existing SMTP provider's settings (never VITE_):
 
-PlayFab's SendEmailFromTemplate delivers to an account's configured contact email, not an arbitrary address supplied in a form. Player notifications therefore target the verified conversation owner. Guests have no player thread or automated reply email; staff can use the existing Reply by email action for guests. Do not use the recovery template for contact notifications.
+- SMTP_HOST: provider hostname.
+- SMTP_PORT: 465 for implicit TLS, or 587 (default) with required STARTTLS. Certificate validation remains enabled.
+- SMTP_USER and SMTP_PASSWORD: existing provider credentials.
+- SMTP_FROM: bare provider-approved sender email address.
 
-Persistence happens before sending email. Missing configuration or delivery failure returns a successful save with `not_configured` or `failed` notification status. Admin conversation views display that status. There is no automatic retry of ambiguous provider failures, avoiding unintended duplicate emails. A `sent` result means provider acceptance, not proof of inbox delivery.
+Reuse ADMIN_AUTH_ORIGIN as the trusted HTTPS website origin for buttons. Reuse PLAYFAB_CONTACT_ADMIN_PLAYER_ID for the admin mailbox's PlayFab account. SMTP recipients are resolved with server-side GetPlayerProfile from that account or the authenticated conversation owner's account, never from the form's email field. Missing profile contact emails fail notification without affecting storage.
 
-## Verification
+All SMTP variables absent/empty preserves existing generic PLAYFAB_CONTACT_ADMIN_EMAIL_TEMPLATE_ID and PLAYFAB_CONTACT_REPLY_EMAIL_TEMPLATE_ID notifications during rollout. To enable readable copies, configure SMTP and redeploy. Partial/invalid SMTP configuration reports failure; it does not silently send a generic email. No automatic retry or template fallback after SMTP failure avoids duplicate notifications on ambiguous delivery outcomes.
 
-Automated tests cover shared settings across independent requests, stripping contact fields from legacy local persistence, ticket ownership, cross-user access denial, guest isolation, admin/player replies, status refresh, concurrent replies, deletion, and both successful and failed email provider responses. The full email flow is tested with mocked PlayFab transport, not live inbox delivery.
+Admin notifications contain submitted name, email, subject, full message (or latest player reply), and Open Admin Messages linking to /admin/messages. Player notifications contain conversation subject, the full admin reply, and View Conversation linking to /dashboard/messages. All user text is HTML-escaped; plain-text alternatives preserve the original content. Subject headers are fixed, links use trusted configuration, and no user input is used as From or Reply-To. Emails instruct recipients to reply on the website; email replies are not ingested. Guests still have no public conversation or automatic player reply notification.
 
-Final checks: TypeScript and production build passed. All changed source/test files passed lint. The selected regression/security suite plus the local-store regression passed 57 tests in total. Full-repository `npm run lint` reported 29 existing formatting errors and 13 warnings outside this work. The secret scan found none of the five configured server-only credential values in 124 public JavaScript bundles. `git diff --check` passed.
+PlayFab Title Internal Data remains the source of truth. Every message/reply is saved before profile lookup or sending. Missing configuration or provider failure cannot undo the save. Delivery status remains separate. Sent means provider acceptance, not confirmed inbox delivery. No email secrets or bodies are logged or returned to the browser.
 
-A live read-only check returned identical contact settings for two independent public requests. The shared store had no configured contact fields at the time of verification. Browser click-through testing was unavailable because no browser was connected. Live contact-email delivery requires the three environment variables above, which were absent from the local environment.
+## Verification and deployment checklist
 
-Manual check after configuration: save contact details in Admin Settings; open Contact in a separate browser; submit while signed in as player A; reply from Admin Messages; refresh player A's Dashboard → Messages; reply back; verify admin status updates and both notification mailboxes. Player B must not see or open player A's conversation. A guest submission must remain admin-only.
+Validation for the readable-copy change: 68 distinct tests passed across contact conversations, contact persistence/UI, admin authentication, password reset, contact-email synchronization, email directory/worker, and release-post suites. Type check and production build passed. Changed-file lint passed; repository lint still reports 29 existing formatting errors and 13 warnings in unrelated files. The client-bundle scan checked 124 JavaScript files against five configured secret values and SMTP/server-only identifiers, with no matches. Live SMTP/inbox delivery has not been verified: local contact templates are configured, but direct SMTP credentials are absent.
 
-## Files for this contact extension
+Automated conversation tests mock PlayFab and SMTP transport. They assert that an authenticated player's "I cannot access my account" appears in both admin email bodies, and "We checked your account, please try signing in again." appears in both player email bodies. They also cover exact-content persistence before sending, account-based recipients despite a different form email, follow-up player replies, HTML injection, unsafe link origins, SMTP failures, legacy template fallback, cross-user access denial and guest isolation. Mocked acceptance does not prove live inbox delivery.
+
+1. Configure SMTP variables from the existing PlayFab SMTP provider in Vercel; confirm ADMIN_AUTH_ORIGIN is the deployed HTTPS origin and redeploy.
+2. Sign in as player A and submit "I cannot access my account". Check Admin Messages after refresh and the admin inbox for name, email, subject, full text, and working Open Admin Messages button.
+3. Reply in Admin Messages: "We checked your account, please try signing in again." Confirm the player inbox contains the reply and View Conversation opens Dashboard Messages (sign in if necessary).
+4. Refresh player A's conversation and reply on the website; confirm admin receives that text. Player B must not see or open player A's conversation. Guest submissions remain admin-only.
+5. In staging, temporarily use invalid SMTP credentials; submit/reply and refresh to confirm both records remain saved while notification status reports failed. Restore credentials.
+
+## Files changed for readable email copies
+
+- `src/lib/email/contact-smtp.server.ts`: escaped HTML/plain text, account recipient lookup and SMTP transport.
+- `src/lib/email/contact-notifications.server.ts`: rich SMTP delivery with legacy template fallback when unconfigured.
+- `src/lib/cms/messages.server.ts`: passes saved event content to notifications.
+- `tests/contact-conversations.test.ts`: content, escaping, transport and failure regressions.
+- `.env.example`, `docs/contact-system.md`: configuration and deployment checklist.
+- `package.json`, `package-lock.json`: Nodemailer and TypeScript definitions.
+
+## Files for the preceding contact extension
 
 - `src/lib/cms/contact-settings-types.ts`, `contact-settings.server.ts`, `contact-settings.ts`: schema, shared API, query hook.
 - `src/lib/cms/messages.server.ts`, `messages.ts`, `types.ts`: ownership, conversation persistence, queries and types.
