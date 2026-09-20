@@ -85,7 +85,10 @@ test("public submission persists centrally and fresh admin requests retrieve it 
   const response = (await submit())!;
   assert.equal(response.status, 201);
   const { id } = await response.json();
-  assert.equal(Object.keys(storage).length, 1);
+  assert.equal(
+    Object.keys(storage).filter((k) => k.startsWith("civilcraft.website.v1.messages.")).length,
+    1,
+  );
   for (let refresh = 0; refresh < 2; refresh++) {
     const inbox = await admin();
     assert.equal(inbox.status, 200);
@@ -94,6 +97,9 @@ test("public submission persists centrally and fresh admin requests retrieve it 
     assert.equal(messages.length, 1);
     assert.deepEqual(messages[0], {
       ...input,
+      ownerId: null,
+      replies: [],
+      notificationStatus: "not_configured",
       id,
       status: "New",
       createdAt: messages[0].createdAt,

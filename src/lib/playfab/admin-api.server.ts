@@ -1,3 +1,5 @@
+import { contactSettingsRequest } from "../cms/contact-settings.server.ts";
+import { releaseRequest } from "../cms/releases.server.ts";
 import { messageRequest } from "../cms/messages.server.ts";
 import { filterSortPlayers, directorySorts, type DirectoryOptions } from "./directory-filters.ts";
 import { getAdminAnalytics } from "./analytics.server.ts";
@@ -43,6 +45,10 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     )
       return json({ error: "This request is not permitted." }, 403);
 
+    const releasesResponse = await releaseRequest(request, true);
+    if (releasesResponse) return releasesResponse;
+    const contactSettingsResponse = await contactSettingsRequest(request, true);
+    if (contactSettingsResponse) return contactSettingsResponse;
     const messagesResponse = await messageRequest(request, true);
     if (messagesResponse) return messagesResponse;
     const contentResponse = await contentRequest(request, true);

@@ -31,6 +31,15 @@ function load(file, messages, notifications) {
       require: (name) => {
         if (name === "@tanstack/react-router") return { createFileRoute: () => (config) => config };
         if (name === "@/lib/cms/messages") return messages;
+        if (name === "@/lib/cms/contact-settings")
+          return {
+            useContactSettings: () => ({ data: { social: {} } }),
+            emptyContactSettings: { social: {} },
+          };
+        if (name.endsWith("/MessageConversation"))
+          return {
+            MessageConversation: ({ message }) => React.createElement("p", null, message.message),
+          };
         if (name === "@/lib/cms/message-types") return { contactSchema, inquiryTypes };
         if (name === "@/lib/cms/content-types") return { isRealText: () => false };
         if (name === "@/lib/cms/store")

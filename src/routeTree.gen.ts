@@ -46,6 +46,7 @@ import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardAchievementsRouteImport } from './routes/dashboard.achievements'
 import { Route as DashboardAlmanacRouteImport } from './routes/dashboard.almanac'
 import { Route as DashboardLeaderboardsRouteImport } from './routes/dashboard.leaderboards'
+import { Route as DashboardMessagesRouteImport } from './routes/dashboard.messages'
 import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardTransactionsRouteImport } from './routes/dashboard.transactions'
@@ -239,6 +240,11 @@ const DashboardLeaderboardsRoute = DashboardLeaderboardsRouteImport.update({
   path: '/leaderboards',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardMessagesRoute = DashboardMessagesRouteImport.update({
+  id: '/messages',
+  path: '/messages',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardProfileRoute = DashboardProfileRouteImport.update({
   id: '/profile',
   path: '/profile',
@@ -310,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/achievements': typeof DashboardAchievementsRoute
   '/dashboard/almanac': typeof DashboardAlmanacRoute
   '/dashboard/leaderboards': typeof DashboardLeaderboardsRoute
+  '/dashboard/messages': typeof DashboardMessagesRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
@@ -353,6 +360,7 @@ export interface FileRoutesByTo {
   '/dashboard/achievements': typeof DashboardAchievementsRoute
   '/dashboard/almanac': typeof DashboardAlmanacRoute
   '/dashboard/leaderboards': typeof DashboardLeaderboardsRoute
+  '/dashboard/messages': typeof DashboardMessagesRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
@@ -400,6 +408,7 @@ export interface FileRoutesById {
   '/dashboard/achievements': typeof DashboardAchievementsRoute
   '/dashboard/almanac': typeof DashboardAlmanacRoute
   '/dashboard/leaderboards': typeof DashboardLeaderboardsRoute
+  '/dashboard/messages': typeof DashboardMessagesRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
@@ -448,6 +457,7 @@ export interface FileRouteTypes {
     | '/dashboard/achievements'
     | '/dashboard/almanac'
     | '/dashboard/leaderboards'
+    | '/dashboard/messages'
     | '/dashboard/profile'
     | '/dashboard/settings'
     | '/dashboard/transactions'
@@ -491,6 +501,7 @@ export interface FileRouteTypes {
     | '/dashboard/achievements'
     | '/dashboard/almanac'
     | '/dashboard/leaderboards'
+    | '/dashboard/messages'
     | '/dashboard/profile'
     | '/dashboard/settings'
     | '/dashboard/transactions'
@@ -537,6 +548,7 @@ export interface FileRouteTypes {
     | '/dashboard/achievements'
     | '/dashboard/almanac'
     | '/dashboard/leaderboards'
+    | '/dashboard/messages'
     | '/dashboard/profile'
     | '/dashboard/settings'
     | '/dashboard/transactions'
@@ -832,6 +844,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardLeaderboardsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/messages': {
+      id: '/dashboard/messages'
+      path: '/messages'
+      fullPath: '/dashboard/messages'
+      preLoaderRoute: typeof DashboardMessagesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/profile': {
       id: '/dashboard/profile'
       path: '/profile'
@@ -942,6 +961,7 @@ interface DashboardRouteChildren {
   DashboardAchievementsRoute: typeof DashboardAchievementsRoute
   DashboardAlmanacRoute: typeof DashboardAlmanacRoute
   DashboardLeaderboardsRoute: typeof DashboardLeaderboardsRoute
+  DashboardMessagesRoute: typeof DashboardMessagesRoute
   DashboardProfileRoute: typeof DashboardProfileRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardTransactionsRoute: typeof DashboardTransactionsRoute
@@ -952,6 +972,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAchievementsRoute: DashboardAchievementsRoute,
   DashboardAlmanacRoute: DashboardAlmanacRoute,
   DashboardLeaderboardsRoute: DashboardLeaderboardsRoute,
+  DashboardMessagesRoute: DashboardMessagesRoute,
   DashboardProfileRoute: DashboardProfileRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardTransactionsRoute: DashboardTransactionsRoute,

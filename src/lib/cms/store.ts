@@ -24,7 +24,16 @@ function hydrate() {
     if (raw) {
       const saved = JSON.parse(raw);
       delete saved.bugs;
-      state = { ...seedState, ...saved, news: [], gallery: [] };
+      if (saved.settings)
+        for (const key of ["siteName", "supportEmail", "phone", "address", "officeHours", "social"])
+          delete saved.settings[key];
+      state = {
+        ...seedState,
+        ...saved,
+        settings: { ...seedState.settings, ...saved.settings },
+        news: [],
+        gallery: [],
+      };
     }
   } catch {
     /* ignore corrupt storage */
@@ -34,7 +43,10 @@ function hydrate() {
 function persist() {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(KEY, JSON.stringify(state));
+    const settings = { ...state.settings } as Record<string, unknown>;
+    for (const key of ["siteName", "supportEmail", "phone", "address", "officeHours", "social"])
+      delete settings[key];
+    window.localStorage.setItem(KEY, JSON.stringify({ ...state, settings }));
   } catch {
     /* quota / private mode */
   }

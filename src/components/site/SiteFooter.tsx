@@ -1,9 +1,9 @@
 import { Link } from "@tanstack/react-router";
-import { useCms } from "@/lib/cms/store";
+import { useContactSettings, emptyContactSettings } from "@/lib/cms/contact-settings";
 import { BrandMark } from "./BrandMark";
 
 export function SiteFooter() {
-  const settings = useCms((s) => s.settings);
+  const settings = useContactSettings().data ?? emptyContactSettings;
 
   return (
     <footer className="relative mt-16 border-t-2 border-border bg-card">

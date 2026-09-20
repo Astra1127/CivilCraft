@@ -1,3 +1,4 @@
+import { useContactSettings, emptyContactSettings } from "@/lib/cms/contact-settings";
 import { createFileRoute } from "@tanstack/react-router";
 import { Clock, Mail, MapPin, Phone, Share2 } from "lucide-react";
 import { useState } from "react";
@@ -48,7 +49,8 @@ import { messageService } from "@/lib/cms/messages";
 import { isRealText } from "@/lib/cms/content-types";
 
 function ContactPage() {
-  const settings = useCms((s) => s.settings);
+  const contactSettings = useContactSettings();
+  const settings = contactSettings.data ?? emptyContactSettings;
   const socials = (["facebook", "youtube", "discord"] as const).filter(
     (k) => isRealText(settings.social[k]) && /^https?:\/\//.test(settings.social[k]),
   );

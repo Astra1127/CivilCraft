@@ -1,3 +1,5 @@
+import { contactSettingsRequest } from "./lib/cms/contact-settings.server";
+import { releaseRequest } from "./lib/cms/releases.server";
 import { messageRequest } from "./lib/cms/messages.server";
 import { handleEmailRequest } from "./lib/email/api.server";
 import { handlePasswordReset } from "./lib/playfab/reset-password.server";
@@ -55,6 +57,10 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const releasesResponse = await releaseRequest(request);
+      if (releasesResponse) return releasesResponse;
+      const contactSettingsResponse = await contactSettingsRequest(request);
+      if (contactSettingsResponse) return contactSettingsResponse;
       const contactResponse = await messageRequest(request);
       if (contactResponse) return contactResponse;
       const resetResponse = await handlePasswordReset(request);

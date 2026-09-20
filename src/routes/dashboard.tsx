@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
-import { BarChart3, BookOpen, Medal, Receipt, Settings, Trophy, User } from "lucide-react";
+import { BarChart3, BookOpen, Medal, Receipt, Settings, Trophy, User, Mail } from "lucide-react";
 import { useEffect } from "react";
 import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/DashboardShell";
 import { LoadingState } from "@/components/common/States";
@@ -27,6 +27,7 @@ const items: DashboardNavItem[] = [
   { to: "/dashboard/achievements", label: "Achievements", icon: Medal, section: "Overview" },
   { to: "/dashboard/transactions", label: "Transactions", icon: Receipt, section: "Overview" },
   { to: "/dashboard/profile", label: "Profile", icon: User, section: "Account" },
+  { to: "/dashboard/messages", label: "Messages", icon: Mail, section: "Account" },
   { to: "/dashboard/settings", label: "Settings", icon: Settings, section: "Account" },
 ];
 

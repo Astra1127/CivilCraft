@@ -1,7 +1,7 @@
+import { useContactSettings, emptyContactSettings } from "@/lib/cms/contact-settings";
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/common/PageHeader";
 import { PublicLayout } from "@/components/site/PublicLayout";
-import { useCms } from "@/lib/cms/store";
 
 export const Route = createFileRoute("/privacy")({
   head: () => ({
@@ -25,7 +25,7 @@ export const Route = createFileRoute("/privacy")({
 });
 
 function PrivacyPage() {
-  const settings = useCms((s) => s.settings);
+  const settings = useContactSettings().data ?? emptyContactSettings;
 
   return (
     <PublicLayout>

@@ -47,6 +47,18 @@ export interface ContactMessage {
   message: string;
   createdAt: string;
   status: MessageStatus;
+  ownerId?: string | null;
+  replies?: ContactReply[];
+  notificationStatus?: string;
+}
+
+export interface ContactReply {
+  id: string;
+  messageId: string;
+  author: "admin" | "player";
+  message: string;
+  createdAt: string;
+  notificationStatus?: string;
 }
 
 export type BugStatus = "New" | "Investigating" | "Resolved" | "Closed";
@@ -78,6 +90,8 @@ export interface Release {
   recommendedRequirements: string[];
   notes: string;
   releaseDate: string;
+  /** Update publication is independent of the currently downloadable build. */
+  published?: boolean;
   status: "draft" | "current" | "archived";
   downloads: number;
 }

@@ -1,3 +1,4 @@
+import { MessageConversation } from "@/components/common/MessageConversation";
 import { createFileRoute } from "@tanstack/react-router";
 import { Inbox, Mail, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -149,9 +150,24 @@ function AdminMessages() {
                   {selected.inquiryType} · {formatDate(selected.createdAt)}
                 </p>
               </div>
-              <p className="whitespace-pre-wrap rounded-xl border-2 border-dashed border-border bg-secondary/30 p-3 text-sm">
-                {selected.message}
-              </p>
+              <MessageConversation
+                key={selected.id}
+                message={selected}
+                admin
+                onReply={async (text) => {
+                  const result = await messageService.change({
+                    action: "reply",
+                    id: selected.id,
+                    message: text,
+                  });
+                  toast.success(
+                    result.notificationStatus === "sent"
+                      ? "Reply saved and email notification sent"
+                      : "Reply saved; email notification unavailable",
+                  );
+                  await query.refetch();
+                }}
+              />
               <div className="flex flex-wrap items-center gap-2">
                 <Select
                   disabled={saving}

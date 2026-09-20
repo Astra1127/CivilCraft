@@ -1,3 +1,6 @@
+import { useContactSettings, emptyContactSettings } from "@/lib/cms/contact-settings";
+import { contactSettingsSchema } from "@/lib/cms/contact-settings-types";
+import { ErrorState } from "@/components/common/States";
 import { AdminIntegrations } from "@/components/admin/AdminIntegrations";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { createFileRoute } from "@tanstack/react-router";
@@ -24,18 +27,40 @@ function AdminSettings() {
   const { tab } = Route.useSearch();
   const navigate = Route.useNavigate();
   const saved = useCms((s) => s.settings);
-  const [form, setForm] = useState<SiteSettings>(saved);
+  const contact = useContactSettings(true);
+  const [draft, setDraft] = useState<Partial<SiteSettings>>({});
+  const form = { ...saved, ...(contact.data ?? emptyContactSettings), ...draft };
+  const [saving, setSaving] = useState(false);
 
-  const set = (patch: Partial<SiteSettings>) => setForm((f) => ({ ...f, ...patch }));
+  const set = (patch: Partial<SiteSettings>) => setDraft((f) => ({ ...f, ...patch }));
 
-  const save = () => {
-    if (!form.siteName.trim() || !form.supportEmail.trim()) {
-      toast.error("Site name and support email are required");
+  const save = async () => {
+    if (saving || contact.isPending || contact.isError) return;
+    const parsed = contactSettingsSchema.safeParse(form);
+    if (!parsed.success) {
+      toast.error("Check the contact details and social links.");
       return;
     }
-    setCmsState((prev) => ({ ...prev, settings: form }));
-    logActivity({ area: "Settings", action: "Website settings saved", target: form.siteName });
-    toast.success("Settings saved");
+    setSaving(true);
+    try {
+      await contact.save(parsed.data);
+      setCmsState((prev) => ({
+        ...prev,
+        settings: {
+          ...prev.settings,
+          metaTitle: form.metaTitle,
+          metaDescription: form.metaDescription,
+          maintenanceMode: form.maintenanceMode,
+        },
+      }));
+      setDraft({});
+      logActivity({ area: "Settings", action: "Website settings saved", target: form.siteName });
+      toast.success("Settings saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save settings.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -50,7 +75,12 @@ function AdminSettings() {
         }
         actions={
           tab !== "integrations" ? (
-            <Button variant="gold" size="sm" onClick={save}>
+            <Button
+              variant="gold"
+              size="sm"
+              disabled={saving || contact.isPending || contact.isError}
+              onClick={save}
+            >
               Save settings
             </Button>
           ) : null
@@ -71,6 +101,11 @@ function AdminSettings() {
           <AdminIntegrations />
         </TabsContent>
         <TabsContent value="general" className="space-y-5 pt-3">
+          {contact.isPending ? (
+            <p role="status">Loading contact details...</p>
+          ) : contact.isError ? (
+            <ErrorState description={contact.error.message} onRetry={() => contact.refetch()} />
+          ) : null}
           <div className="grid gap-3 lg:grid-cols-2">
             <Panel title="Contact details" icon={Building2} bodyClassName="p-4">
               <div className="grid gap-3 sm:grid-cols-2">

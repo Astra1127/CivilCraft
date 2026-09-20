@@ -1,3 +1,4 @@
+import { useReleasePosts } from "@/lib/cms/releases";
 import { createFileRoute } from "@tanstack/react-router";
 import { Download, Smartphone } from "lucide-react";
 import { EmptyState } from "@/components/common/States";
@@ -35,7 +36,10 @@ export const Route = createFileRoute("/download")({
 });
 
 function DownloadPage() {
-  const release = useCms((s) => s.releases.find((r) => r.status === "current"));
+  const legacyRelease = useCms((s) => s.releases.find((r) => r.status === "current"));
+  const updates = useReleasePosts();
+  const release = updates.data?.initialized ? updates.data.current : legacyRelease;
+  const latest = updates.data?.latest;
   const faq = useCms((s) => s.faq.filter((f) => f.published).sort((a, b) => a.order - b.order));
   const steps = useCms((s) => s.settings.installSteps);
 
@@ -131,21 +135,38 @@ function DownloadPage() {
         </div>
       </section>
 
-      {release ? (
-        <section id="whats-new" className="scroll-mt-24 bg-background py-12">
-          <div className="mx-auto max-w-6xl px-4 sm:px-6">
-            <div className="panel p-6 sm:p-8">
-              <h2 className="text-3xl">What's New</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                v{release.version} · build {release.build}
+      <section id="whats-new" className="scroll-mt-24 bg-background py-12">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <div className="panel p-6 sm:p-8">
+            <h2 className="text-3xl">What's New</h2>
+            {updates.isPending ? (
+              <p role="status" className="mt-4">
+                Loading updates...
               </p>
-              <p className="mt-4 whitespace-pre-wrap break-words text-muted-foreground">
-                {release.notes.trim() ? release.notes : "No release notes yet."}
-              </p>
-            </div>
+            ) : updates.isError ? (
+              <div role="alert" className="mt-4">
+                <p>Updates are temporarily unavailable.</p>
+                <Button variant="outline" onClick={() => updates.refetch()}>
+                  Retry
+                </Button>
+              </div>
+            ) : latest ? (
+              <article className="mt-4">
+                <h3 className="break-words text-2xl">{latest.title}</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  v{latest.version} / build {latest.build} /{" "}
+                  <time dateTime={latest.releaseDate}>{formatDate(latest.releaseDate)}</time>
+                </p>
+                <p className="mt-4 whitespace-pre-wrap break-words text-muted-foreground">
+                  {latest.notes}
+                </p>
+              </article>
+            ) : (
+              <p className="mt-4 text-muted-foreground">No published updates yet.</p>
+            )}
           </div>
-        </section>
-      ) : null}
+        </div>
+      </section>
 
       <SectionDivider variant="beam" />
 

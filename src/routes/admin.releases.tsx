@@ -1,3 +1,6 @@
+import { ReleasePosts } from "@/components/admin/ReleasePosts";
+import { useAdminReleases } from "@/lib/cms/releases";
+import { ErrorState, LoadingState } from "@/components/common/States";
 import { createFileRoute } from "@tanstack/react-router";
 import { ListChecks, Package } from "lucide-react";
 import { useState } from "react";
@@ -15,31 +18,57 @@ export const Route = createFileRoute("/admin/releases")({
 });
 
 function AdminReleases() {
-  const releases = useCms((s) => s.releases);
+  const localReleases = useCms((s) => s.releases);
+  const query = useAdminReleases();
+  const releases = query.data?.initialized ? query.data.releases : localReleases;
+  const [patches, setPatches] = useState<Record<string, Partial<Release>>>({});
+  const [busy, setBusy] = useState(false);
   const installSteps = useCms((s) => s.settings.installSteps);
   const [steps, setSteps] = useState(installSteps.join("\n"));
   const current = releases.find((r) => r.status === "current");
 
   const update = (id: string, patch: Partial<Release>) =>
-    setCmsState((prev) => ({
-      ...prev,
-      releases: prev.releases.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-    }));
-
-  const makeCurrent = (release: Release) => {
-    setCmsState((prev) => ({
-      ...prev,
-      releases: prev.releases.map((r) => ({
-        ...r,
-        status: r.id === release.id ? "current" : r.status === "current" ? "archived" : r.status,
-      })),
-    }));
-    logActivity({
-      area: "Releases",
-      action: "Build set as current",
-      target: `v${release.version} (build ${release.build})`,
-    });
-    toast.success(`v${release.version} is now the public build`);
+    setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  const save = async (release: Release) => {
+    await query.mutate({ action: "save", release });
+  };
+  const makeCurrent = async (release: Release) => {
+    setBusy(true);
+    try {
+      await query.mutate({ action: "current", id: release.id });
+      toast.success(`v${release.version} is now the public build`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not set current build.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveBuild = async (release: Release) => {
+    setBusy(true);
+    try {
+      await save(release);
+      setPatches((prev) => {
+        const next = { ...prev };
+        delete next[release.id];
+        return next;
+      });
+      toast.success("Build saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save build.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const initialize = async () => {
+    setBusy(true);
+    try {
+      await query.mutate({ action: "initialize", releases: localReleases });
+      toast.success("Existing releases imported as draft updates");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not import releases.");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const saveSteps = () => {
@@ -58,6 +87,10 @@ function AdminReleases() {
     });
     toast.success("Installation guide updated");
   };
+
+  if (query.isPending) return <LoadingState label="Loading releases..." />;
+  if (query.isError)
+    return <ErrorState description={query.error.message} onRetry={() => query.refetch()} />;
 
   return (
     <AdminPage>
@@ -98,147 +131,143 @@ function AdminReleases() {
 
       <section id="whats-new" className="scroll-mt-24">
         <Panel title="What's New" icon={ListChecks} bodyClassName="p-4 space-y-3">
-          {current ? (
-            <>
-              <Label htmlFor="current-release-notes">
-                Release notes for v{current.version} · build {current.build}
-              </Label>
-              <Textarea
-                id="current-release-notes"
-                rows={6}
-                value={current.notes}
-                placeholder="No release notes yet."
-                onChange={(e) => update(current.id, { notes: e.target.value })}
-              />
-              <p className="text-sm text-muted-foreground">
-                Shown under the current build information on the public Download page.
-              </p>
-            </>
+          {query.data.initialized ? (
+            <ReleasePosts releases={releases} save={save} />
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Set a build as current to edit its release notes.
-            </p>
+            <>
+              <p className="text-sm text-muted-foreground">
+                Import the existing release records to manage shared update posts. APK details and
+                the current build selection are preserved; notes start as drafts.
+              </p>
+              <Button variant="gold" disabled={busy} onClick={initialize}>
+                Import existing releases
+              </Button>
+            </>
           )}
         </Panel>
       </section>
 
       <ul className="space-y-3">
-        {releases.map((r) => (
-          <li key={r.id} className="overflow-hidden rounded-xl border-2 border-border bg-card">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border bg-secondary/40 px-4 py-2.5">
-              <div className="min-w-0">
-                <p className="font-display text-base">
-                  v{r.version} · build {r.build}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {r.platform} · {r.fileName ?? "No file"} · {formatBytes(r.fileSizeBytes)} ·{" "}
-                  {r.downloads.toLocaleString()} downloads
-                </p>
+        {releases.map((saved) => {
+          const r = { ...saved, ...patches[saved.id] };
+          return (
+            <li key={r.id} className="overflow-hidden rounded-xl border-2 border-border bg-card">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border bg-secondary/40 px-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="font-display text-base">
+                    v{r.version} · build {r.build}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {r.platform} · {r.fileName ?? "No file"} · {formatBytes(r.fileSizeBytes)} ·{" "}
+                    {r.downloads.toLocaleString()} downloads
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <StatusPill
+                    tone={r.status === "current" ? "ok" : r.status === "draft" ? "warn" : "off"}
+                  >
+                    {r.status}
+                  </StatusPill>
+                  {r.status !== "current" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy || !query.data.initialized}
+                      onClick={() => makeCurrent(r)}
+                    >
+                      Make current
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <StatusPill
-                  tone={r.status === "current" ? "ok" : r.status === "draft" ? "warn" : "off"}
+
+              <fieldset disabled={busy || !query.data.initialized} className="space-y-3 p-4">
+                <div className="grid gap-3 sm:grid-cols-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`v-${r.id}`}>Version</Label>
+                    <Input
+                      id={`v-${r.id}`}
+                      value={r.version}
+                      onChange={(e) => update(r.id, { version: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`b-${r.id}`}>Build</Label>
+                    <Input
+                      id={`b-${r.id}`}
+                      value={r.build}
+                      onChange={(e) => update(r.id, { build: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`a-${r.id}`}>Minimum Android</Label>
+                    <Input
+                      id={`a-${r.id}`}
+                      value={r.minAndroid}
+                      onChange={(e) => update(r.id, { minAndroid: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`f-${r.id}`}>APK file name</Label>
+                    <Input
+                      id={`f-${r.id}`}
+                      value={r.fileName ?? ""}
+                      placeholder="civilcraft.apk"
+                      onChange={(e) => update(r.id, { fileName: e.target.value || null })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor={`u-${r.id}`}>Download URL</Label>
+                  <Input
+                    id={`u-${r.id}`}
+                    value={r.fileUrl ?? ""}
+                    placeholder="https://"
+                    onChange={(e) => update(r.id, { fileUrl: e.target.value || null })}
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`min-${r.id}`}>Minimum requirements (one per line)</Label>
+                    <Textarea
+                      id={`min-${r.id}`}
+                      rows={4}
+                      value={r.minRequirements.join("\n")}
+                      onChange={(e) =>
+                        update(r.id, {
+                          minRequirements: e.target.value.split("\n").filter(Boolean),
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor={`rec-${r.id}`}>Recommended requirements (one per line)</Label>
+                    <Textarea
+                      id={`rec-${r.id}`}
+                      rows={4}
+                      value={r.recommendedRequirements.join("\n")}
+                      onChange={(e) =>
+                        update(r.id, {
+                          recommendedRequirements: e.target.value.split("\n").filter(Boolean),
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+                <Button
+                  variant="gold"
+                  size="sm"
+                  disabled={!patches[r.id]}
+                  onClick={() => saveBuild(r)}
                 >
-                  {r.status}
-                </StatusPill>
-                {r.status !== "current" ? (
-                  <Button size="sm" variant="outline" onClick={() => makeCurrent(r)}>
-                    Make current
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="space-y-3 p-4">
-              <div className="grid gap-3 sm:grid-cols-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor={`v-${r.id}`}>Version</Label>
-                  <Input
-                    id={`v-${r.id}`}
-                    value={r.version}
-                    onChange={(e) => update(r.id, { version: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`b-${r.id}`}>Build</Label>
-                  <Input
-                    id={`b-${r.id}`}
-                    value={r.build}
-                    onChange={(e) => update(r.id, { build: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`a-${r.id}`}>Minimum Android</Label>
-                  <Input
-                    id={`a-${r.id}`}
-                    value={r.minAndroid}
-                    onChange={(e) => update(r.id, { minAndroid: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`f-${r.id}`}>APK file name</Label>
-                  <Input
-                    id={`f-${r.id}`}
-                    value={r.fileName ?? ""}
-                    placeholder="civilcraft.apk"
-                    onChange={(e) => update(r.id, { fileName: e.target.value || null })}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor={`u-${r.id}`}>Download URL</Label>
-                <Input
-                  id={`u-${r.id}`}
-                  value={r.fileUrl ?? ""}
-                  placeholder="https://"
-                  onChange={(e) => update(r.id, { fileUrl: e.target.value || null })}
-                />
-              </div>
-
-              {r.status !== "current" ? (
-                <div className="space-y-1.5">
-                  <Label htmlFor={`n-${r.id}`}>Release notes</Label>
-                  <Textarea
-                    id={`n-${r.id}`}
-                    rows={3}
-                    value={r.notes}
-                    onChange={(e) => update(r.id, { notes: e.target.value })}
-                  />
-                </div>
-              ) : null}
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor={`min-${r.id}`}>Minimum requirements (one per line)</Label>
-                  <Textarea
-                    id={`min-${r.id}`}
-                    rows={4}
-                    value={r.minRequirements.join("\n")}
-                    onChange={(e) =>
-                      update(r.id, {
-                        minRequirements: e.target.value.split("\n").filter(Boolean),
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor={`rec-${r.id}`}>Recommended requirements (one per line)</Label>
-                  <Textarea
-                    id={`rec-${r.id}`}
-                    rows={4}
-                    value={r.recommendedRequirements.join("\n")}
-                    onChange={(e) =>
-                      update(r.id, {
-                        recommendedRequirements: e.target.value.split("\n").filter(Boolean),
-                      })
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-          </li>
-        ))}
+                  Save build
+                </Button>
+              </fieldset>
+            </li>
+          );
+        })}
       </ul>
 
       <Panel title="Installation guide" icon={ListChecks} bodyClassName="p-4 space-y-3">
