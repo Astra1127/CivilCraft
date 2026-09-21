@@ -32,10 +32,12 @@ function NavList({
   items,
   onNavigate,
   dense,
+  onSignOut,
 }: {
   items: DashboardNavItem[];
   onNavigate?: () => void;
   dense?: boolean;
+  onSignOut: () => Promise<void>;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const sections: string[] = [];
@@ -77,6 +79,21 @@ function NavList({
                   </li>
                 );
               })}
+            {section === items.find((item) => item.label === "Settings")?.section ? (
+              <li className="mt-2 border-t border-border pt-2">
+                <button
+                  type="button"
+                  onClick={() => void onSignOut()}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-xl border-2 border-transparent text-sm font-bold text-foreground/75 transition-all hover:-translate-y-0.5 hover:border-border hover:bg-card hover:text-foreground",
+                    dense ? "px-3 py-1.5" : "px-3 py-2.5",
+                  )}
+                >
+                  <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">Sign out</span>
+                </button>
+              </li>
+            ) : null}
           </ul>
         </div>
       ))}
@@ -135,7 +152,12 @@ export function DashboardShell({
                   <SheetTitle className="text-left font-display">{title}</SheetTitle>
                 </SheetHeader>
                 <nav aria-label={title} className="p-3">
-                  <NavList items={items} dense={admin} onNavigate={() => setOpen(false)} />
+                  <NavList
+                    items={items}
+                    dense={admin}
+                    onNavigate={() => setOpen(false)}
+                    onSignOut={signOut}
+                  />
                 </nav>
               </SheetContent>
             </Sheet>
@@ -189,10 +211,6 @@ export function DashboardShell({
             <span className="hidden max-w-[12rem] truncate text-sm font-bold text-muted-foreground sm:block">
               {(variant === "admin" ? adminUser : player)?.displayName}
             </span>
-            <Button variant="outline" size="sm" onClick={signOut}>
-              <LogOut className="mr-1 h-4 w-4" aria-hidden="true" />
-              Sign out
-            </Button>
           </div>
         </div>
       </header>
@@ -209,7 +227,7 @@ export function DashboardShell({
               <p className="mb-2 px-2 text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
                 Control Center
               </p>
-              <NavList items={items} dense />
+              <NavList items={items} dense onSignOut={signOut} />
             </div>
           ) : (
             /* Engineer's notebook: tabbed paper binder down the left */
@@ -217,7 +235,7 @@ export function DashboardShell({
               <p className="mb-2 pl-10 text-[10px] font-extrabold uppercase tracking-[0.18em] text-muted-foreground">
                 Engineer Hub
               </p>
-              <NavList items={items} />
+              <NavList items={items} onSignOut={signOut} />
             </div>
           )}
         </nav>

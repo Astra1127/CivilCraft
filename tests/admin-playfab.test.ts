@@ -1,4 +1,6 @@
 import { summarizePlayers } from "../src/lib/playfab/analytics.server.ts";
+import { imageStorage } from "../src/lib/cms/images.server.ts";
+const originalBlobConfiguration = imageStorage.configuration;
 import { mapIdentity } from "../src/lib/playfab/admin-players.server.ts";
 import { handleLeaderboardRequest, mapLeaderboard } from "../src/lib/playfab/leaderboard.server.ts";
 import { handlePlayerBugRequest } from "../src/lib/playfab/bug-reports.server.ts";
@@ -47,6 +49,7 @@ const tsv =
 let exportSerial = 0;
 let fragmentFiles: string[] | null = null;
 beforeEach(() => {
+  imageStorage.configuration = async () => "Unavailable";
   env.ADMIN_SESSION_SECRET = "test-admin-session-credential-" + ++exportSerial + "-long-enough";
   fragmentFiles = null;
   Object.assign(process.env, env);
@@ -213,6 +216,7 @@ beforeEach(() => {
   };
 });
 after(() => {
+  imageStorage.configuration = originalBlobConfiguration;
   globalThis.fetch = fetchBefore;
   for (const [k, v] of Object.entries(prior)) {
     if (v === undefined) delete process.env[k];
@@ -278,23 +282,75 @@ test("missing secret is a safe partial state; live probe checks PlayFab", async 
   assert.match(down, /Unavailable/);
   assert.ok(!down.includes(env.PLAYFAB_SECRET_KEY));
 });
-test("integration configuration reports safe statuses without exposing service credentials", async () => {
+test("integration configuration reports safe statuses without exposing service credentials", async (t) => {
+  let blobAvailable = false;
+  t.mock.method(imageStorage, "configuration", async () =>
+    blobAvailable ? "Configured" : "Unavailable",
+  );
   const names = [
     "BLOB_READ_WRITE_TOKEN",
     "PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID",
     "PLAYFAB_RELEASE_EMAIL_TEMPLATE_ID",
     "CRON_SECRET",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "SMTP_FROM",
+    "PLAYFAB_CONTACT_ADMIN_PLAYER_ID",
+    "PLAYFAB_CONTACT_ADMIN_EMAIL_TEMPLATE_ID",
+    "PLAYFAB_CONTACT_REPLY_EMAIL_TEMPLATE_ID",
+    "BLOB_STORE_ID",
+    "BLOB_WEBHOOK_PUBLIC_KEY",
   ];
   const previous = names.map((name) => process.env[name]);
   try {
     const cookie = await session();
     for (const name of names) delete process.env[name];
     const missing = await (await request("/api/admin/playfab/status", cookie)).json();
-    assert.deepEqual(Object.values(missing.services), Array(4).fill("Not configured"));
+    assert.equal(missing.services.contactDelivery, "PlayFab template fallback");
+    assert.ok(
+      Object.entries(missing.services)
+        .filter(([key]) => !["contactDelivery", "contactLinkOrigin", "imageStorage"].includes(key))
+        .every(([, value]) => value === "Not configured"),
+    );
+    process.env["BLOB_STORE_ID"] = "connected-store";
+    process.env["BLOB_WEBHOOK_PUBLIC_KEY"] = "public-key";
+    assert.equal(
+      (await (await request("/api/admin/playfab/status", cookie)).json()).services.imageStorage,
+      "Unavailable",
+      "metadata alone does not prove runtime access",
+    );
     for (const name of names) process.env[name] = "private-integration-canary-" + name;
+    blobAvailable = true;
+    delete process.env["BLOB_READ_WRITE_TOKEN"];
+    process.env["SMTP_PORT"] = "465";
+    process.env["SMTP_FROM"] = "notify@example.test";
+    process.env["PLAYFAB_CONTACT_ADMIN_PLAYER_ID"] = "BEEF";
     const response = await request("/api/admin/playfab/status", cookie);
     const text = await response.text();
-    assert.deepEqual(Object.values(JSON.parse(text).services), Array(4).fill("Configured"));
+    const services = JSON.parse(text).services;
+    assert.equal(services.contactDelivery, "Direct SMTP");
+    assert.ok(
+      Object.entries(services)
+        .filter(([key]) => key !== "contactDelivery")
+        .every(([, value]) => value === "Configured"),
+    );
+    delete process.env["SMTP_PASSWORD"];
+    const partial = (await (await request("/api/admin/playfab/status", cookie)).json()).services;
+    assert.equal(partial.contactSmtp, "Incomplete or invalid");
+    assert.equal(partial.contactDelivery, "Direct SMTP");
+    process.env["SMTP_PASSWORD"] = "test-only-password";
+    process.env["SMTP_PORT"] = "";
+    assert.equal(
+      (await (await request("/api/admin/playfab/status", cookie)).json()).services.contactSmtp,
+      "Configured",
+    );
+    process.env["SMTP_PORT"] = "invalid";
+    assert.equal(
+      (await (await request("/api/admin/playfab/status", cookie)).json()).services.contactSmtp,
+      "Incomplete or invalid",
+    );
     assert.ok(!text.includes("private-integration-canary"));
     assert.ok(!text.includes(env.PLAYFAB_SECRET_KEY));
     assert.ok(!text.includes(env.ADMIN_SESSION_SECRET));

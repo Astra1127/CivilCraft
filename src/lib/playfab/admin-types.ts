@@ -44,10 +44,16 @@ export interface AdminPlayerPage {
 }
 export interface AdminIntegrationStatus {
   services: {
-    imageStorage: "Configured" | "Not configured";
+    imageStorage: "Configured" | "Unavailable";
     recoveryTemplate: "Configured" | "Not configured";
     releaseTemplate: "Configured" | "Not configured";
     emailWorker: "Configured" | "Not configured";
+    contactSmtp: "Configured" | "Not configured" | "Incomplete or invalid";
+    contactDelivery: "Direct SMTP" | "PlayFab template fallback";
+    contactLinkOrigin: "Configured" | "Not configured";
+    contactAdminRecipient: "Configured" | "Not configured";
+    contactAdminTemplate: "Configured" | "Not configured";
+    contactReplyTemplate: "Configured" | "Not configured";
   };
   titleId: string;
   mode: "Live";

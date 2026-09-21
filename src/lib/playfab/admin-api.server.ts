@@ -1,4 +1,5 @@
 import { contactSettingsRequest } from "../cms/contact-settings.server.ts";
+import { integrationServices } from "./integration-status.server.ts";
 import { releaseRequest } from "../cms/releases.server.ts";
 import { messageRequest } from "../cms/messages.server.ts";
 import { filterSortPlayers, directorySorts, type DirectoryOptions } from "./directory-filters.ts";
@@ -61,15 +62,8 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     }
     if (path === "/api/admin/playfab/status" && request.method === "GET") {
       const { titleId, secret } = adminGameConfig();
-      const configured = (name: string) =>
-        process.env[name]?.trim() ? ("Configured" as const) : ("Not configured" as const);
       const status: AdminIntegrationStatus = {
-        services: {
-          imageStorage: configured("BLOB_READ_WRITE_TOKEN"),
-          recoveryTemplate: configured("PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID"),
-          releaseTemplate: configured("PLAYFAB_RELEASE_EMAIL_TEMPLATE_ID"),
-          emailWorker: configured("CRON_SECRET"),
-        },
+        services: await integrationServices(),
         titleId,
         mode: "Live",
         connection: "Partially configured",

@@ -36,10 +36,11 @@ function TermsPage() {
           <h2 className="font-display text-xl text-foreground">Educational use</h2>
           <p>
             The game and this website are provided free of charge for learning purposes as part of
-            an academic capstone project. Civil Craft simplifies selected engineering concepts for
-            educational gameplay. It is not professional engineering software or a substitute for
-            structural analysis, engineering design, formal engineering instruction, or engineering
-            approval or certification. The game and website are offered as-is, without warranty.
+            an academic capstone project. Civil Craft introduces selected basic structural mechanics
+            concepts. Its gameplay-oriented simulation does not fully reproduce real-world
+            engineering conditions, and material properties are adjusted for learning and gameplay.
+            It does not replace professional structural analysis, engineering design software or
+            engineering judgment. The game and website are offered as-is, without warranty.
           </p>
         </section>
         <section className="paper-panel space-y-2 p-5">

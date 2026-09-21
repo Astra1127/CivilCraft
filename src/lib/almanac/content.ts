@@ -59,7 +59,7 @@ export const bridgeTypes: BridgeTypeEntry[] = [
     name: "Truss Bridge",
     description: "Uses connected structural members, commonly arranged in triangular forms.",
     howItWorks:
-      "Triangles cannot deform without changing member length, so each member carries pure tension or compression instead of bending.",
+      "Triangular frames distribute loads through connected members, which mainly carry tension or compression in a simplified truss.",
     strengths: "Strong for its weight, efficient across medium spans.",
     inGame: "The workhorse of the canyon contracts.",
     conceptIds: ["tension", "compression", "load-distribution", "stability"],
@@ -75,7 +75,8 @@ export const bridgeTypes: BridgeTypeEntry[] = [
     description: "Uses a curved structural form to transfer loads toward its supports.",
     howItWorks:
       "The arch turns downward load into compression along the curve, which is delivered sideways into the abutments.",
-    strengths: "Very strong in compression, great over canyons.",
+    strengths:
+      "Carries loads mainly through compression when its supports resist the outward push.",
     inGame: "Canyon crossings where solid rock walls can take the thrust.",
     conceptIds: ["compression", "load-distribution", "support"],
     realWorld: {
@@ -90,7 +91,7 @@ export const bridgeTypes: BridgeTypeEntry[] = [
     description: "Uses cables or ropes to support the bridge deck across longer spans.",
     howItWorks:
       "The deck hangs from vertical hangers on a main cable; the cable pulls in tension and the towers push down in compression.",
-    strengths: "The only practical way across the widest gaps.",
+    strengths: "Cables can support a deck across long spans.",
     inGame: "Late, wide crossings with a larger budget.",
     conceptIds: ["tension", "compression", "load-distribution"],
     realWorld: {
@@ -130,7 +131,8 @@ export const engineeringConcepts: EngineeringConcept[] = [
   {
     id: "load",
     name: "Load",
-    summary: "The weight a bridge carries — the deck itself plus vehicles crossing it.",
+    summary:
+      "Dead load is the bridge's own weight. Live load changes as vehicles or other traffic use the bridge.",
     diagram: "▼ ▼ ▼ ▼",
   },
   {
@@ -148,13 +150,14 @@ export const engineeringConcepts: EngineeringConcept[] = [
   {
     id: "stability",
     name: "Stability",
-    summary: "Whether a structure holds its shape once load is applied.",
+    summary:
+      "A stable bridge resists changes in shape. In equilibrium, forces and turning effects balance so it remains at rest.",
     diagram: "△ stable   □ racks",
   },
   {
     id: "structural-failure",
     name: "Structural Failure",
-    summary: "A member exceeding what it can carry, breaking the load path.",
+    summary: "A bridge or member can deform or break when it cannot carry the applied forces.",
     diagram: "──/ /──  member snaps",
   },
 ];

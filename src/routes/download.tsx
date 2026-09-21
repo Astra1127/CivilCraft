@@ -113,7 +113,7 @@ function DownloadPage() {
 
           {release ? (
             <dl className="panel grid gap-2 p-6 text-sm">
-              <p className="font-display text-lg">Game information</p>
+              <p className="font-display text-lg">Current build</p>
               {[
                 ["Version", release.version],
                 ["Build", release.build],

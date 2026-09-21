@@ -67,7 +67,9 @@ function SettingsPage() {
                 Email updates
               </Label>
             </div>
-            <p className="text-sm text-muted-foreground">Receive news and patch-note summaries.</p>
+            <p className="text-sm text-muted-foreground">
+              Receive email notifications about published updates.
+            </p>
           </div>
           <Switch
             id="email-updates"
@@ -86,7 +88,7 @@ function SettingsPage() {
               </Label>
             </div>
             <p className="text-sm text-muted-foreground">
-              Show your display name on public leaderboards.
+              Preview only. This control does not change leaderboard visibility.
             </p>
           </div>
           <Switch id="public-profile" checked={publicProfile} onCheckedChange={setPublicProfile} />
@@ -101,7 +103,7 @@ function SettingsPage() {
               </Label>
             </div>
             <p className="text-sm text-muted-foreground">
-              Use denser spacing for tables and lists.
+              Preview only. This control does not change dashboard spacing.
             </p>
           </div>
           <Switch id="compact-mode" checked={compactMode} onCheckedChange={setCompactMode} />
@@ -131,8 +133,8 @@ function SettingsPage() {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Account details like display name, password and cosmetics are managed in the game and synced
-        back to this dashboard.
+        Manage your display name and cosmetics in Civil Craft. To reset your shared account
+        password, use Forgot Password on the Login page.
       </p>
     </div>
   );

@@ -1,9 +1,8 @@
 import type { CmsState } from "./types";
 
 /**
- * Initial website CMS content. Everything here is an editable placeholder —
- * it is fully manageable from the Admin Dashboard and contains no invented
- * official Civil Craft information.
+ * Initial editable website copy. Saved administrator content takes precedence.
+ * Never seed sample messages, builds, requirements or publication dates.
  */
 export const seedState: CmsState = {
   news: [],
@@ -12,8 +11,9 @@ export const seedState: CmsState = {
   faq: [
     {
       id: "f1",
-      question: "Is Civil Craft free?",
-      answer: "Civil Craft: Bridge Edition is a student educational project and is free to play.",
+      question: "What is Civil Craft: Bridge Edition?",
+      answer:
+        "A 3D educational bridge-construction simulation for Android. Build and test bridges to explore basic structural mechanics, then improve your designs. It is not professional engineering design or analysis software.",
       category: "Download",
       order: 1,
       published: true,
@@ -40,7 +40,7 @@ export const seedState: CmsState = {
       id: "f4",
       question: "Where is my player progress stored?",
       answer:
-        "Progress is stored in the game backend (PlayFab) and tied to your player account, not to your device.",
+        "Progress synced by the game to PlayFab is tied to your Civil Craft account. Sign in with that same account to see the records the game has saved.",
       category: "Account",
       order: 4,
       published: true,
@@ -82,43 +82,9 @@ export const seedState: CmsState = {
       published: true,
     },
   ],
-  messages: [
-    {
-      id: "m1",
-      name: "Sample Sender",
-      email: "sample@example.com",
-      subject: "Sample inquiry",
-      inquiryType: "General Inquiry",
-      message: "Sample inquiry retained so the support inbox is not empty during review.",
-      createdAt: "2026-08-19T10:00:00.000Z",
-      status: "New",
-    },
-  ],
+  messages: [],
   activity: [],
-  releases: [
-    {
-      id: "r1",
-      version: "0.1.0",
-      build: "100",
-      title: "Prototype Build",
-      platform: "Android",
-      fileName: null,
-      fileSizeBytes: null,
-      fileUrl: null,
-      minAndroid: "9.0",
-      minRequirements: ["Android 9.0+", "4 GB RAM", "Quad-core processor", "1.5 GB free storage"],
-      recommendedRequirements: [
-        "Android 11+",
-        "6 GB RAM",
-        "Octa-core processor",
-        "2 GB free storage",
-      ],
-      notes: "First playable prototype build.",
-      releaseDate: "2026-08-10",
-      status: "current",
-      downloads: 0,
-    },
-  ],
+  releases: [],
   about: {
     story: {
       heading: "One canyon at a time.",

@@ -58,17 +58,17 @@ const pillars = [
   {
     icon: Hammer,
     title: "Build",
-    text: "Design bridges using different structural forms and construction materials.",
+    text: "Design a bridge using available materials, the contract budget and project requirements.",
   },
   {
     icon: Gauge,
     title: "Test",
-    text: "Simulate vehicles, loads and environmental conditions to observe how your bridge responds.",
+    text: "Test your bridge under the contract's required loads and conditions.",
   },
   {
     icon: BookOpen,
     title: "Learn",
-    text: "Apply basic structural mechanics through construction, observation and problem-solving.",
+    text: "Observe structural behavior, improve your design and try again.",
   },
 ];
 
@@ -169,9 +169,9 @@ function HomePage() {
             </h1>
             <p className="mt-3 font-display text-xl">Build. Test. Learn.</p>
             <p className="mt-4 max-w-lg text-muted-foreground">
-              Step into Arcadia as an aspiring civil engineer. Take on construction contracts,
-              design bridges and test them under different loads and conditions as you learn basic
-              structural mechanics.
+              A 3D educational bridge-construction simulation for Android. Take on contracts as an
+              aspiring engineer and learn basic structural mechanics by building, testing and
+              improving your bridges.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button asChild size="lg" variant="gold">
@@ -515,8 +515,8 @@ function HomePage() {
             <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">Test</p>
             <h2 className="mt-3 text-3xl sm:text-4xl">Put It to the Test</h2>
             <p className="mt-4 max-w-lg text-muted-foreground">
-              Run a structural simulation and observe how vehicles, loads and environmental
-              conditions affect your bridge. Use the results to improve your design.
+              Test your bridge under the required loads and observe how it behaves. Use the results
+              to find weak points and improve your design.
             </p>
             <Checks
               items={[
@@ -526,7 +526,7 @@ function HomePage() {
               ]}
             />
             <p className="mt-6 font-display text-sm uppercase tracking-[0.18em] text-gold">
-              Build → Test → Learn → Improve
+              Build → Test → Improve → Learn
             </p>
           </div>
         </div>

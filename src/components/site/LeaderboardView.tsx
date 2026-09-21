@@ -183,14 +183,14 @@ export function LeaderboardView({
               query
                 ? "No matching players on this page."
                 : period === "weekly"
-                  ? "No weekly leaderboard records yet."
+                  ? "Weekly rankings are unavailable."
                   : "No all-time leaderboard records yet."
             }
             description={
               query
                 ? "Try another filter."
                 : period === "weekly"
-                  ? "Weekly scores recorded by Civil Craft will appear here."
+                  ? "Choose All-Time to view recorded engineering scores."
                   : "Engineering scores recorded by Civil Craft will appear here."
             }
           />

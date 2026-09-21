@@ -434,8 +434,8 @@ function AdminOverview() {
       </Panel>
       <Panel title="Local website configuration" icon={Package}>
         <p className="mb-4 text-sm text-muted-foreground">
-          Release settings and website content are stored in this browser. They are not global game
-          analytics or a verified deployed build.
+          This panel shows the legacy release copy stored in this browser. Use Game & Download for
+          the shared current build and published updates.
         </p>
         <div className="grid gap-x-8 md:grid-cols-2">
           <div>
@@ -454,9 +454,10 @@ function AdminOverview() {
           </div>
         </div>
         <p className="mt-4 text-xs text-muted-foreground">
-          News, gallery, FAQ, website action history, releases, settings and About content remain
-          browser-local. Their counters and sample records are excluded from this overview. Economy
-          analytics are omitted because no global transaction ledger is implemented.
+          FAQ, About content, installation steps and website action history still use local
+          settings. Gallery, contact details, messages and imported release posts use shared backend
+          storage. Economy analytics are omitted because no global transaction ledger is
+          implemented.
         </p>
       </Panel>
     </AdminPage>

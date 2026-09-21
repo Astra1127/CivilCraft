@@ -47,13 +47,13 @@ export const Route = createFileRoute("/about")({
       {
         name: "description",
         content:
-          "The story, gameplay loop, learning goals, game modes and student development team behind Civil Craft: Bridge Edition, an educational 3D bridge-building game.",
+          "Explore Civil Craft: Bridge Edition, a 3D Android bridge-building simulation for introductory structural mechanics, and meet its student development team.",
       },
       { property: "og:title", content: "About Civil Craft: Bridge Edition" },
       {
         property: "og:description",
         content:
-          "Story and lore, the player's role, learning through gameplay, game modes and the student team building Civil Craft: Bridge Edition.",
+          "The player's role, story contracts, learning through gameplay and the student team building Civil Craft: Bridge Edition.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -85,15 +85,15 @@ const roleSteps = [
     n: "04",
     icon: Weight,
     title: "Test",
-    text: "Simulate the crossing, improve your design and complete the project. Record your progress in the Almanac.",
+    text: "Test the crossing, observe the result and improve your design. Learn from each attempt.",
   },
 ];
 
 const concepts = [
   {
     icon: GitCompareArrows,
-    title: "Structural Forces",
-    text: "How forces travel through bridge members.",
+    title: "Bending",
+    text: "How bridge members bend under an applied load.",
   },
   {
     icon: Layers,
@@ -103,13 +103,13 @@ const concepts = [
   { icon: Ruler, title: "Load Distribution", text: "How weight spreads across the structure." },
   {
     icon: ShieldCheck,
-    title: "Bridge Stability",
-    text: "What keeps a structure standing under load.",
+    title: "Equilibrium & Stability",
+    text: "How balanced forces help a bridge remain at rest under load.",
   },
   {
     icon: Boxes,
-    title: "Material Properties",
-    text: "What each available material can and cannot take.",
+    title: "Material Stress",
+    text: "How forces within a material change as the bridge carries a load.",
   },
   {
     icon: Sparkles,
@@ -118,8 +118,8 @@ const concepts = [
   },
   {
     icon: Coins,
-    title: "Budget & Cost",
-    text: "Building an adequate structure within the level's budget.",
+    title: "Dead & Live Loads",
+    text: "The bridge's own weight and the changing loads of vehicles crossing it.",
   },
   {
     icon: Puzzle,
@@ -178,11 +178,18 @@ function MemberPortrait({ member }: { member: TeamMember }) {
 
 import { isRealText } from "@/lib/cms/content-types";
 
+const projectRoles = [
+  ["Project Manager", "Plans the project, coordinates tasks and tracks development progress."],
+  ["Game Programmer", "Develops the game, writes code and maintains its functionality."],
+  ["UI/UX Designer", "Designs the user interface and creates visual assets for the game."],
+  ["Documentation Specialist", "Organizes project documentation and prepares technical reports."],
+] as const;
+
 function AboutPage() {
   useHashScroll();
   const { isAuthenticated } = useAuth();
   const about = useCms((s) => s.about);
-  const team = [...(about?.team ?? [])]
+  const configuredTeam = [...(about?.team ?? [])]
     .filter(
       (m) =>
         m.published &&
@@ -196,6 +203,28 @@ function AboutPage() {
       contribution: isRealText(m.contribution) ? m.contribution : "",
     }))
     .sort((a, b) => a.order - b.order);
+  // Keep published people; represent missing roles without inventing names or assignments.
+  const team: TeamMember[] = [
+    ...configuredTeam,
+    ...projectRoles.flatMap(([role, responsibilities], index) =>
+      configuredTeam.some((member) =>
+        member.roles.some((value) => value.toLowerCase() === role.toLowerCase()),
+      )
+        ? []
+        : [
+            {
+              id: `project-role-${index}`,
+              fullName: role,
+              roles: [],
+              responsibilities,
+              contribution: "",
+              photoUrl: null,
+              order: index + 1,
+              published: true,
+            },
+          ],
+    ),
+  ];
   const story = about?.story;
   const academic = about?.academic;
   const [active, setActive] = useState<TeamMember | null>(null);
@@ -227,9 +256,9 @@ function AboutPage() {
             Building bridges. Inspiring future engineers.
           </h1>
           <p className="mt-4 max-w-xl text-sm text-muted-foreground sm:text-base">
-            Civil Craft: Bridge Edition is a 3D educational bridge-construction game centered on
-            learning through practical engineering challenges. Step into Arcadia as an aspiring
-            civil engineer and build new connections.
+            Civil Craft: Bridge Edition is a mobile-based 3D bridge-construction simulation for
+            Android. Build, test and improve bridges while exploring introductory structural
+            mechanics as an aspiring engineer.
           </p>
           <p className="mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">
             Review construction contracts, build bridges and test your designs as structural and
@@ -239,7 +268,7 @@ function AboutPage() {
             {[
               ["#story", "Story"],
               ["#learning", "Learning"],
-              ["#modes", "Game Modes"],
+              ["#modes", "Story Mode"],
               ["#team", "Team"],
             ].map(([href, label]) => (
               <a
@@ -402,11 +431,11 @@ function AboutPage() {
             </div>
             <div className="min-w-0">
               <Label>Engineering through play</Label>
-              <h2 className="mt-2 text-3xl sm:text-4xl">The physics is the teacher.</h2>
+              <h2 className="mt-2 text-3xl sm:text-4xl">Learn through testing.</h2>
               <p className="mt-3 text-muted-foreground">
-                Civil Craft introduces basic structural mechanics through construction and
-                simulation. Observe loads, materials and structural behavior, then apply what you
-                learn to the next bridge-building challenge.
+                Connect basic structural mechanics with bridge-building practice in a risk-free
+                virtual environment. Build, test, improve and learn as you observe loads, materials
+                and structural behavior.
               </p>
             </div>
           </div>
@@ -429,8 +458,8 @@ function AboutPage() {
                 <h3 className="font-display text-xl">Revisit what you discovered in the game</h3>
               </div>
               <p className="mt-2 text-sm text-muted-foreground">
-                Your Bridge Almanac is your personal engineering record: projects, discoveries,
-                engineering lessons, materials, bridge types and progress throughout your journey.
+                Your Bridge Almanac brings together engineering concepts, bridge types and materials
+                discovered in play, with completed-project records supplied by the game.
               </p>
             </div>
             <Button asChild variant="gold" className="shrink-0">
@@ -506,8 +535,8 @@ function AboutPage() {
             <Label>Behind Civil Craft</Label>
             <h2 className="mt-2 text-3xl sm:text-4xl">Meet the team.</h2>
             <p className="mt-3 text-muted-foreground">
-              Civil Craft: Bridge Edition is being developed as an academic thesis/capstone project
-              by a student development team.
+              The student team brings together four project roles: Project Manager, Game Programmer,
+              UI/UX Designer and Documentation Specialist.
             </p>
           </div>
 
@@ -582,9 +611,10 @@ function AboutPage() {
           <Label>Academic project</Label>
           <h2 className="mt-2 text-2xl sm:text-3xl">Built for learning.</h2>
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-            Civil Craft: Bridge Edition is developed as an academic thesis/capstone project. The
-            game is the practical output of that research: an interactive way to present
-            introductory structural engineering concepts.
+            Civil Craft uses Unity PhysX for educational gameplay, not professional structural
+            analysis. It introduces selected basic concepts, not advanced engineering topics.
+            Material properties are adjusted for learning and gameplay, so tests do not fully
+            reproduce real-world conditions or replace engineering design software or judgment.
           </p>
           <dl className="mt-7 grid gap-x-8 gap-y-5 border-t-2 border-dashed border-border pt-6 sm:grid-cols-2 lg:grid-cols-3">
             {[

@@ -84,28 +84,59 @@ export function AdminIntegrations() {
         <DataRow label="Provider" value="Vercel Blob (private)" />
         <DataRow label="Configuration" value={status?.services.imageStorage ?? "Unavailable"} />
         <p className="mt-3 text-xs text-muted-foreground">
-          Configure private image storage in the hosting environment, then redeploy. Credentials are
-          managed outside this interface.
+          Image storage uses the Blob SDK's runtime authentication with the connected store and
+          Vercel OIDC credentials. Configured means a read-only access check succeeded; it does not
+          test uploads. Unavailable means access could not be verified. Store metadata alone is not
+          authentication. Uploaded files and image reads remain private.
         </p>
       </Panel>
       <Panel title="Email" icon={Globe}>
-        <DataRow label="Provider" value="PlayFab SMTP / email templates" />
+        <DataRow label="Provider" value="PlayFab templates and server-side contact SMTP" />
         <DataRow
           label="Account Recovery template"
           value={status?.services.recoveryTemplate ?? "Unavailable"}
         />
         <DataRow
-          label="Update template"
+          label="Legacy Updates email template (optional)"
           value={status?.services.releaseTemplate ?? "Unavailable"}
         />
         <DataRow
-          label="Worker authentication"
+          label="Legacy Updates dispatch authentication (optional)"
           value={status?.services.emailWorker ?? "Unavailable"}
         />
+        <DataRow
+          label="Contact delivery mode"
+          value={status?.services.contactDelivery ?? "Unavailable"}
+        />
+        <DataRow label="Contact SMTP" value={status?.services.contactSmtp ?? "Unavailable"} />
+        <DataRow
+          label="Contact email link origin (SMTP)"
+          value={status?.services.contactLinkOrigin ?? "Unavailable"}
+        />
+        <DataRow
+          label="Admin notification recipient"
+          value={status?.services.contactAdminRecipient ?? "Unavailable"}
+        />
+        <DataRow
+          label="Admin contact template (fallback)"
+          value={status?.services.contactAdminTemplate ?? "Unavailable"}
+        />
+        <DataRow
+          label="Player reply template (fallback)"
+          value={status?.services.contactReplyTemplate ?? "Unavailable"}
+        />
         <p className="mt-3 text-xs text-muted-foreground">
-          SMTP is managed in PlayFab. These statuses reflect website configuration only; SMTP
-          delivery and the external worker schedule are not verified here. Password recovery
-          requires a custom Account Recovery template; no email is requested when it is missing.
+          Recovery uses PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID in PlayFab. Contact copies use SMTP_HOST,
+          SMTP_USER, SMTP_PASSWORD and SMTP_FROM; SMTP_PORT defaults to 587. SMTP links require a
+          valid HTTPS ADMIN_AUTH_ORIGIN. With no SMTP settings, existing PlayFab contact templates
+          remain the fallback. Partial SMTP settings do not fall back. These checks validate
+          configuration, not delivery or recipient mailbox availability.
+        </p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          The existing POST /api/email/dispatch worker uses PLAYFAB_RELEASE_EMAIL_TEMPLATE_ID,
+          CRON_SECRET and Blob duplicate protection. It reads legacy Updates records, not current
+          Game &amp; Download posts. These optional settings are not required for contact messages,
+          recovery or displaying What's New. No worker schedule is verified here.
         </p>
       </Panel>
       <Panel title="Website content" icon={Globe} bodyClassName="p-4 space-y-3">

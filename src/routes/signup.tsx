@@ -182,7 +182,7 @@ function SignupPage() {
               <>
                 <h1 className="mt-6 text-3xl">Become an Engineer</h1>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Create your account to track progress and achievements.
+                  Create your Civil Craft account to track progress and achievements.
                 </p>
 
                 <form onSubmit={submit} noValidate className="mt-6 space-y-4">

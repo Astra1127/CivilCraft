@@ -1,13 +1,7 @@
 import sharp from "sharp";
-import { put, get, del } from "@vercel/blob";
+import { put, get, del, list } from "@vercel/blob";
 import { AdminApiError } from "../playfab/admin-client.server.ts";
 import { imageTypes, maxImageBytes } from "./content-types.ts";
-
-function options() {
-  const token = process.env["BLOB_READ_WRITE_TOKEN"]?.trim();
-  if (!token) throw new AdminApiError(503, "Image storage is not configured.");
-  return { token };
-}
 
 /** Decode and re-encode: MIME labels and filename extensions are not trusted. */
 export async function validateImage(bytes: Uint8Array, mime: string) {
@@ -37,9 +31,22 @@ export async function validateImage(bytes: Uint8Array, mime: string) {
 }
 
 export const imageStorage = {
+  /** SDK resolves runtime OIDC credentials, including supported local CLI refresh. */
+  async configuration(): Promise<"Configured" | "Unavailable"> {
+    try {
+      await list({
+        prefix: "civilcraft/gallery/",
+        limit: 1,
+        abortSignal: AbortSignal.timeout(5000),
+      });
+      return "Configured";
+    } catch {
+      // Never expose provider errors, credentials, paths or listing results.
+      return "Unavailable";
+    }
+  },
   async write(path: string, bytes: Uint8Array, contentType: string) {
     const result = await put(path, Buffer.from(bytes), {
-      ...options(),
       access: "private",
       contentType,
       addRandomSuffix: false,
@@ -47,9 +54,9 @@ export const imageStorage = {
     return result.pathname;
   },
   async read(path: string) {
-    return get(path, { ...options(), access: "private", useCache: false });
+    return get(path, { access: "private", useCache: false });
   },
   async remove(path: string) {
-    await del(path, options());
+    await del(path);
   },
 };
