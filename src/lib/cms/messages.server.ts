@@ -114,7 +114,12 @@ async function playerId(request: Request, optional = false): Promise<string | nu
 async function notify(
   id: string,
   kind: "admin" | "player",
-  content: z.infer<typeof contactSchema>,
+  content: z.infer<typeof contactSchema> & {
+    createdAt?: string;
+    originalMessage?: string;
+    replyMessage?: string;
+    replyCreatedAt?: string;
+  },
   ownerId?: string | null,
 ) {
   const status = await notifyContact(kind, content, ownerId);
@@ -174,15 +179,16 @@ export async function messageRequest(request: Request, admin = false): Promise<R
     const body = await smallBody(request);
     if (!admin && !player) {
       const input = contactSchema.parse(body),
-        id = randomUUID();
+        id = randomUUID(),
+        createdAt = new Date().toISOString();
       await save(prefix + id, {
         ...input,
         id,
         ownerId: owner,
-        createdAt: new Date().toISOString(),
+        createdAt,
         status: "New",
       });
-      const notificationStatus = await notify(id, "admin", input);
+      const notificationStatus = await notify(id, "admin", { ...input, createdAt });
       return json({ id, notificationStatus }, 201);
     }
     const change = admin ? changeSchema.parse(body) : replyInput.parse(body);
@@ -205,7 +211,13 @@ export async function messageRequest(request: Request, admin = false): Promise<R
       const notificationStatus = await notify(
         reply.id,
         admin ? "player" : "admin",
-        { ...message, message: reply.message },
+        {
+          ...message,
+          message: reply.message,
+          replyMessage: reply.message,
+          originalMessage: message.message,
+          replyCreatedAt: reply.createdAt,
+        },
         message.ownerId,
       );
       return json({ success: true, id: reply.id, notificationStatus }, 201);

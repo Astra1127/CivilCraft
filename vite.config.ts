@@ -15,6 +15,23 @@ export default defineConfig(({ command, mode }) => {
       "ADMIN_USERS_JSON",
       "ADMIN_AUTH_ORIGIN",
       "ADMIN_SESSION_SECRET",
+      "PLAYFAB_RECOVERY_EMAIL_TEMPLATE_ID",
+      "PLAYFAB_RELEASE_EMAIL_TEMPLATE_ID",
+      "PLAYFAB_CONTACT_ADMIN_PLAYER_ID",
+      "PLAYFAB_CONTACT_ADMIN_EMAIL_TEMPLATE_ID",
+      "PLAYFAB_CONTACT_REPLY_EMAIL_TEMPLATE_ID",
+      "VERCEL_OIDC_TOKEN",
+      "BLOB_STORE_ID",
+      "BLOB_READ_WRITE_TOKEN",
+      "CRON_SECRET",
+      "SMTP_HOST",
+      "SMTP_PORT",
+      "SMTP_USER",
+      "SMTP_PASSWORD",
+      "SMTP_FROM",
+      "RESEND_API_KEY",
+      "ADMIN_EMAIL",
+      "RESEND_FROM",
     ]) {
       if (process.env[key] === undefined && serverEnv[key] !== undefined)
         process.env[key] = serverEnv[key];

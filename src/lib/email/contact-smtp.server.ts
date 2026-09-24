@@ -7,6 +7,11 @@ export interface ContactEmailContent {
   email: string;
   subject: string;
   message: string;
+  inquiryType?: string;
+  createdAt?: string;
+  originalMessage?: string;
+  replyMessage?: string;
+  replyCreatedAt?: string;
 }
 const escapeHtml = (value: string) =>
   value.replace(
