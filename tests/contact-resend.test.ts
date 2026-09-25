@@ -20,6 +20,11 @@ beforeEach(() => {
   delete process.env["ADMIN_EMAIL"];
   delete process.env["RESEND_FROM"];
   delete process.env["SMTP_HOST"];
+  delete process.env["SMTP_USER"];
+  delete process.env["SMTP_PASS"];
+  delete process.env["SMTP_PASSWORD"];
+  delete process.env["GMAIL_SMTP_USER"];
+  delete process.env["GMAIL_SMTP_APP_PASSWORD"];
   delete process.env["PLAYFAB_CONTACT_ADMIN_PLAYER_ID"];
   process.env["ADMIN_AUTH_ORIGIN"] = origin;
 });
@@ -199,7 +204,7 @@ test("notifyContact: routes admin notification to ADMIN_EMAIL via Resend when co
   assert.equal(sentTo, adminEmail);
 });
 
-test("notifyContact: routes player reply to user email when ownerId is null (guest reply fix)", async () => {
+test("sendContactResendEmail: routes player reply to user email when ownerId is null", async () => {
   process.env["RESEND_API_KEY"] = testApiKey;
   process.env["ADMIN_EMAIL"] = adminEmail;
 
@@ -212,8 +217,9 @@ test("notifyContact: routes player reply to user email when ownerId is null (gue
     return Response.json({ id: "resend_msg_reply_999" }, { status: 200 });
   };
 
-  const status = await notifyContact(
+  await sendContactResendEmail(
     "player",
+    "guest@example.test",
     {
       name: "Guest Visitor",
       email: "guest@example.test",
@@ -222,10 +228,9 @@ test("notifyContact: routes player reply to user email when ownerId is null (gue
       replyMessage: "Here is the admin answer",
       originalMessage: "Original guest question",
     },
-    null, // ownerId is null for guests
+    origin,
   );
 
-  assert.equal(status, "sent");
   assert.equal(sentTo, "guest@example.test");
   assert.ok(String(sentBody["html"]).includes("Here is the admin answer"));
   assert.ok(String(sentBody["html"]).includes("Original guest question"));

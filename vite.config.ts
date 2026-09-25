@@ -28,12 +28,20 @@ export default defineConfig(({ command, mode }) => {
       "SMTP_PORT",
       "SMTP_USER",
       "SMTP_PASSWORD",
+      "SMTP_PASS",
+      "SMTP_SECURE",
       "SMTP_FROM",
+      "EMAIL_FROM",
+      "GMAIL_SMTP_HOST",
+      "GMAIL_SMTP_PORT",
+      "GMAIL_SMTP_SECURE",
+      "GMAIL_SMTP_USER",
+      "GMAIL_SMTP_APP_PASSWORD",
       "RESEND_API_KEY",
       "ADMIN_EMAIL",
       "RESEND_FROM",
     ]) {
-      if (process.env[key] === undefined && serverEnv[key] !== undefined)
+      if (!process.env[key]?.trim() && serverEnv[key] !== undefined)
         process.env[key] = serverEnv[key];
     }
   }
