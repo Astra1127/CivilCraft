@@ -152,6 +152,42 @@ test("hidden uploads and subsequently hidden/deleted images cannot be read publi
   assert.equal(blobs.size, 0);
   assert.equal((await admin("/images/" + item.id)).status, 404);
 });
+test("gallery items can be uploaded with description, edited by admin, and updated publicly", async () => {
+  const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: "#ccaa44" } })
+    .png()
+    .toBuffer();
+  const form = new FormData();
+  form.set("file", new File([bytes], "bridge.png", { type: "image/png" }));
+  form.set("caption", "Original Bridge Caption");
+  form.set("description", "Original Bridge Description");
+  form.set("category", "Bridges");
+  form.set("visible", "true");
+  const uploadRes = await admin("/upload", form);
+  assert.equal(uploadRes.status, 201);
+  const uploaded = await uploadRes.json();
+  assert.equal(uploaded.description, "Original Bridge Description");
+
+  const initialPublic = await (await publicRead())!.json();
+  assert.equal(initialPublic.gallery[0].caption, "Original Bridge Caption");
+  assert.equal(initialPublic.gallery[0].description, "Original Bridge Description");
+
+  const editRes = await change("/gallery", {
+    id: uploaded.id,
+    action: "edit",
+    caption: "Updated Suspension Span",
+    description: "Detailed description of cable tension and deck truss.",
+    category: "Gameplay",
+    visible: true,
+  });
+  assert.equal(editRes.status, 200);
+
+  const updatedPublic = await (await publicRead())!.json();
+  assert.equal(updatedPublic.gallery[0].caption, "Updated Suspension Span");
+  assert.equal(updatedPublic.gallery[0].description, "Detailed description of cable tension and deck truss.");
+  assert.equal(updatedPublic.gallery[0].category, "Gameplay");
+
+  await change("/gallery", { id: uploaded.id, action: "delete" });
+});
 test("all content administration endpoints reject guests and cross-origin writes", async () => {
   for (const path of ["", "/upload", "/gallery", "/updates", "/images/123"]) {
     assert.equal((await admin(path, undefined, undefined, false)).status, 401);

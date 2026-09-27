@@ -1,4 +1,5 @@
 import { useReleasePosts } from "@/lib/cms/releases";
+import { useFaq } from "@/lib/cms/faq";
 import { createFileRoute } from "@tanstack/react-router";
 import { Download, Smartphone } from "lucide-react";
 import { EmptyState } from "@/components/common/States";
@@ -40,7 +41,9 @@ function DownloadPage() {
   const updates = useReleasePosts();
   const release = updates.data?.initialized ? updates.data.current : legacyRelease;
   const latest = updates.data?.latest;
-  const faq = useCms((s) => s.faq.filter((f) => f.published).sort((a, b) => a.order - b.order));
+  const legacyFaq = useCms((s) => s.faq.filter((f) => f.published).sort((a, b) => a.order - b.order));
+  const faqQuery = useFaq();
+  const faq = faqQuery.data && faqQuery.data.length > 0 ? faqQuery.data.filter((f) => f.published) : legacyFaq;
   const steps = useCms((s) => s.settings.installSteps);
 
   return (

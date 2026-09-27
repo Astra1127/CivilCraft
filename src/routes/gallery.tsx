@@ -1,12 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Image as ImageIcon, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Lightbox } from "@/components/common/Lightbox";
-import { PageHeader } from "@/components/common/PageHeader";
 import { EmptyState } from "@/components/common/States";
 import { PublicLayout } from "@/components/site/PublicLayout";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useContent } from "@/lib/cms/content";
-import type { GalleryCategory } from "@/lib/cms/types";
+import type { GalleryCategory, GalleryItem } from "@/lib/cms/types";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/gallery")({
   head: () => ({
@@ -15,12 +17,13 @@ export const Route = createFileRoute("/gallery")({
       {
         name: "description",
         content:
-          "Screenshots from Civil Craft: Bridge Edition — gameplay, bridges, environments and characters from the low-poly bridge building game.",
+          "Explore Civil Craft: Bridge Edition screenshots, environments, bridges, characters, and UI visuals from the low-poly bridge-building simulation.",
       },
-      { property: "og:title", content: "Gallery — Civil Craft: Bridge Edition" },
+      { property: "og:title", content: "Explore Civil Craft: Bridge Edition — Gallery" },
       {
         property: "og:description",
-        content: "Gameplay, bridge, environment and character screenshots from Civil Craft.",
+        content:
+          "Official gallery for Civil Craft: Bridge Edition. Explore gameplay, canyon environments, custom bridge designs, and game art.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -29,141 +32,205 @@ export const Route = createFileRoute("/gallery")({
   component: GalleryPage,
 });
 
-/** Public-facing label for each stored category. */
-const label: Record<GalleryCategory, string> = {
+/** Display label mapping for categories */
+const categoryDisplayNames: Record<string, string> = {
   Gameplay: "Gameplay",
+  Environments: "Environments",
+  Maps: "Environments",
   Bridges: "Bridges",
-  Maps: "Environment",
   Characters: "Characters",
-  UI: "Interface",
-  Videos: "Videos",
+  UI: "UI",
 };
 
-const order: GalleryCategory[] = ["Gameplay", "Bridges", "Maps", "Characters", "UI"];
+const filterTabs = ["All", "Gameplay", "Environments", "Bridges", "Characters", "UI"] as const;
+type FilterTab = (typeof filterTabs)[number];
 
-/**
- * Asymmetric rhythm: each entry is the span/height treatment for the item at
- * that position, repeating so the gallery never reads as an equal card grid.
- */
-const rhythm = [
-  "lg:col-span-4 aspect-[16/9]",
-  "lg:col-span-2 aspect-[3/4]",
-  "lg:col-span-2 aspect-[4/3]",
-  "lg:col-span-4 aspect-[16/9]",
-  "lg:col-span-2 aspect-[4/3]",
-  "lg:col-span-2 aspect-[4/3]",
-  "lg:col-span-2 aspect-[4/3]",
-];
+function matchesTab(itemCategory: string, tab: FilterTab): boolean {
+  if (tab === "All") return true;
+  if (tab === "Environments") {
+    return itemCategory === "Environments" || itemCategory === "Maps";
+  }
+  return itemCategory.toLowerCase() === tab.toLowerCase();
+}
 
 function GalleryPage() {
   const query = useContent();
   const gallery = query.data?.gallery ?? [];
-  const [category, setCategory] = useState<GalleryCategory | "All">("All");
-  const [visible, setVisible] = useState(9);
-  const [index, setIndex] = useState<number | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<FilterTab>("All");
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
-  // Only offer categories that actually contain images.
-  const categories = useMemo(
-    () => order.filter((c) => gallery.some((g) => g.category === c)),
-    [gallery],
-  );
+  const filteredItems = useMemo(() => {
+    return gallery.filter((item) => matchesTab(item.category, selectedFilter));
+  }, [gallery, selectedFilter]);
 
-  const items = useMemo(
-    () => gallery.filter((g) => category === "All" || g.category === category),
-    [gallery, category],
-  );
+  const lightboxItems = useMemo(() => {
+    return filteredItems.map((item) => ({
+      id: item.id,
+      caption: item.caption,
+      url: item.url,
+      category: categoryDisplayNames[item.category] || item.category,
+      description: item.description,
+    }));
+  }, [filteredItems]);
 
   return (
     <PublicLayout>
-      <PageHeader
-        eyebrow="Field Photos"
-        title="Civil Craft Gallery"
-        description="Official Civil Craft screenshots and media: bridge designs, gameplay and the world of Arcadia."
-      />
+      {/* Hero Header */}
+      <section className="relative border-b-2 border-border bg-card/60 py-12 sm:py-16">
+        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
+          <div className="inline-flex items-center gap-1.5 rounded-full border-2 border-border bg-card px-3 py-1 text-xs font-extrabold uppercase tracking-widest text-gold shadow-sm">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            Field Showcase
+          </div>
 
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-        <div className="mb-6 flex flex-wrap gap-2">
-          {(["All", ...categories] as const).map((c) => (
+          <h1 className="mt-4 font-display text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl md:text-5xl">
+            Explore Civil Craft: Bridge Edition
+          </h1>
+
+          <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground sm:text-lg">
+            Explore screenshots, environments, bridges, characters, UI, and other visuals from the
+            game.
+          </p>
+        </div>
+      </section>
+
+      {/* Main Gallery Area */}
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
+        {/* Category Filters */}
+        <div className="mb-8 flex flex-wrap items-center justify-center gap-2">
+          {filterTabs.map((tab) => (
             <Button
-              key={c}
+              key={tab}
               size="sm"
-              variant={c === category ? "default" : "outline"}
+              variant={selectedFilter === tab ? "gold" : "outline"}
               onClick={() => {
-                setCategory(c as GalleryCategory | "All");
-                setVisible(9);
-                setIndex(null);
+                setSelectedFilter(tab);
+                setLightboxIndex(null);
               }}
+              className={cn(
+                "rounded-full border-2 font-bold transition-all",
+                selectedFilter === tab
+                  ? "shadow-sm"
+                  : "border-border bg-card text-foreground/80 hover:border-gold/60 hover:text-gold",
+              )}
             >
-              {c === "All" ? "All" : label[c as GalleryCategory]}
+              {tab}
             </Button>
           ))}
         </div>
 
+        {/* Query State Handling */}
         {query.isPending ? (
-          <p role="status">Loading gallery...</p>
+          <div className="py-16 text-center" role="status">
+            <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-border border-t-gold" />
+            <p className="mt-3 text-sm font-bold text-muted-foreground">Loading gallery media...</p>
+          </div>
         ) : query.isError ? (
-          <div role="alert">
-            <p>Unable to load the gallery.</p>
-            <Button variant="outline" onClick={() => query.refetch()}>
+          <div className="rounded-2xl border-2 border-border bg-card p-8 text-center" role="alert">
+            <p className="font-bold text-destructive">Unable to load the gallery.</p>
+            <p className="mt-1 text-sm text-muted-foreground">{query.error.message}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => query.refetch()}
+              className="mt-4 border-2"
+            >
               Retry
             </Button>
           </div>
-        ) : items.length === 0 ? (
-          <EmptyState
-            title="No gallery items yet."
-            description="Official Civil Craft screenshots and media will appear here."
-          />
-        ) : (
-          <>
-            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
-              {items.slice(0, visible).map((item, i) => {
-                const shape = rhythm[i % rhythm.length]!;
-                return (
-                  <li key={item.id} className={shape.split(" ")[0]}>
-                    <button
-                      type="button"
-                      onClick={() => setIndex(i)}
-                      className="group block w-full text-left"
-                      aria-label={`Open ${item.caption}`}
-                    >
-                      <span className="block overflow-hidden rounded-xl border-2 border-border bg-card">
-                        <img
-                          src={item.url}
-                          alt={item.caption}
-                          loading="lazy"
-                          className={`w-full object-cover transition-transform duration-200 group-hover:scale-[1.03] ${shape.split(" ")[1]}`}
-                        />
-                      </span>
-                      <span className="mt-2 block text-sm font-bold">{item.caption}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {label[item.category]}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-
-            {visible < items.length ? (
-              <div className="mt-8 text-center">
-                <Button variant="outline" onClick={() => setVisible((v) => v + 9)}>
-                  Load More
+        ) : filteredItems.length === 0 ? (
+          <div className="rounded-2xl border-2 border-border bg-card p-8">
+            <EmptyState
+              title={
+                selectedFilter === "All"
+                  ? "No gallery items yet"
+                  : `No items in ${selectedFilter}`
+              }
+              description={
+                selectedFilter === "All"
+                  ? "Official screenshots and showcase media will appear here once published."
+                  : `No images currently published in the ${selectedFilter} category. Try selecting "All" to view other media.`
+              }
+            />
+            {selectedFilter !== "All" && (
+              <div className="mt-4 text-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedFilter("All")}
+                  className="border-2"
+                >
+                  View All Media
                 </Button>
               </div>
-            ) : null}
-          </>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {filteredItems.map((item, i) => (
+              <div
+                key={item.id}
+                className="group flex flex-col overflow-hidden rounded-2xl border-2 border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-gold/60 hover:shadow-md"
+              >
+                {/* Image card with click to open lightbox */}
+                <button
+                  type="button"
+                  onClick={() => setLightboxIndex(i)}
+                  className="relative aspect-video w-full overflow-hidden bg-background/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+                  aria-label={`View larger preview of ${item.caption}`}
+                >
+                  <img
+                    src={item.url}
+                    alt={item.caption}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/10" />
+                </button>
+
+                {/* Card metadata */}
+                <div className="flex flex-1 flex-col p-4 sm:p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <Badge
+                      variant="outline"
+                      className="border-border bg-background text-xs font-bold text-muted-foreground"
+                    >
+                      {categoryDisplayNames[item.category] || item.category}
+                    </Badge>
+                  </div>
+
+                  <h3 className="mt-2 font-display text-base font-bold text-foreground sm:text-lg">
+                    {item.caption}
+                  </h3>
+
+                  {item.description ? (
+                    <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-muted-foreground sm:text-sm">
+                      {item.description}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-auto pt-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setLightboxIndex(i)}
+                      className="h-8 px-2 text-xs font-bold text-gold hover:bg-gold/10 hover:text-gold"
+                    >
+                      Enlarge View →
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
+        {/* Lightbox Preview Modal */}
         <Lightbox
-          items={items.map((i) => ({
-            id: i.id,
-            caption: i.caption,
-            url: i.url,
-            category: label[i.category],
-          }))}
-          index={index}
-          onIndexChange={setIndex}
-          onClose={() => setIndex(null)}
+          items={lightboxItems}
+          index={lightboxIndex}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
         />
       </div>
     </PublicLayout>

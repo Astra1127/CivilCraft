@@ -5,6 +5,7 @@ import { messageRequest } from "../cms/messages.server.ts";
 import { filterSortPlayers, directorySorts, type DirectoryOptions } from "./directory-filters.ts";
 import { getAdminAnalytics } from "./analytics.server.ts";
 import { contentRequest } from "../cms/content.server.ts";
+import { faqRequest } from "../cms/faq.server.ts";
 import { smallBody } from "./request-body.server.ts";
 import { listBugReports, changeBugReport } from "./bug-reports.server.ts";
 import { getAdminAuthConfig } from "../admin-auth/config.server.ts";
@@ -54,6 +55,8 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     if (messagesResponse) return messagesResponse;
     const contentResponse = await contentRequest(request, true);
     if (contentResponse) return contentResponse;
+    const faqResponse = await faqRequest(request, true);
+    if (faqResponse) return faqResponse;
     if (path === "/api/admin/analytics" && request.method === "GET")
       return json(await getAdminAnalytics(config, session.user.id));
     if (path === "/api/admin/bug-reports") {

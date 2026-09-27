@@ -12,6 +12,7 @@ const gallerySchema = z.object({
   id: idSchema,
   caption: z.string().trim().min(3).max(200),
   category: z.enum(galleryCategories),
+  description: z.string().trim().max(1000).optional().default(""),
   visible: z.boolean(),
   createdAt: z.string().datetime(),
   storagePath: z.string().regex(/^civilcraft\/gallery\/[a-f0-9-]+\.(png|jpeg|webp)$/),
@@ -100,6 +101,7 @@ function publicImage(image: StoredImage, admin: boolean): GalleryItem {
     category: image.category,
     visible: image.visible,
     createdAt: image.createdAt,
+    description: image.description || undefined,
     url: `${admin ? "/api/admin/content" : "/api/content"}/images/${image.id}`,
   };
 }
@@ -149,6 +151,7 @@ export async function uploadGallery(request: Request) {
     .object({
       caption: gallerySchema.shape.caption,
       category: gallerySchema.shape.category,
+      description: z.string().trim().max(1000).optional().default(""),
       visible: z.enum(["true", "false"]),
     })
     .parse(Object.fromEntries(form));
@@ -177,8 +180,11 @@ export async function changeGallery(body: Record<string, unknown>) {
   const input = z
     .object({
       id: idSchema,
-      action: z.enum(["visibility", "delete"]),
+      action: z.enum(["visibility", "delete", "edit"]),
       visible: z.boolean().optional(),
+      caption: z.string().trim().min(3).max(200).optional(),
+      description: z.string().trim().max(1000).optional(),
+      category: z.enum(galleryCategories).optional(),
     })
     .parse(body);
   const image = parseRows(await records(), "gallery", gallerySchema).find((g) => g.id === input.id);
@@ -188,6 +194,15 @@ export async function changeGallery(body: Record<string, unknown>) {
     await save("gallery", image.id, { ...image, visible: false });
     await imageStorage.remove(image.storagePath);
     await save("gallery", image.id, null);
+  } else if (input.action === "edit") {
+    const updated: StoredImage = {
+      ...image,
+      caption: input.caption !== undefined ? input.caption : image.caption,
+      description: input.description !== undefined ? input.description : (image.description ?? ""),
+      category: input.category !== undefined ? input.category : image.category,
+      visible: input.visible !== undefined ? input.visible : image.visible,
+    };
+    await save("gallery", image.id, updated);
   } else {
     if (typeof input.visible !== "boolean")
       throw new AdminApiError(400, "Choose a visibility state.");

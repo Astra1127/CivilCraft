@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 import {
+  normalizeUrl,
   renderResendEmail,
   resendConfigured,
+  resolvePublicSiteUrl,
+  resolveWebsiteUrl,
   sendContactResendEmail,
   type ContactResendContent,
 } from "../src/lib/email/contact-resend.server.ts";
@@ -25,6 +28,10 @@ beforeEach(() => {
   delete process.env["SMTP_PASSWORD"];
   delete process.env["GMAIL_SMTP_USER"];
   delete process.env["GMAIL_SMTP_APP_PASSWORD"];
+  delete process.env["PUBLIC_SITE_URL"];
+  delete process.env["SITE_URL"];
+  delete process.env["VERCEL_PROJECT_PRODUCTION_URL"];
+  delete process.env["VERCEL_URL"];
   delete process.env["PLAYFAB_CONTACT_ADMIN_PLAYER_ID"];
   process.env["ADMIN_AUTH_ORIGIN"] = origin;
 });
@@ -268,4 +275,73 @@ test("notifyContact: falls back to not_configured when no email provider is conf
   });
 
   assert.equal(status, "not_configured");
+});
+
+test("normalizeUrl: strips trailing slashes and handles clean paths", () => {
+  assert.equal(normalizeUrl("https://civil-craft.vercel.app/"), "https://civil-craft.vercel.app");
+  assert.equal(normalizeUrl("https://civil-craft.vercel.app///"), "https://civil-craft.vercel.app");
+  assert.equal(normalizeUrl("https://civil-craft.vercel.app/contact/"), "https://civil-craft.vercel.app/contact");
+  assert.equal(normalizeUrl("http://localhost:5173/"), "http://localhost:5173");
+  assert.equal(normalizeUrl("civilcraft.org/"), "https://civilcraft.org");
+  assert.equal(normalizeUrl(""), "");
+});
+
+test("resolvePublicSiteUrl: prioritizes PUBLIC_SITE_URL and SITE_URL over origin and localhost", () => {
+  // 1. Explicit PUBLIC_SITE_URL overrides everything
+  process.env["PUBLIC_SITE_URL"] = "https://civil-craft.vercel.app/";
+  process.env["ADMIN_AUTH_ORIGIN"] = "http://localhost:5173";
+  assert.equal(resolvePublicSiteUrl("http://localhost:5173"), "https://civil-craft.vercel.app");
+
+  // 2. SITE_URL works as alias
+  delete process.env["PUBLIC_SITE_URL"];
+  process.env["SITE_URL"] = "https://civilcraft.org/";
+  assert.equal(resolvePublicSiteUrl("http://localhost:5173"), "https://civilcraft.org");
+
+  // 3. In production, never allows localhost even if origin is passed
+  delete process.env["SITE_URL"];
+  process.env["NODE_ENV"] = "production";
+  assert.equal(resolvePublicSiteUrl("http://localhost:5173"), "https://civilcraft.org");
+
+  // 4. In production with VERCEL_PROJECT_PRODUCTION_URL
+  process.env["VERCEL_PROJECT_PRODUCTION_URL"] = "civil-craft.vercel.app";
+  assert.equal(resolvePublicSiteUrl("http://localhost:5173"), "https://civil-craft.vercel.app");
+
+  // 5. In development without PUBLIC_SITE_URL, allows localhost
+  delete process.env["NODE_ENV"];
+  delete process.env["VERCEL_PROJECT_PRODUCTION_URL"];
+  assert.equal(resolvePublicSiteUrl("http://localhost:5173"), "http://localhost:5173");
+});
+
+test("renderResendEmail: applies Civil Craft design system palette (#F3E7D1, #FCF6EC, #4A3428, #4E372C, #C58A42)", () => {
+  process.env["PUBLIC_SITE_URL"] = "https://civil-craft.vercel.app/";
+
+  const content: ContactResendContent = {
+    name: "Isa Jemma",
+    email: "isa.jemma@ncst.edu.ph",
+    subject: "Bridge Arch Analysis",
+    message: "Our engineering calculation shows standard support spacing.",
+    replyMessage: "Our engineering calculation shows standard support spacing.",
+    originalMessage: "What is the recommended support spacing?",
+    inquiryType: "Technical Support",
+  };
+
+  const rendered = renderResendEmail("player", content);
+
+  // Background and panels
+  assert.ok(rendered.html.includes("#F3E7D1"), "Outer background must use Civil Craft warm cream #F3E7D1");
+  assert.ok(rendered.html.includes("#FCF6EC"), "Card container must use Civil Craft inner cream #FCF6EC");
+  assert.ok(rendered.html.includes("#4A3428"), "Card border must use Civil Craft brown #4A3428");
+  assert.ok(rendered.html.includes("#4E372C"), "Primary text must use Civil Craft dark brown #4E372C");
+  assert.ok(rendered.html.includes("#C58A42"), "Accent must use Civil Craft construction gold #C58A42");
+
+  // Button link must use configured PUBLIC_SITE_URL without trailing slash
+  assert.ok(rendered.html.includes('href="https://civil-craft.vercel.app"'));
+  assert.ok(!rendered.html.includes("localhost"));
+
+  // Check admin notification also uses the warm theme
+  const adminRendered = renderResendEmail("admin", content);
+  assert.ok(adminRendered.html.includes("#F3E7D1"));
+  assert.ok(adminRendered.html.includes("#FCF6EC"));
+  assert.ok(adminRendered.html.includes("#4A3428"));
+  assert.ok(adminRendered.html.includes("#C58A42"));
 });

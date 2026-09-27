@@ -40,6 +40,8 @@ export default defineConfig(({ command, mode }) => {
       "RESEND_API_KEY",
       "ADMIN_EMAIL",
       "RESEND_FROM",
+      "PUBLIC_SITE_URL",
+      "SITE_URL",
     ]) {
       if (!process.env[key]?.trim() && serverEnv[key] !== undefined)
         process.env[key] = serverEnv[key];

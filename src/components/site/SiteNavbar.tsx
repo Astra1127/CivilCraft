@@ -19,6 +19,7 @@ const publicLinks = [
   { to: "/", label: "Home" },
   { to: "/about", label: "About" },
   { to: "/gallery", label: "Gallery" },
+  { to: "/faq", label: "FAQ" },
   { to: "/download", label: "Download" },
   { to: "/contact", label: "Contact" },
 ] as const;

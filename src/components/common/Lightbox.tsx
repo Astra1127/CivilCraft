@@ -9,6 +9,7 @@ export interface LightboxItem {
   caption: string;
   url?: string | undefined;
   category?: string | undefined;
+  description?: string | undefined;
 }
 
 export function Lightbox({
@@ -39,25 +40,42 @@ export function Lightbox({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-3xl bg-card">
-        <DialogTitle className="font-display text-lg">{item.caption}</DialogTitle>
+      <DialogContent className="max-w-3xl border-2 border-border bg-card">
+        <DialogTitle className="font-display text-lg text-foreground">{item.caption}</DialogTitle>
         <DialogDescription className="text-xs text-muted-foreground">
           {item.category ? `${item.category} · ` : ""}Image {index + 1} of {items.length}
         </DialogDescription>
         {item.url ? (
-          <img src={item.url} alt={item.caption} className="w-full rounded-xl" loading="lazy" />
+          <div className="overflow-hidden rounded-xl border border-border bg-background/50">
+            <img
+              src={item.url}
+              alt={item.caption}
+              className="max-h-[65vh] w-full rounded-xl object-contain"
+              loading="lazy"
+            />
+          </div>
         ) : (
           <ArtPlaceholder label={item.caption} />
         )}
-        <div className="flex items-center justify-between gap-2">
+        {item.description ? (
+          <p className="text-sm leading-relaxed text-foreground/90 whitespace-pre-line">
+            {item.description}
+          </p>
+        ) : null}
+        <div className="flex items-center justify-between gap-2 pt-2">
           <Button
             variant="outline"
+            size="sm"
             onClick={() => onIndexChange((index - 1 + items.length) % items.length)}
           >
             <ChevronLeft className="mr-1 h-4 w-4" aria-hidden="true" />
             Previous
           </Button>
-          <Button variant="outline" onClick={() => onIndexChange((index + 1) % items.length)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onIndexChange((index + 1) % items.length)}
+          >
             Next
             <ChevronRight className="ml-1 h-4 w-4" aria-hidden="true" />
           </Button>

@@ -25,6 +25,7 @@ export interface GalleryItem {
   url?: string | undefined;
   visible: boolean;
   createdAt: string;
+  description?: string;
 }
 
 export interface FaqEntry {

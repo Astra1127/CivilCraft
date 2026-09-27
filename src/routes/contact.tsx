@@ -1,4 +1,5 @@
 import { useContactSettings, emptyContactSettings } from "@/lib/cms/contact-settings";
+import { useFaq } from "@/lib/cms/faq";
 import { createFileRoute } from "@tanstack/react-router";
 import { Clock, Mail, MapPin, Phone, Share2 } from "lucide-react";
 import { useState } from "react";
@@ -54,12 +55,17 @@ function ContactPage() {
   const socials = (["facebook", "youtube", "discord"] as const).filter(
     (k) => isRealText(settings.social[k]) && /^https?:\/\//.test(settings.social[k]),
   );
-  const faq = useCms((s) =>
+  const legacyFaq = useCms((s) =>
     s.faq
       .filter((f) => f.published)
       .sort((a, b) => a.order - b.order)
       .slice(0, 6),
   );
+  const faqQuery = useFaq();
+  const faq =
+    faqQuery.data && faqQuery.data.length > 0
+      ? faqQuery.data.filter((f) => f.published).slice(0, 6)
+      : legacyFaq;
   const [values, setValues] = useState({
     name: "",
     email: "",

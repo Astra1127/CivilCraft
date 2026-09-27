@@ -33,6 +33,8 @@ beforeEach(() => {
   delete process.env["SMTP_FROM"];
   delete process.env["EMAIL_FROM"];
   delete process.env["ADMIN_EMAIL"];
+  delete process.env["PUBLIC_SITE_URL"];
+  delete process.env["SITE_URL"];
   delete process.env["PLAYFAB_CONTACT_ADMIN_PLAYER_ID"];
   process.env["ADMIN_AUTH_ORIGIN"] = origin;
 });
@@ -265,4 +267,38 @@ test("Admin -> Visitor reply: strictly never calls Resend even when RESEND_API_K
   // Must return failed directly without falling back to Resend
   assert.equal(status, "failed");
   assert.equal(resendCalled, false, "Resend must NEVER be called for player reply");
+});
+
+test("Admin -> Visitor reply: uses configured PUBLIC_SITE_URL for the website button without trailing slash", async (t) => {
+  process.env["GMAIL_SMTP_USER"] = adminGmail;
+  process.env["GMAIL_SMTP_APP_PASSWORD"] = mockAppPassword;
+  process.env["PUBLIC_SITE_URL"] = "https://civil-craft.vercel.app/";
+  process.env["ADMIN_AUTH_ORIGIN"] = "http://localhost:5173";
+
+  let sentMail: Record<string, unknown> | null = null;
+  t.mock.method(nodemailer, "createTransport", () => ({
+    sendMail: async (mail: Record<string, unknown>) => {
+      sentMail = mail;
+      return { messageId: "gmail_reply_url_test" };
+    },
+    close: () => {},
+  }));
+
+  const status = await notifyContact(
+    "player",
+    {
+      name: "Isa Jemma",
+      email: visitorEmail,
+      subject: "Bridge Design",
+      message: "Here is our response.",
+    },
+    null,
+  );
+
+  assert.equal(status, "sent");
+  assert.ok(sentMail);
+  const html = String(sentMail["html"]);
+  // Must use the configured production URL and strip the trailing slash
+  assert.ok(html.includes('href="https://civil-craft.vercel.app"'));
+  assert.ok(!html.includes("localhost:5173"));
 });

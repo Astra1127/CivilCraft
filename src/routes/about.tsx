@@ -637,6 +637,24 @@ function AboutPage() {
         </div>
       </section>
 
+      {/* ── 07.5 · FAQ CALLOUT ────────────────────────── */}
+      <section className="border-t-2 border-border bg-card/60 py-10">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-6">
+          <div className="min-w-0 text-center sm:text-left">
+            <Label>Have more questions?</Label>
+            <h3 className="mt-1 font-display text-xl font-bold text-foreground">Common questions & field answers</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Learn about device compatibility, educational mechanics, and game progress.
+            </p>
+          </div>
+          <Button asChild variant="outline" className="shrink-0 border-2 border-border bg-card font-bold hover:border-gold hover:text-gold">
+            <Link to="/faq">
+              View FAQ →
+            </Link>
+          </Button>
+        </div>
+      </section>
+
       <SectionDivider variant="truss" />
 
       {/* ── 08 · FINAL CTA ───────────────────────────────── */}

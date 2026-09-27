@@ -5,6 +5,7 @@ import { handleEmailRequest } from "./lib/email/api.server";
 import { handlePasswordReset } from "./lib/playfab/reset-password.server";
 import { handleLeaderboardRequest } from "./lib/playfab/leaderboard.server";
 import { contentRequest } from "./lib/cms/content.server";
+import { faqRequest } from "./lib/cms/faq.server";
 import { handlePlayerBugRequest } from "./lib/playfab/bug-reports.server";
 import "./lib/error-capture";
 
@@ -69,6 +70,8 @@ export default {
       if (emailResponse) return emailResponse;
       const publicContentResponse = await contentRequest(request);
       if (publicContentResponse) return publicContentResponse;
+      const faqResponse = await faqRequest(request);
+      if (faqResponse) return faqResponse;
       const leaderboardResponse = await handleLeaderboardRequest(request);
       if (leaderboardResponse) return leaderboardResponse;
       const playerResponse = await handlePlayerBugRequest(request);
