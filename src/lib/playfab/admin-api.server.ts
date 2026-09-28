@@ -14,6 +14,9 @@ import { AdminApiError, adminGameConfig, object, playFabAdmin } from "./admin-cl
 import { directoryPage } from "./admin-directory.server.ts";
 import { getAdminPlayer, lookupPlayer, mapBans } from "./admin-players.server.ts";
 import type { AdminIntegrationStatus, PlayerSearchKind } from "./admin-types.ts";
+import type { Transaction } from "./types.ts";
+import { listOrders } from "../payments/orders.server.ts";
+import { getProduct } from "../payments/products.ts";
 
 const headers = {
   "Cache-Control": "no-store, private",
@@ -95,6 +98,28 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
       // Reuse the administrative access probe. Current inventory is not a ledger,
       // and Civil Craft has no global transaction-history source implemented yet.
       await playFabAdmin("Admin/GetAllSegments");
+      if (url.searchParams.get("orders") === "1" || url.searchParams.get("all") === "1") {
+        const orders = await listOrders();
+        const records: Transaction[] = orders.map((o) => ({
+          transactionId: o.orderId,
+          playerId: o.playFabId,
+          itemId: o.productId,
+          itemName: getProduct(o.productId)?.name || (o.productId === "coins_500" ? "500 Civil Craft Coins" : o.productId),
+          itemCategory: "Currency",
+          amount: o.expectedAmount / 100,
+          currency: o.currency,
+          type: "purchase" as const,
+          status:
+            o.status === "fulfilled"
+              ? ("completed" as const)
+              : o.status === "failed" || o.status === "cancelled"
+                ? ("refunded" as const)
+                : ("pending" as const),
+          paymentMethod: "PayMongo",
+          createdAt: o.createdAt,
+        }));
+        return json({ configured: true, records });
+      }
       return json({ configured: true, records: [] });
     }
     if (path === "/api/admin/players" && request.method === "GET") {

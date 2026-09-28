@@ -24,6 +24,7 @@ import { Route as LeaderboardsRouteImport } from './routes/leaderboards'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as ShopRouteImport } from './routes/shop'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
@@ -50,6 +51,8 @@ import { Route as DashboardMessagesRouteImport } from './routes/dashboard.messag
 import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardTransactionsRouteImport } from './routes/dashboard.transactions'
+import { Route as PaymentCancelRouteImport } from './routes/payment.cancel'
+import { Route as PaymentSuccessRouteImport } from './routes/payment.success'
 import { Route as UpdatesIndexRouteImport } from './routes/updates.index'
 import { Route as UpdatesSlugRouteImport } from './routes/updates.$slug'
 import { Route as CommunityNewsIndexRouteImport } from './routes/community.news.index'
@@ -128,6 +131,11 @@ const PrivacyRoute = PrivacyRouteImport.update({
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShopRoute = ShopRouteImport.update({
+  id: '/shop',
+  path: '/shop',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -260,6 +268,16 @@ const DashboardTransactionsRoute = DashboardTransactionsRouteImport.update({
   path: '/transactions',
   getParentRoute: () => DashboardRoute,
 } as any)
+const PaymentCancelRoute = PaymentCancelRouteImport.update({
+  id: '/payment/cancel',
+  path: '/payment/cancel',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PaymentSuccessRoute = PaymentSuccessRouteImport.update({
+  id: '/payment/success',
+  path: '/payment/success',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const UpdatesIndexRoute = UpdatesIndexRouteImport.update({
   id: '/updates/',
   path: '/updates/',
@@ -297,6 +315,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/shop': typeof ShopRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/admin/almanac': typeof AdminAlmanacRoute
@@ -320,6 +339,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
+  '/payment/cancel': typeof PaymentCancelRoute
+  '/payment/success': typeof PaymentSuccessRoute
   '/updates/$slug': typeof UpdatesSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/community/': typeof CommunityIndexRoute
@@ -341,6 +362,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/shop': typeof ShopRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/admin/almanac': typeof AdminAlmanacRoute
@@ -364,6 +386,8 @@ export interface FileRoutesByTo {
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
+  '/payment/cancel': typeof PaymentCancelRoute
+  '/payment/success': typeof PaymentSuccessRoute
   '/updates/$slug': typeof UpdatesSlugRoute
   '/admin': typeof AdminIndexRoute
   '/community': typeof CommunityIndexRoute
@@ -389,6 +413,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/shop': typeof ShopRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/admin/almanac': typeof AdminAlmanacRoute
@@ -412,6 +437,8 @@ export interface FileRoutesById {
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
+  '/payment/cancel': typeof PaymentCancelRoute
+  '/payment/success': typeof PaymentSuccessRoute
   '/updates/$slug': typeof UpdatesSlugRoute
   '/admin/': typeof AdminIndexRoute
   '/community/': typeof CommunityIndexRoute
@@ -438,6 +465,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/reset-password'
+    | '/shop'
     | '/signup'
     | '/terms'
     | '/admin/almanac'
@@ -461,6 +489,8 @@ export interface FileRouteTypes {
     | '/dashboard/profile'
     | '/dashboard/settings'
     | '/dashboard/transactions'
+    | '/payment/cancel'
+    | '/payment/success'
     | '/updates/$slug'
     | '/admin/'
     | '/community/'
@@ -482,6 +512,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/reset-password'
+    | '/shop'
     | '/signup'
     | '/terms'
     | '/admin/almanac'
@@ -505,6 +536,8 @@ export interface FileRouteTypes {
     | '/dashboard/profile'
     | '/dashboard/settings'
     | '/dashboard/transactions'
+    | '/payment/cancel'
+    | '/payment/success'
     | '/updates/$slug'
     | '/admin'
     | '/community'
@@ -529,6 +562,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/privacy'
     | '/reset-password'
+    | '/shop'
     | '/signup'
     | '/terms'
     | '/admin/almanac'
@@ -552,6 +586,8 @@ export interface FileRouteTypes {
     | '/dashboard/profile'
     | '/dashboard/settings'
     | '/dashboard/transactions'
+    | '/payment/cancel'
+    | '/payment/success'
     | '/updates/$slug'
     | '/admin/'
     | '/community/'
@@ -577,8 +613,11 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ShopRoute: typeof ShopRoute
   SignupRoute: typeof SignupRoute
   TermsRoute: typeof TermsRoute
+  PaymentCancelRoute: typeof PaymentCancelRoute
+  PaymentSuccessRoute: typeof PaymentSuccessRoute
   UpdatesSlugRoute: typeof UpdatesSlugRoute
   UpdatesIndexRoute: typeof UpdatesIndexRoute
 }
@@ -688,6 +727,13 @@ declare module '@tanstack/react-router' {
       path: '/reset-password'
       fullPath: '/reset-password'
       preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/shop': {
+      id: '/shop'
+      path: '/shop'
+      fullPath: '/shop'
+      preLoaderRoute: typeof ShopRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -872,6 +918,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardTransactionsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/payment/cancel': {
+      id: '/payment/cancel'
+      path: '/payment/cancel'
+      fullPath: '/payment/cancel'
+      preLoaderRoute: typeof PaymentCancelRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/payment/success': {
+      id: '/payment/success'
+      path: '/payment/success'
+      fullPath: '/payment/success'
+      preLoaderRoute: typeof PaymentSuccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/updates/': {
       id: '/updates/'
       path: '/updates'
@@ -999,8 +1059,11 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ShopRoute: ShopRoute,
   SignupRoute: SignupRoute,
   TermsRoute: TermsRoute,
+  PaymentCancelRoute: PaymentCancelRoute,
+  PaymentSuccessRoute: PaymentSuccessRoute,
   UpdatesSlugRoute: UpdatesSlugRoute,
   UpdatesIndexRoute: UpdatesIndexRoute,
 }

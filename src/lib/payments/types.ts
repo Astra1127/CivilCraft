@@ -1,0 +1,72 @@
+export type PaymentOrderStatus =
+  | "pending"
+  | "paid"
+  | "fulfilled"
+  | "failed"
+  | "cancelled";
+
+export interface PaymentOrder {
+  orderId: string;
+  playFabId: string;
+  productId: string;
+  expectedAmount: number; // in centavos, e.g. 5000 = ₱50.00
+  currency: string; // "PHP"
+  expectedCoins: number; // e.g. 500
+  PayMongoCheckoutSessionId: string | null;
+  PayMongoReferenceNumber: string;
+  status: PaymentOrderStatus;
+  createdAt: string;
+  paidAt: string | null;
+  fulfilledAt: string | null;
+  webhookEventId: string | null;
+  checkoutUrl?: string | null;
+  error?: string | null;
+}
+
+export interface PaymentProduct {
+  id: string;
+  name: string;
+  description: string;
+  amount: number; // in centavos, e.g. 5000 = ₱50.00
+  currency: string; // "PHP"
+  rewardCoins: number;
+  category: "currency" | "support" | "cosmetic";
+}
+
+export interface PayMongoWebhookEvent {
+  data: {
+    id: string;
+    type: string;
+    attributes: {
+      type: string;
+      livemode: boolean;
+      data: {
+        id: string;
+        type: string;
+        attributes: {
+          status?: string;
+          amount?: number;
+          currency?: string;
+          reference_number?: string;
+          payments?: Array<{
+            id: string;
+            type: string;
+            attributes: {
+              amount: number;
+              currency: string;
+              status: string;
+              paid_at?: number;
+            };
+          }>;
+          line_items?: Array<{
+            amount: number;
+            currency: string;
+            name: string;
+            quantity: number;
+          }>;
+          metadata?: Record<string, string>;
+        };
+      };
+    };
+  };
+}

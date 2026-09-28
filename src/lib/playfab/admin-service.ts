@@ -61,6 +61,6 @@ export const adminPlayerService = {
     });
   },
   getTransactions() {
-    return request<{ configured: boolean; records: Transaction[] }>("transactions");
+    return request<{ configured: boolean; records: Transaction[] }>("transactions?orders=1");
   },
 };

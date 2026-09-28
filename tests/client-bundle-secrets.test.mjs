@@ -34,7 +34,7 @@ test(
         "Server credential found in a client bundle",
       );
       assert.ok(
-        !/x-vercel-blob-store-id|getVercelOidcToken|resolveBlobAuth|nodemailer/.test(source),
+        !/x-vercel-blob-store-id|getVercelOidcToken|resolveBlobAuth|nodemailer|paymongo\.server|verifyPayMongoSignature/.test(source),
         "Server-only authentication implementation found in client bundle",
       );
     }

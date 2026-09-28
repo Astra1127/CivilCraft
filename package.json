@@ -14,7 +14,8 @@
     "admin:hash-password": "node scripts/admin-hash-password.mjs",
     "test:admin": "node --test tests/admin-playfab.test.ts",
     "test:content": "node --test tests/public-content.test.ts",
-    "test:reset": "node --test tests/reset-password.test.ts tests/reset-password-ui.test.mjs"
+    "test:reset": "node --test tests/reset-password.test.ts tests/reset-password-ui.test.mjs",
+    "test:payments": "node --test tests/paymongo.test.ts"
   },
   "overrides": {
     "rolldown": "1.2.1"

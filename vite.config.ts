@@ -42,6 +42,11 @@ export default defineConfig(({ command, mode }) => {
       "RESEND_FROM",
       "PUBLIC_SITE_URL",
       "SITE_URL",
+      "PUBLIC_APP_URL",
+      "PAYMONGO_SECRET_KEY",
+      "PAYMONGO_PUBLIC_KEY",
+      "PAYMONGO_WEBHOOK_SECRET",
+      "PLAYFAB_COINS_CURRENCY_CODE",
     ]) {
       if (!process.env[key]?.trim() && serverEnv[key] !== undefined)
         process.env[key] = serverEnv[key];

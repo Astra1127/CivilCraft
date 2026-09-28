@@ -30,7 +30,8 @@ type Operation =
   | "Admin/RevokeAllBansForUser"
   | "Server/GetUserData"
   | "Server/GetPlayerStatistics"
-  | "Server/GetUserInventory";
+  | "Server/GetUserInventory"
+  | "Server/AddUserVirtualCurrency";
 export async function playFabAdmin(
   operation: Operation,
   body: Record<string, unknown> = {},

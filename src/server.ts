@@ -13,6 +13,7 @@ import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { handleAdminRequest } from "./lib/admin-auth/http.server";
 import { handlePlayFabAdminRequest } from "./lib/playfab/admin-api.server";
+import { handlePaymentsRequest } from "./lib/payments/api.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -76,6 +77,8 @@ export default {
       if (leaderboardResponse) return leaderboardResponse;
       const playerResponse = await handlePlayerBugRequest(request);
       if (playerResponse) return playerResponse;
+      const paymentsResponse = await handlePaymentsRequest(request);
+      if (paymentsResponse) return paymentsResponse;
       const apiResponse = await handlePlayFabAdminRequest(request);
       if (apiResponse) return apiResponse;
       const authResponse = await handleAdminRequest(request);
