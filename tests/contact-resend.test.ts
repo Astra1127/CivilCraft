@@ -220,7 +220,10 @@ test("sendContactResendEmail: routes player reply to user email when ownerId is 
 
   globalThis.fetch = async (_url, init) => {
     sentBody = JSON.parse(String(init?.body));
-    sentTo = (sentBody["to"] as string[])[0];
+    const toField = sentBody["to"];
+    if (Array.isArray(toField) && typeof toField[0] === "string") {
+      sentTo = toField[0];
+    }
     return Response.json({ id: "resend_msg_reply_999" }, { status: 200 });
   };
 

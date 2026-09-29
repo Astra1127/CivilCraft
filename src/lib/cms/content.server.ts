@@ -81,7 +81,11 @@ async function save(kind: string, id: string, value: unknown) {
     Value: serialized,
   });
 }
-function parseRows<T>(data: Record<string, unknown>, kind: string, schema: z.ZodType<T>): T[] {
+function parseRows<T>(
+  data: Record<string, unknown>,
+  kind: string,
+  schema: z.ZodType<T, z.ZodTypeDef, any>,
+): T[] {
   return Object.entries(data)
     .filter(([key, value]) => key.startsWith(prefix + kind + ".") && value != null)
     .map(([key, value]) => {
@@ -94,16 +98,30 @@ function parseRows<T>(data: Record<string, unknown>, kind: string, schema: z.Zod
       }
     });
 }
-function publicImage(image: StoredImage, admin: boolean): GalleryItem {
-  return {
+function publicImage(
+  image: {
+    id: string;
+    caption: string;
+    category: GalleryItem["category"];
+    visible: boolean;
+    createdAt: string;
+    description?: string | undefined;
+  },
+  admin: boolean,
+): GalleryItem {
+  const item: GalleryItem = {
     id: image.id,
     caption: image.caption,
     category: image.category,
     visible: image.visible,
     createdAt: image.createdAt,
-    description: image.description || undefined,
     url: `${admin ? "/api/admin/content" : "/api/content"}/images/${image.id}`,
   };
+  const desc = image.description?.trim();
+  if (desc) {
+    item.description = desc;
+  }
+  return item;
 }
 export async function listContent(admin = false) {
   const data = await records();

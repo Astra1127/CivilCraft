@@ -29,7 +29,7 @@ export interface CreateCheckoutInput {
   orderId: string;
   product: PaymentProduct;
   playFabId: string;
-  requestOrigin?: string;
+  requestOrigin: string;
 }
 
 export interface CreateCheckoutResult {
@@ -49,7 +49,7 @@ export async function createPayMongoCheckout(
     throw new Error("PayMongo live keys are not permitted in test mode.");
   }
 
-  const baseOrigin = input.requestOrigin?.replace(/\/+$/, "") || appUrl;
+  const baseOrigin = input.requestOrigin.replace(/\/+$/, "") || appUrl;
   const successUrl = `${baseOrigin}/payment/success?order_id=${encodeURIComponent(input.orderId)}`;
   const cancelUrl = `${baseOrigin}/payment/cancel?order_id=${encodeURIComponent(input.orderId)}`;
 
@@ -75,6 +75,7 @@ export async function createPayMongoCheckout(
           "grab_pay",
           "dob",
           "dob_ubp",
+          "qrph",
         ],
         reference_number: input.orderId,
         description: input.product.name,

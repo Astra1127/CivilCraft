@@ -1,7 +1,7 @@
 import { useReleasePosts } from "@/lib/cms/releases";
 import { useFaq } from "@/lib/cms/faq";
 import { createFileRoute } from "@tanstack/react-router";
-import { Download, Smartphone } from "lucide-react";
+import { Download } from "lucide-react";
 import { EmptyState } from "@/components/common/States";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { SectionDivider } from "@/components/site/SectionDivider";
@@ -93,10 +93,6 @@ function DownloadPage() {
                       Download unavailable
                     </Button>
                   )}
-                  <Button size="lg" variant="outline" disabled>
-                    <Smartphone className="mr-2 h-5 w-5" aria-hidden="true" />
-                    Google Play unavailable
-                  </Button>
                 </div>
                 <div className="mt-4 flex max-w-lg flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <Badge variant="outline" className="border-gold/60 bg-gold/10 text-gold">

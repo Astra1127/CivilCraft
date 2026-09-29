@@ -80,7 +80,18 @@ export async function processPayMongoWebhook(
   }
 
   const eventType = eventAttributes.type;
-  if (eventType !== "checkout_session.payment.paid") {
+  if (eventType === "qr.expired") {
+    return {
+      status: 200,
+      body: {
+        success: true,
+        received: true,
+        message: "QR code expiration acknowledged",
+      },
+    };
+  }
+
+  if (eventType !== "checkout_session.payment.paid" && eventType !== "qr.paid") {
     // Safely ignore other event types
     return {
       status: 200,

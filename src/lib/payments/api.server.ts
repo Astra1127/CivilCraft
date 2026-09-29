@@ -1,5 +1,5 @@
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
-import { getProduct } from "./products.ts";
+import { getProduct, PAYMENT_PRODUCTS, DEFAULT_PRODUCTS } from "./products.ts";
 import {
   generateOrderId,
   getOrder,
@@ -7,9 +7,36 @@ import {
   saveOrder,
   updateOrderStatus,
 } from "./orders.server.ts";
-import { createPayMongoCheckout } from "./paymongo.server.ts";
+import { createPayMongoCheckout, getPayMongoConfig } from "./paymongo.server.ts";
 import { processPayMongoWebhook } from "./fulfillment.server.ts";
 import type { PaymentOrder } from "./types.ts";
+
+function resolveRequestOrigin(request: Request): string {
+  const headerOrigin = request.headers.get("origin")?.trim();
+  if (headerOrigin && headerOrigin !== "null") {
+    return headerOrigin.replace(/\/+$/, "");
+  }
+
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  if (host) {
+    const proto =
+      request.headers.get("x-forwarded-proto") ||
+      (request.url.startsWith("https:") ? "https" : "http");
+    return `${proto}://${host}`.replace(/\/+$/, "");
+  }
+
+  try {
+    const parsed = new URL(request.url);
+    if (parsed.origin && parsed.origin !== "null") {
+      return parsed.origin.replace(/\/+$/, "");
+    }
+  } catch {
+    // fallback below
+  }
+
+  const { appUrl } = getPayMongoConfig();
+  return appUrl;
+}
 
 async function authenticatePlayer(request: Request): Promise<string> {
   const authorization = request.headers.get("authorization");
@@ -92,7 +119,7 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       }
 
       const orderId = generateOrderId();
-      const origin = request.headers.get("origin") || undefined;
+      const origin = resolveRequestOrigin(request);
 
       const order: PaymentOrder = {
         orderId,
@@ -198,6 +225,14 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       }
       return jsonResponse({ error: "Unable to retrieve orders" }, 500);
     }
+  }
+
+  // 5. Public shop products catalog
+  if (path === "/api/shop/products") {
+    if (request.method !== "GET") {
+      return jsonResponse({ error: "Method not allowed" }, 405);
+    }
+    return jsonResponse({ products: DEFAULT_PRODUCTS });
   }
 
   return null;

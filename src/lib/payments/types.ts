@@ -31,6 +31,8 @@ export interface PaymentProduct {
   currency: string; // "PHP"
   rewardCoins: number;
   category: "currency" | "support" | "cosmetic";
+  badge?: string;
+  popular?: boolean;
 }
 
 export interface PayMongoWebhookEvent {
@@ -70,3 +72,4 @@ export interface PayMongoWebhookEvent {
     };
   };
 }
+

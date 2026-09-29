@@ -39,6 +39,14 @@ function load(file, state) {
               isError: false,
             }),
           };
+        if (name === "@/lib/cms/faq")
+          return {
+            useFaq: () => ({
+              data: [],
+              isPending: false,
+              isError: false,
+            }),
+          };
         if (name === "@/lib/cms/store")
           return {
             useCms: (selector) =>

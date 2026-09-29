@@ -418,7 +418,9 @@ test("8. Client-supplied price, coins, or playFabId are completely ignored and s
 
   // Verify PayMongo API was called with authoritative server values
   assert.equal(payMongoApiRequests.length, 1);
-  const payMongoPayload = payMongoApiRequests[0].body.data.attributes;
+  const firstReq = payMongoApiRequests[0];
+  assert.ok(firstReq);
+  const payMongoPayload = firstReq.body.data.attributes;
   assert.equal(payMongoPayload.line_items[0].amount, 5000); // ₱50.00
   assert.equal(payMongoPayload.line_items[0].currency, "PHP");
   assert.equal(payMongoPayload.metadata.playFabId, TEST_PLAYER_ID); // Server-authenticated ID, not attacker ID
@@ -465,9 +467,11 @@ test("9. Successful payment webhook fulfills order and credits exactly 500 CO to
 
   // Verify PlayFab AddUserVirtualCurrency was called
   assert.equal(awardedCoinsLog.length, 1);
-  assert.equal(awardedCoinsLog[0].playFabId, TEST_PLAYER_ID);
-  assert.equal(awardedCoinsLog[0].currency, "CO");
-  assert.equal(awardedCoinsLog[0].amount, 500);
+  const firstAward = awardedCoinsLog[0];
+  assert.ok(firstAward);
+  assert.equal(firstAward.playFabId, TEST_PLAYER_ID);
+  assert.equal(firstAward.currency, "CO");
+  assert.equal(firstAward.amount, 500);
 
   // Verify order updated to fulfilled
   const order = await getOrder(orderId);
@@ -868,4 +872,194 @@ test("21. Non-POST HTTP methods to payment endpoints are rejected with 405", asy
   assert.ok(getWebhookRes);
   assert.equal(getWebhookRes.status, 405);
 });
+
+// -------------------------------------------------------------
+// Test 22: Shop products endpoint returns active catalog
+// -------------------------------------------------------------
+test("22. Public /api/shop/products returns product catalog with coins_500", async () => {
+  const req = new Request("https://civil-craft.vercel.app/api/shop/products", {
+    method: "GET",
+  });
+  const res = await handlePaymentsRequest(req);
+  assert.ok(res);
+  assert.equal(res.status, 200);
+
+  const data = (await res.json()) as { products: Array<{ id: string; amount: number; rewardCoins: number }> };
+  assert.ok(Array.isArray(data.products));
+  assert.ok(data.products.length >= 1);
+
+  const coins500 = data.products.find((p) => p.id === "coins_500");
+  assert.ok(coins500);
+  assert.equal(coins500.amount, 5000);
+  assert.equal(coins500.rewardCoins, 500);
+});
+
+// -------------------------------------------------------------
+// Test 23: Multi-product checkout creation with server validation
+// -------------------------------------------------------------
+test("23. Checkout creation works for coins_1000 and enforces server price", async () => {
+  const req = new Request(
+    "https://civil-craft.vercel.app/api/payments/paymongo/create-checkout",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_PLAYER_TICKET}`,
+      },
+      body: JSON.stringify({
+        productId: "coins_1000",
+        amount: 1, // client attempts to spoof price
+        rewardCoins: 999999, // client attempts to spoof coins
+      }),
+    },
+  );
+
+  const res = await handlePaymentsRequest(req);
+  assert.ok(res);
+  assert.equal(res.status, 200);
+
+  const data = (await res.json()) as { success: boolean; orderId: string };
+  assert.equal(data.success, true);
+
+  const order = await getOrder(data.orderId);
+  assert.ok(order);
+  assert.equal(order.expectedAmount, 9500); // Server-enforced
+  assert.equal(order.expectedCoins, 1000); // Server-enforced
+});
+
+// -------------------------------------------------------------
+// Test 24: QR payment method (qrph) enabled in Checkout Session
+// -------------------------------------------------------------
+test("24. Checkout creation includes qrph in payment_method_types alongside existing methods", async () => {
+  payMongoApiRequests = [];
+  const req = new Request(
+    "https://civil-craft.vercel.app/api/payments/paymongo/create-checkout",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_PLAYER_TICKET}`,
+      },
+      body: JSON.stringify({
+        productId: "coins_500",
+      }),
+    },
+  );
+
+  const res = await handlePaymentsRequest(req);
+  assert.ok(res);
+  assert.equal(res.status, 200);
+
+  const lastReq = payMongoApiRequests[payMongoApiRequests.length - 1];
+  assert.ok(lastReq);
+  const types = lastReq.body?.data?.attributes?.payment_method_types as string[];
+  assert.ok(Array.isArray(types));
+  assert.ok(types.includes("qrph"), "payment_method_types must include qrph for QR payments");
+  assert.ok(types.includes("card"), "payment_method_types must preserve card");
+  assert.ok(types.includes("gcash"), "payment_method_types must preserve gcash");
+  assert.ok(types.includes("paymaya"), "payment_method_types must preserve paymaya");
+});
+
+// -------------------------------------------------------------
+// Test 25: qr.paid fulfills order and qr.expired is acknowledged
+// -------------------------------------------------------------
+test("25. qr.paid fulfills order to PlayFab and qr.expired is safely acknowledged", async () => {
+  // 1. Create a pending order
+  const orderId = generateOrderId();
+  const initialOrder: PaymentOrder = {
+    orderId,
+    playFabId: TEST_PLAYER_ID,
+    productId: "coins_500",
+    expectedAmount: 5000,
+    currency: "PHP",
+    expectedCoins: 500,
+    PayMongoCheckoutSessionId: "cs_test_qr_123",
+    PayMongoReferenceNumber: orderId,
+    status: "pending",
+    createdAt: new Date().toISOString(),
+    paidAt: null,
+    fulfilledAt: null,
+    webhookEventId: null,
+  };
+  await saveOrder(initialOrder);
+
+  // 2. Test qr.expired acknowledgment
+  const expiredPayload = JSON.stringify({
+    data: {
+      id: "evt_test_qr_expired_1",
+      type: "event",
+      attributes: {
+        type: "qr.expired",
+        livemode: false,
+        data: {
+          id: "qr_test_123",
+          type: "qr_code",
+          attributes: {
+            metadata: { orderId },
+          },
+        },
+      },
+    },
+  });
+  const expiredSign = signPayload(expiredPayload);
+  const expiredReq = new Request("https://civil-craft.vercel.app/api/webhooks/paymongo", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Paymongo-Signature": expiredSign.header,
+    },
+    body: expiredPayload,
+  });
+  const expiredRes = await handlePaymentsRequest(expiredReq);
+  assert.ok(expiredRes);
+  assert.equal(expiredRes.status, 200);
+
+  // 3. Test qr.paid fulfillment
+  awardedCoinsLog = [];
+  const paidPayload = JSON.stringify({
+    data: {
+      id: "evt_test_qr_paid_1",
+      type: "event",
+      attributes: {
+        type: "qr.paid",
+        livemode: false,
+        data: {
+          id: "qr_test_123",
+          type: "qr_code",
+          attributes: {
+            amount: 5000,
+            currency: "PHP",
+            status: "paid",
+            metadata: { orderId },
+          },
+        },
+      },
+    },
+  });
+  const paidSign = signPayload(paidPayload);
+  const paidReq = new Request("https://civil-craft.vercel.app/api/webhooks/paymongo", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Paymongo-Signature": paidSign.header,
+    },
+    body: paidPayload,
+  });
+  const paidRes = await handlePaymentsRequest(paidReq);
+  assert.ok(paidRes);
+  assert.equal(paidRes.status, 200);
+
+  const updatedOrder = await getOrder(orderId);
+  assert.ok(updatedOrder);
+  assert.equal(updatedOrder.status, "fulfilled");
+  assert.equal(updatedOrder.webhookEventId, "evt_test_qr_paid_1");
+
+  assert.equal(awardedCoinsLog.length, 1);
+  const firstAward = awardedCoinsLog[0];
+  assert.ok(firstAward);
+  assert.equal(firstAward.playFabId, TEST_PLAYER_ID);
+  assert.equal(firstAward.currency, "CO");
+  assert.equal(firstAward.amount, 500);
+});
+
 

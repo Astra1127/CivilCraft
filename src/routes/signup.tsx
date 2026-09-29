@@ -34,7 +34,6 @@ export const Route = createFileRoute("/signup")({
 
 const schema = z
   .object({
-    fullName: z.string().trim().min(2, "Enter your full name").max(80),
     username: z
       .string()
       .trim()
@@ -59,7 +58,6 @@ function SignupPage() {
   const { register, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [values, setValues] = useState({
-    fullName: "",
     username: "",
     email: "",
     password: "",
@@ -186,7 +184,6 @@ function SignupPage() {
                 </p>
 
                 <form onSubmit={submit} noValidate className="mt-6 space-y-4">
-                  {field("fullName", "Full Name", "text", "name")}
                   {field("username", "Username", "text", "username")}
                   {field("email", "Email", "email", "email")}
                   {passwordField("password", "Password")}

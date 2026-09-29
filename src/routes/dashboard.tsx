@@ -1,5 +1,15 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
-import { BarChart3, BookOpen, Medal, Receipt, Settings, Trophy, User, Mail, Coins } from "lucide-react";
+import {
+  BarChart3,
+  BookOpen,
+  Coins,
+  Mail,
+  Medal,
+  Receipt,
+  Settings,
+  Trophy,
+  User,
+} from "lucide-react";
 import { useEffect } from "react";
 import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/DashboardShell";
 import { LoadingState } from "@/components/common/States";
