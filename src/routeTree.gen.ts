@@ -38,6 +38,7 @@ import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminMessagesRouteImport } from './routes/admin.messages'
 import { Route as AdminNewsRouteImport } from './routes/admin.news'
 import { Route as AdminPlayersRouteImport } from './routes/admin.players'
+import { Route as AdminProductsRouteImport } from './routes/admin.products'
 import { Route as AdminReleasesRouteImport } from './routes/admin.releases'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
@@ -203,6 +204,11 @@ const AdminPlayersRoute = AdminPlayersRouteImport.update({
   path: '/players',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminProductsRoute = AdminProductsRouteImport.update({
+  id: '/products',
+  path: '/products',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminReleasesRoute = AdminReleasesRouteImport.update({
   id: '/releases',
   path: '/releases',
@@ -328,6 +334,7 @@ export interface FileRoutesByFullPath {
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/news': typeof AdminNewsRoute
   '/admin/players': typeof AdminPlayersRoute
+  '/admin/products': typeof AdminProductsRoute
   '/admin/releases': typeof AdminReleasesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
@@ -375,6 +382,7 @@ export interface FileRoutesByTo {
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/news': typeof AdminNewsRoute
   '/admin/players': typeof AdminPlayersRoute
+  '/admin/products': typeof AdminProductsRoute
   '/admin/releases': typeof AdminReleasesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
@@ -426,6 +434,7 @@ export interface FileRoutesById {
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/news': typeof AdminNewsRoute
   '/admin/players': typeof AdminPlayersRoute
+  '/admin/products': typeof AdminProductsRoute
   '/admin/releases': typeof AdminReleasesRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
@@ -478,6 +487,7 @@ export interface FileRouteTypes {
     | '/admin/messages'
     | '/admin/news'
     | '/admin/players'
+    | '/admin/products'
     | '/admin/releases'
     | '/admin/settings'
     | '/admin/transactions'
@@ -525,6 +535,7 @@ export interface FileRouteTypes {
     | '/admin/messages'
     | '/admin/news'
     | '/admin/players'
+    | '/admin/products'
     | '/admin/releases'
     | '/admin/settings'
     | '/admin/transactions'
@@ -575,6 +586,7 @@ export interface FileRouteTypes {
     | '/admin/messages'
     | '/admin/news'
     | '/admin/players'
+    | '/admin/products'
     | '/admin/releases'
     | '/admin/settings'
     | '/admin/transactions'
@@ -827,6 +839,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminPlayersRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/products': {
+      id: '/admin/products'
+      path: '/products'
+      fullPath: '/admin/products'
+      preLoaderRoute: typeof AdminProductsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/releases': {
       id: '/admin/releases'
       path: '/releases'
@@ -974,6 +993,7 @@ interface AdminRouteChildren {
   AdminMessagesRoute: typeof AdminMessagesRoute
   AdminNewsRoute: typeof AdminNewsRoute
   AdminPlayersRoute: typeof AdminPlayersRoute
+  AdminProductsRoute: typeof AdminProductsRoute
   AdminReleasesRoute: typeof AdminReleasesRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminTransactionsRoute: typeof AdminTransactionsRoute
@@ -991,6 +1011,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminMessagesRoute: AdminMessagesRoute,
   AdminNewsRoute: AdminNewsRoute,
   AdminPlayersRoute: AdminPlayersRoute,
+  AdminProductsRoute: AdminProductsRoute,
   AdminReleasesRoute: AdminReleasesRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminTransactionsRoute: AdminTransactionsRoute,

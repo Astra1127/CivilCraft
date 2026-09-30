@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router";
 import {
   Bug,
+  Coins,
   Image,
   HelpCircle,
   LayoutDashboard,
@@ -50,6 +51,7 @@ const items: DashboardNavItem[] = [
   { to: "/admin/players", label: "Players", icon: Users, section: "Game" },
   { to: "/admin/leaderboard", label: "Leaderboard", icon: Trophy, section: "Game" },
   { to: "/admin/releases", label: "Game & Download", icon: Package, section: "Game" },
+  { to: "/admin/products", label: "Coin Products", icon: Coins, section: "Game" },
   { to: "/admin/transactions", label: "Transactions", icon: Receipt, section: "Game" },
   { to: "/admin/gallery", label: "Gallery", icon: Image, section: "Content" },
   { to: "/admin/faq", label: "FAQ", icon: HelpCircle, section: "Content" },

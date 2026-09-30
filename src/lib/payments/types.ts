@@ -31,8 +31,12 @@ export interface PaymentProduct {
   currency: string; // "PHP"
   rewardCoins: number;
   category: "currency" | "support" | "cosmetic";
-  badge?: string;
-  popular?: boolean;
+  badge?: string | undefined;
+  popular?: boolean | undefined;
+  active?: boolean | undefined;
+  order?: number | undefined;
+  createdAt?: string | undefined;
+  updatedAt?: string | undefined;
 }
 
 export interface PayMongoWebhookEvent {

@@ -10,8 +10,18 @@ import { leaderboardService, type LeaderboardEntry } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { LeaderboardPeriod } from "@/lib/playfab/leaderboard-shared";
-import { LEADERBOARD_PAGE_SIZE, LEADERBOARD_VIEWS } from "@/lib/playfab/leaderboard-shared";
+import type {
+  LeaderboardPeriod,
+  LeaderboardContract,
+  LeaderboardMode,
+} from "@/lib/playfab/leaderboard-shared";
+import {
+  LEADERBOARD_PAGE_SIZE,
+  LEADERBOARD_VIEWS,
+  LEADERBOARD_CONTRACTS,
+  DEFAULT_CONTRACT,
+  DEFAULT_MODE,
+} from "@/lib/playfab/leaderboard-shared";
 
 const podiumIcon = [Crown, Trophy, Medal];
 
@@ -42,10 +52,10 @@ export function Podium({
             </span>
             <div className="min-w-0">
               <p className="truncate font-display text-base">{e.displayName}</p>
-              <p className="text-xs text-muted-foreground">
-                Rank #{e.rank} · Level {e.level ?? "\u2014"}
+              <p className="text-xs text-muted-foreground">Rank #{e.rank}</p>
+              <p className="font-display text-lg">
+                ₱{e.cost.toLocaleString()} / {e.peakStress.toFixed(1)}%
               </p>
-              <p className="font-display text-lg">{e.score.toLocaleString()}</p>
             </div>
           </li>
         );
@@ -54,18 +64,71 @@ export function Podium({
   );
 }
 
-export function LeaderboardView({
+type LeaderboardViewProps = {
+  highlightId?: string | undefined;
+  showPodium?: boolean;
+  compact?: boolean;
+  admin?: boolean;
+};
+export function LeaderboardView(props: LeaderboardViewProps) {
+  const [contract, setContract] = useState<LeaderboardContract>(DEFAULT_CONTRACT);
+  const [mode, setMode] = useState<LeaderboardMode>(DEFAULT_MODE);
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap gap-4">
+        <label className="grid gap-1 text-sm">
+          Contract
+          <select
+            className="rounded-md border border-input bg-background p-2"
+            value={contract}
+            onChange={(e) => setContract(e.target.value as LeaderboardContract)}
+          >
+            {LEADERBOARD_CONTRACTS.map((id) => (
+              <option key={id} value={id}>
+                {id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm">
+          Ranking mode
+          <select
+            className="rounded-md border border-input bg-background p-2"
+            value={mode}
+            onChange={(e) => setMode(e.target.value as LeaderboardMode)}
+          >
+            <option value="efficient">Efficient</option>
+            <option value="strongest">Strongest</option>
+          </select>
+        </label>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        {mode === "efficient"
+          ? "Lowest construction cost first; lower peak stress breaks ties."
+          : "Lowest peak stress first; lower construction cost breaks ties."}{" "}
+        Each mode keeps its own best run.
+      </p>
+      <SelectedLeaderboard key={contract + ":" + mode} {...props} contract={contract} mode={mode} />
+    </div>
+  );
+}
+function SelectedLeaderboard({
   highlightId,
   showPodium = true,
   compact = false,
   admin = false,
+  contract,
+  mode,
 }: {
   highlightId?: string | undefined;
   showPodium?: boolean;
   compact?: boolean;
   admin?: boolean;
+  contract: LeaderboardContract;
+  mode: LeaderboardMode;
 }) {
-  const [period, setPeriod] = useState<LeaderboardPeriod>("weekly");
+  // Weekly has no published statistic in this integration and always returns an empty page.
+  const [period, setPeriod] = useState<LeaderboardPeriod>("all-time");
   const [pageSize, setPageSize] = useState(LEADERBOARD_PAGE_SIZE);
   const [version, setVersion] = useState<number | undefined>();
   const [query, setQuery] = useState("");
@@ -74,6 +137,8 @@ export function LeaderboardView({
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
     queryKey: [
       "canonical-leaderboard",
+      contract,
+      mode,
       admin ? "admin" : highlightId,
       page,
       version,
@@ -82,15 +147,32 @@ export function LeaderboardView({
       pageSize,
     ],
     queryFn: () =>
-      leaderboardService.getLeaderboard((page - 1) * pageSize, version, admin, period, pageSize),
+      leaderboardService.getLeaderboard(
+        (page - 1) * pageSize,
+        version,
+        admin,
+        period,
+        pageSize,
+        contract,
+        mode,
+      ),
     staleTime: 0,
   });
   useEffect(() => {
-    if (data && data.version !== null && version === undefined) setVersion(data.version);
-  }, [data, version]);
+    if (data && !isFetching && data.version !== null && version === undefined)
+      setVersion(data.version);
+  }, [data, isFetching, version]);
   const mine = useQuery({
-    queryKey: ["canonical-leaderboard-rank", highlightId, version, refreshKey, period],
-    queryFn: () => leaderboardService.getPlayerRank(highlightId!, version, period),
+    queryKey: [
+      "canonical-leaderboard-rank",
+      contract,
+      mode,
+      highlightId,
+      version,
+      refreshKey,
+      period,
+    ],
+    queryFn: () => leaderboardService.getPlayerRank(highlightId!, version, period, contract, mode),
     enabled: !admin && !!highlightId && period === "all-time" && version !== undefined,
     staleTime: 0,
   });
@@ -118,7 +200,12 @@ export function LeaderboardView({
         >
           <TabsList>
             {LEADERBOARD_VIEWS.map((view) => (
-              <TabsTrigger key={view.id} value={view.id}>
+              <TabsTrigger
+                key={view.id}
+                value={view.id}
+                disabled={view.id === "weekly"}
+                title={view.id === "weekly" ? "Weekly rankings are not available yet." : undefined}
+              >
                 {view.label}
               </TabsTrigger>
             ))}
@@ -160,7 +247,13 @@ export function LeaderboardView({
           {isPending || mine.isFetching
             ? "Loading..."
             : !mine.isError && mine.data
-              ? "#" + mine.data.rank
+              ? "#" +
+                mine.data.rank +
+                " / ₱" +
+                mine.data.cost.toLocaleString() +
+                " / " +
+                mine.data.peakStress.toFixed(1) +
+                "%"
               : "Not available"}
         </p>
       ) : null}
@@ -213,10 +306,10 @@ export function LeaderboardView({
                       Engineer
                     </th>
                     <th scope="col" className="px-4 py-3 font-display">
-                      Level
+                      Construction cost
                     </th>
                     <th scope="col" className="px-4 py-3 text-right font-display">
-                      Engineering Score
+                      Peak stress
                     </th>
                   </tr>
                 </thead>
@@ -236,8 +329,8 @@ export function LeaderboardView({
                           {e.playFabId}
                         </span>
                       </td>
-                      <td className="px-4 py-3">{e.level ?? "\u2014"}</td>
-                      <td className="px-4 py-3 text-right">{e.score.toLocaleString()}</td>
+                      <td className="px-4 py-3">₱{e.cost.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">{e.peakStress.toFixed(1)}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -260,13 +353,15 @@ export function LeaderboardView({
                     </span>
                     <div className="min-w-0">
                       <p className="truncate font-semibold">{e.displayName}</p>
-                      <p className="text-xs text-muted-foreground">Level {e.level ?? "\u2014"}</p>
+
                       <p className="truncate font-mono text-xs text-muted-foreground">
                         {e.playFabId}
                       </p>
                     </div>
                   </div>
-                  <p className="shrink-0 font-display">{e.score.toLocaleString()}</p>
+                  <p className="shrink-0 font-display">
+                    ₱{e.cost.toLocaleString()} / {e.peakStress.toFixed(1)}%
+                  </p>
                 </li>
               ))}
             </ul>

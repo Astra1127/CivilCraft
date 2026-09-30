@@ -265,7 +265,7 @@ function AdminOverview() {
           </Module>
         </Panel>
         <Panel
-          title="Top engineers"
+          title="Top engineers / ShopKeeper / Efficient"
           icon={Trophy}
           className="min-w-0"
           actions={
@@ -279,12 +279,14 @@ function AdminOverview() {
               rows.length ? (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
-                    <caption className="sr-only">Top five engineers ranked by TotalScore</caption>
+                    <caption className="sr-only">
+                      ShopKeeper / Efficient: top five engineers
+                    </caption>
                     <thead>
                       <tr className="border-b border-border text-left">
                         <th className="py-3">Rank</th>
                         <th>Engineer</th>
-                        <th className="text-right">Engineering score</th>
+                        <th className="text-right">Cost / peak stress</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -297,7 +299,9 @@ function AdminOverview() {
                               {row.playFabId}
                             </p>
                           </td>
-                          <td className="text-right font-display">{row.score.toLocaleString()}</td>
+                          <td className="text-right font-display">
+                            ₱{row.cost.toLocaleString()} / {row.peakStress.toFixed(1)}%
+                          </td>
                         </tr>
                       ))}
                     </tbody>

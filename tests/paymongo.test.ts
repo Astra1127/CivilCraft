@@ -1062,4 +1062,254 @@ test("25. qr.paid fulfills order to PlayFab and qr.expired is safely acknowledge
   assert.equal(firstAward.amount, 500);
 });
 
+// -------------------------------------------------------------
+// Test 26: Admin dynamically creates a new coin product
+// -------------------------------------------------------------
+test("26. Admin can create a new coin product and it appears dynamically in the shop", async () => {
+  const config = getAdminAuthConfig()!;
+  const sessionToken = await issueAdminSession(config, config.users[0]!);
+  const cookieHeader = `${cookieName(config)}=${sessionToken}`;
+
+  // 1. Create a 5,000 Coins — ₱400 product
+  const createReq = new Request("https://civil-craft.vercel.app/api/admin/products", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      cookie: cookieHeader,
+      origin: "https://civil-craft.vercel.app",
+    },
+    body: JSON.stringify({
+      action: "save",
+      product: {
+        id: "coins_5000",
+        name: "5,000 Civil Craft Coins",
+        description: "Mega builder vault for elite bridge engineers",
+        amount: 40000, // ₱400.00 in centavos
+        currency: "PHP",
+        rewardCoins: 5000,
+        badge: "Ultimate Pack",
+        popular: true,
+        active: true,
+      },
+    }),
+  });
+
+  const createRes = await handlePlayFabAdminRequest(createReq);
+  assert.ok(createRes);
+  assert.equal(createRes.status, 200);
+  const createData = (await createRes.json()) as any;
+  assert.equal(createData.success, true);
+  assert.ok(Array.isArray(createData.products));
+  assert.ok(createData.products.some((p: any) => p.id === "coins_5000"));
+
+  // 2. Verify that public /api/shop/products immediately returns this product
+  const shopReq = new Request("https://civil-craft.vercel.app/api/shop/products", {
+    method: "GET",
+  });
+  const shopRes = await handlePaymentsRequest(shopReq);
+  assert.ok(shopRes);
+  assert.equal(shopRes.status, 200);
+  const shopData = (await shopRes.json()) as any;
+  const p5000 = shopData.products.find((p: any) => p.id === "coins_5000");
+  assert.ok(p5000, "Expected new 5,000 coin product to appear in /api/shop/products");
+  assert.equal(p5000.amount, 40000);
+  assert.equal(p5000.rewardCoins, 5000);
+  assert.equal(p5000.badge, "Ultimate Pack");
+});
+
+// -------------------------------------------------------------
+// Test 27: Purchasing the admin-created product grants exact CO coins
+// -------------------------------------------------------------
+test("27. Checkout and webhook payment for admin-created product awards correct CO coins", async () => {
+  // Pre-seed product in internalData since beforeEach clears it
+  internalData["civilcraft.website.v1.coin-products.coins_5000"] = JSON.stringify({
+    id: "coins_5000",
+    name: "5,000 Civil Craft Coins",
+    description: "Mega builder vault for elite bridge engineers",
+    amount: 40000,
+    currency: "PHP",
+    rewardCoins: 5000,
+    category: "currency",
+    badge: "Ultimate Pack",
+    popular: true,
+    active: true,
+  });
+
+  // 1. Create checkout session for coins_5000
+  const checkoutReq = new Request(
+    "https://civil-craft.vercel.app/api/payments/paymongo/create-checkout",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${TEST_PLAYER_TICKET}`,
+        origin: "https://civil-craft.vercel.app",
+      },
+      body: JSON.stringify({ productId: "coins_5000" }),
+    },
+  );
+
+  const checkoutRes = await handlePaymentsRequest(checkoutReq);
+  assert.ok(checkoutRes);
+  assert.equal(checkoutRes.status, 200);
+  const checkoutData = (await checkoutRes.json()) as any;
+  assert.equal(checkoutData.success, true);
+  const orderId = checkoutData.orderId;
+  assert.ok(orderId);
+
+  const order = await getOrder(orderId);
+  assert.ok(order);
+  assert.equal(order.productId, "coins_5000");
+  assert.equal(order.expectedAmount, 40000); // ₱400.00
+  assert.equal(order.expectedCoins, 5000); // 5000 CO coins
+
+  // 2. Simulate PayMongo payment webhook for this order
+  awardedCoinsLog = [];
+  const eventId = "evt_test_dynamic_product_paid_1";
+  const webhookBody = JSON.stringify({
+    data: {
+      id: eventId,
+      type: "event",
+      attributes: {
+        type: "checkout_session.payment.paid",
+        livemode: false,
+        data: {
+          id: order.PayMongoCheckoutSessionId,
+          type: "checkout_session",
+          attributes: {
+            reference_number: orderId,
+            payments: [
+              {
+                id: "pay_dyn_1",
+                type: "payment",
+                attributes: {
+                  amount: 40000,
+                  currency: "PHP",
+                  status: "paid",
+                },
+              },
+            ],
+            metadata: { orderId },
+          },
+        },
+      },
+    },
+  });
+
+  const sign = signPayload(webhookBody);
+  const webhookReq = new Request("https://civil-craft.vercel.app/api/webhooks/paymongo", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Paymongo-Signature": sign.header,
+    },
+    body: webhookBody,
+  });
+
+  const webhookRes = await handlePaymentsRequest(webhookReq);
+  assert.ok(webhookRes);
+  assert.equal(webhookRes.status, 200);
+
+  const fulfilledOrder = await getOrder(orderId);
+  assert.ok(fulfilledOrder);
+  assert.equal(fulfilledOrder.status, "fulfilled");
+
+  // Verify that exactly 5,000 CO coins were credited to the player
+  assert.equal(awardedCoinsLog.length, 1);
+  const award = awardedCoinsLog[0];
+  assert.ok(award);
+  assert.equal(award.playFabId, TEST_PLAYER_ID);
+  assert.equal(award.currency, "CO");
+  assert.equal(award.amount, 5000);
+});
+
+// -------------------------------------------------------------
+// Test 28: Safe product deletion prevention
+// -------------------------------------------------------------
+test("28. Safe product deletion prevents deleting products with transaction history", async () => {
+  const config = getAdminAuthConfig()!;
+  const sessionToken = await issueAdminSession(config, config.users[0]!);
+  const cookieHeader = `${cookieName(config)}=${sessionToken}`;
+
+  // Seed product and an existing order for it
+  internalData["civilcraft.website.v1.coin-products.coins_5000"] = JSON.stringify({
+    id: "coins_5000",
+    name: "5,000 Civil Craft Coins",
+    description: "Mega builder vault",
+    amount: 40000,
+    currency: "PHP",
+    rewardCoins: 5000,
+    category: "currency",
+    active: true,
+  });
+
+  const orderId = generateOrderId();
+  await saveOrder({
+    orderId,
+    playFabId: TEST_PLAYER_ID,
+    productId: "coins_5000",
+    expectedAmount: 40000,
+    currency: "PHP",
+    expectedCoins: 5000,
+    PayMongoCheckoutSessionId: null,
+    PayMongoReferenceNumber: orderId,
+    status: "fulfilled",
+    createdAt: new Date().toISOString(),
+    paidAt: new Date().toISOString(),
+    fulfilledAt: new Date().toISOString(),
+    webhookEventId: "evt_hist_1",
+  });
+
+  // Attempt to delete coins_5000
+  const deleteReq = new Request("https://civil-craft.vercel.app/api/admin/products", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      cookie: cookieHeader,
+      origin: "https://civil-craft.vercel.app",
+    },
+    body: JSON.stringify({
+      action: "delete",
+      id: "coins_5000",
+    }),
+  });
+
+  const deleteRes = await handlePlayFabAdminRequest(deleteReq);
+  assert.ok(deleteRes);
+  assert.equal(deleteRes.status, 400); // Blocked because order exists
+  const deleteData = (await deleteRes.json()) as any;
+  assert.ok(deleteData.error.includes("transaction records exist"));
+
+  // Disable coins_5000 instead
+  const toggleReq = new Request("https://civil-craft.vercel.app/api/admin/products", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      cookie: cookieHeader,
+      origin: "https://civil-craft.vercel.app",
+    },
+    body: JSON.stringify({
+      action: "toggle-active",
+      id: "coins_5000",
+      active: false,
+    }),
+  });
+
+  const toggleRes = await handlePlayFabAdminRequest(toggleReq);
+  assert.ok(toggleRes);
+  assert.equal(toggleRes.status, 200);
+
+  // Shop now filters out disabled product
+  const shopReq = new Request("https://civil-craft.vercel.app/api/shop/products", {
+    method: "GET",
+  });
+  const shopRes = await handlePaymentsRequest(shopReq);
+  assert.ok(shopRes);
+  assert.equal(shopRes.status, 200);
+  const shopData = (await shopRes.json()) as any;
+  const p5000 = shopData.products.find((p: any) => p.id === "coins_5000");
+  assert.equal(p5000, undefined, "Disabled product should not appear in player shop");
+});
+
+
 

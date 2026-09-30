@@ -17,6 +17,14 @@ import type { AdminIntegrationStatus, PlayerSearchKind } from "./admin-types.ts"
 import type { Transaction } from "./types.ts";
 import { listOrders } from "../payments/orders.server.ts";
 import { getProduct } from "../payments/products.ts";
+import {
+  listAllProducts,
+  saveProduct,
+  deleteProduct,
+  toggleProductActive,
+  reorderProducts,
+  getProductById,
+} from "../payments/products.server.ts";
 
 const headers = {
   "Cache-Control": "no-store, private",
@@ -121,6 +129,45 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
         return json({ configured: true, records });
       }
       return json({ configured: true, records: [] });
+    }
+    if (path === "/api/admin/products") {
+      if (request.method === "GET") {
+        const products = await listAllProducts();
+        return json({ products });
+      }
+      if (request.method === "POST") {
+        const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+        const action = typeof body["action"] === "string" ? body["action"] : "save";
+
+        if (action === "delete") {
+          const id = typeof body["id"] === "string" ? body["id"] : "";
+          const result = await deleteProduct(id);
+          const products = await listAllProducts();
+          return json({ success: true, message: result.message, products });
+        }
+
+        if (action === "toggle-active") {
+          const id = typeof body["id"] === "string" ? body["id"] : "";
+          const active = typeof body["active"] === "boolean" ? body["active"] : undefined;
+          const updated = await toggleProductActive(id, active);
+          const products = await listAllProducts();
+          return json({ success: true, product: updated, products });
+        }
+
+        if (action === "reorder") {
+          const orderedIds = Array.isArray(body["orderedIds"])
+            ? (body["orderedIds"] as string[])
+            : [];
+          const products = await reorderProducts(orderedIds);
+          return json({ success: true, products });
+        }
+
+        // Default action: create or save product
+        const productPayload = (body["product"] ?? body) as Record<string, unknown>;
+        const saved = await saveProduct(productPayload);
+        const products = await listAllProducts();
+        return json({ success: true, product: saved, products });
+      }
     }
     if (path === "/api/admin/players" && request.method === "GET") {
       // Configuration is checked even when an export snapshot is cached.

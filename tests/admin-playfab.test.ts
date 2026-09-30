@@ -106,7 +106,7 @@ beforeEach(() => {
     let result: unknown;
     switch (operation) {
       case "Server/GetLeaderboard":
-        assert.equal(body["StatisticName"], "TotalScore");
+        assert.match(String(body["StatisticName"]), /^CC_[ES]_[A-F0-9]{16}$/);
         result = {
           Version: 3,
           Leaderboard: rankingRows.slice(
@@ -634,11 +634,64 @@ async function board(path = "", ticket = "", cookie = "") {
     }),
   );
 }
+
+test("every Revision 4 contract and mode selects the same statistic for top and current-player ranks", async () => {
+  const contracts = {
+    ShopKeeper: "24A0506A7A79A0DB",
+    TUT_CONTRACT1: "6C19CA5B77A6FF90",
+    ReedsContract: "7AD47CC6EE895E44",
+    VancesContract: "C29D1DB10DD4940D",
+    TUT_CONTRACT2: "6C19CD5B77A704A9",
+    ReedSideInspection: "6CC5505F08AAC340",
+    VanceSideRealignment: "0FCFDEF8DF951749",
+    SilasMainContract: "B57A013AC08B9A90",
+    MainContractSilas: "DD46490E01484D5A",
+  };
+  for (const [contractId, suffix] of Object.entries(contracts)) {
+    for (const mode of ["efficient", "strongest"]) {
+      const score = mode === "efficient" ? 2135125720 : 1565470720;
+      rankingRows = [{ PlayFabId: "ABC123", Position: 0, StatValue: score }];
+      const query = "?" + new URLSearchParams({ contractId, mode, version: "3" });
+      const before = calls.length;
+      const top = await (await board(query, "valid-player"))!.json();
+      const mine = await (await board("/me" + query, "valid-player"))!.json();
+      assert.deepEqual(mine, top.entries[0]);
+      assert.equal(mine.cost, 12345);
+      assert.equal(mine.peakStress, 58.2);
+      assert.equal(mine.rank, 1);
+      const reads = calls
+        .slice(before)
+        .filter((c) => c.operation.startsWith("Server/GetLeaderboard"));
+      assert.equal(reads.length, 3);
+      for (const read of reads) {
+        assert.equal(
+          read.body["StatisticName"],
+          `CC_${mode === "efficient" ? "E" : "S"}_${suffix}`,
+        );
+        assert.equal(read.body["Version"], 3);
+      }
+    }
+  }
+});
+
+test("leaderboard rejects unlisted contract/mode before querying statistics", async () => {
+  for (const query of [
+    "?contractId=TotalScore",
+    "?contractId=__proto__",
+    "?mode=Last",
+    "?contractId=",
+  ]) {
+    const before = calls.length;
+    assert.equal((await board(query, "valid-player"))!.status, 400);
+    assert.equal((await board("/me" + query, "valid-player"))!.status, 400);
+    assert.ok(!calls.slice(before).some((c) => c.operation.startsWith("Server/GetLeaderboard")));
+  }
+});
 test("player A, player B and admin retrieve identical all-time pages independent of sessions", async () => {
   rankingRows = Array.from({ length: 23 }, (_, i) => ({
     PlayFabId: i === 0 ? "ABC123" : i === 1 ? "DEF456" : (i + 1).toString(16),
     Position: i,
-    StatValue: 24000 - i,
+    StatValue: 2147483647 - (24000 + i) * 1001 - 500,
   }));
   const cookie = await session();
   const a = await (await board("", "valid-player"))!.json();
@@ -661,7 +714,7 @@ test("player A, player B and admin retrieve identical all-time pages independent
   assert.ok(
     calls
       .filter((c) => c.operation === "Server/GetLeaderboard")
-      .every((c) => !c.body["PlayFabId"] && c.body["StatisticName"] === "TotalScore"),
+      .every((c) => !c.body["PlayFabId"] && c.body["StatisticName"] === "CC_E_24A0506A7A79A0DB"),
   );
 });
 test("leaderboard distinguishes empty, failure, missing access and unranked users", async () => {
@@ -670,7 +723,7 @@ test("leaderboard distinguishes empty, failure, missing access and unranked user
   assert.equal((await board("", "expired"))!.status, 401);
   assert.deepEqual((await (await board("", "", cookie))!.json()).entries, []);
   assert.equal(await (await board("/me", "valid-player"))!.json(), null);
-  rankingRows = [{ PlayFabId: "DEF456", Position: 0, StatValue: 10 }];
+  rankingRows = [{ PlayFabId: "DEF456", Position: 0, StatValue: 2147483647 - 10010 }];
   assert.equal(
     await (await board("/me", "valid-player"))!.json(),
     null,
@@ -693,7 +746,7 @@ test("leaderboard ranks come from backend positions and malformed rows fail clos
       {
         PlayFabId: "ABC123",
         Position: 42,
-        StatValue: 18240,
+        StatValue: 2147483647 - 18240 * 1001,
         Profile: { DisplayName: "Engineer A" },
       },
     ])[0]!.rank,
@@ -804,7 +857,7 @@ test("registration UTC buckets and activity boundaries do not invent missing his
 });
 
 test("weekly is explicitly empty for both consumers and never borrows lifetime scores", async () => {
-  rankingRows = [{ PlayFabId: "ABC123", Position: 0, StatValue: 18240 }];
+  rankingRows = [{ PlayFabId: "ABC123", Position: 0, StatValue: 2147483647 - 18240 * 1001 }];
   const cookie = await session();
   const player = await (await board("?period=weekly", "valid-player"))!.json();
   const admin = await (await board("?period=weekly", "", cookie))!.json();
@@ -814,7 +867,7 @@ test("weekly is explicitly empty for both consumers and never borrows lifetime s
   assert.ok(!calls.some((c) => c.operation.startsWith("Server/GetLeaderboard")));
   assert.equal(
     (await (await board("?period=all-time", "", cookie))!.json()).entries[0].score,
-    18240,
+    2147483647 - 18240 * 1001,
   );
   assert.equal((await board("?period=local", "", cookie))!.status, 400);
   assert.equal((await board("?period=monthly", "", cookie))!.status, 400);
@@ -824,7 +877,7 @@ test("leaderboard supports 10, 20 and 50 backend entries per page", async () => 
   rankingRows = Array.from({ length: 55 }, (_, i) => ({
     PlayFabId: (i + 1).toString(16),
     Position: i,
-    StatValue: 100 - i,
+    StatValue: 2147483647 - (100 + i) * 1001,
   }));
   const cookie = await session();
   for (const size of [10, 20, 50]) {

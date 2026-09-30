@@ -93,6 +93,8 @@ export interface Achievement {
 export type LeaderboardWindow = "weekly" | "all-time";
 
 export interface LeaderboardEntry {
+  cost: number;
+  peakStress: number;
   rank: number;
   playFabId: string;
   displayName: string;

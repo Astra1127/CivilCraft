@@ -1,3 +1,4 @@
+import { bridgeStatistic, decodeBridgeScore } from "./leaderboard-config.server.ts";
 import { getAdminAuthConfig } from "../admin-auth/config.server.ts";
 import { isAuthorizedStaff, readAdminSession } from "../admin-auth/session.server.ts";
 import {
@@ -7,11 +8,19 @@ import {
   playFabAdmin,
   textValue,
 } from "./admin-client.server.ts";
-import { LEADERBOARD_PAGE_SIZE, LEADERBOARD_STATISTIC } from "./leaderboard-shared.ts";
-import type { LeaderboardPage, LeaderboardPeriod } from "./leaderboard-shared.ts";
+import { LEADERBOARD_PAGE_SIZE, DEFAULT_CONTRACT, DEFAULT_MODE } from "./leaderboard-shared.ts";
+import type {
+  LeaderboardPage,
+  LeaderboardPeriod,
+  LeaderboardContract,
+  LeaderboardMode,
+} from "./leaderboard-shared.ts";
 import type { LeaderboardEntry } from "./types.ts";
 
-export function mapLeaderboard(raw: unknown): LeaderboardEntry[] {
+export function mapLeaderboard(
+  raw: unknown,
+  mode: LeaderboardMode = DEFAULT_MODE,
+): LeaderboardEntry[] {
   if (!Array.isArray(raw)) throw new AdminApiError(502, "Unable to load the leaderboard.");
   return raw.map((value) => {
     const row = object(value);
@@ -32,6 +41,7 @@ export function mapLeaderboard(raw: unknown): LeaderboardEntry[] {
       playFabId: id,
       rank: position + 1,
       score,
+      ...decodeBridgeScore(score, mode),
       level: null,
       displayName:
         textValue(row["DisplayName"]) ??
@@ -47,17 +57,20 @@ export async function leaderboardPage(
   version?: number,
   period: LeaderboardPeriod = "all-time",
   pageSize = LEADERBOARD_PAGE_SIZE,
+  contract: LeaderboardContract = DEFAULT_CONTRACT,
+  mode: LeaderboardMode = DEFAULT_MODE,
 ): Promise<LeaderboardPage> {
+  const statistic = bridgeStatistic(contract, mode);
   // No weekly statistic is implemented by the game integration. Never reuse lifetime scores.
   if (period === "weekly") return { entries: [], version: null, nextStart: null };
   const result = await playFabAdmin("Server/GetLeaderboard", {
-    StatisticName: LEADERBOARD_STATISTIC,
+    StatisticName: statistic,
     StartPosition: start,
     MaxResultsCount: pageSize,
     ProfileConstraints: { ShowDisplayName: true },
     ...versionBody(version),
   });
-  const entries = mapLeaderboard(result["Leaderboard"]);
+  const entries = mapLeaderboard(result["Leaderboard"], mode);
   const returnedVersion = result["Version"];
   if (
     typeof returnedVersion !== "number" ||
@@ -76,16 +89,27 @@ export async function leaderboardRank(
   id: string,
   version?: number,
   period: LeaderboardPeriod = "all-time",
+  contract: LeaderboardContract = DEFAULT_CONTRACT,
+  mode: LeaderboardMode = DEFAULT_MODE,
 ): Promise<LeaderboardEntry | null> {
+  const statistic = bridgeStatistic(contract, mode);
   if (period === "weekly") return null;
   const result = await playFabAdmin("Server/GetLeaderboardAroundUser", {
-    StatisticName: LEADERBOARD_STATISTIC,
+    StatisticName: statistic,
     PlayFabId: id,
     MaxResultsCount: 1,
     ProfileConstraints: { ShowDisplayName: true },
     ...versionBody(version),
   });
-  const candidate = mapLeaderboard(result["Leaderboard"]).find((row) => row.playFabId === id);
+  // AroundUser can synthesize a zero score for an unranked player. Verify membership before decoding.
+  const raw = result["Leaderboard"];
+  if (!Array.isArray(raw)) throw new AdminApiError(502, "Unable to load the leaderboard.");
+  const candidate = raw.map(object).find((row) => row["PlayFabId"] === id);
+  if (
+    candidate &&
+    (!Number.isSafeInteger(candidate["Position"]) || Number(candidate["Position"]) < 0)
+  )
+    throw new AdminApiError(502, "Unable to load the leaderboard.");
   if (!candidate) return null;
   // AroundUser can return position 0 for an account with NO statistic. Confirm
   // membership against the all-time leaderboard at that position, in the same version.
@@ -98,15 +122,15 @@ export async function leaderboardRank(
   )
     throw new AdminApiError(502, "Unable to load the leaderboard.");
   const check = await playFabAdmin("Server/GetLeaderboard", {
-    StatisticName: LEADERBOARD_STATISTIC,
-    StartPosition: candidate.rank - 1,
+    StatisticName: statistic,
+    StartPosition: candidate["Position"],
     MaxResultsCount: 1,
     ProfileConstraints: { ShowDisplayName: true },
     ...versionBody(actualVersion),
   });
   if (check["Version"] !== actualVersion)
     throw new AdminApiError(502, "Unable to load the leaderboard.");
-  return mapLeaderboard(check["Leaderboard"]).find((row) => row.playFabId === id) ?? null;
+  return mapLeaderboard(check["Leaderboard"], mode).find((row) => row.playFabId === id) ?? null;
 }
 export async function handleLeaderboardRequest(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
@@ -153,6 +177,9 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
       if (!/^\d{1,9}$/.test(raw)) throw new AdminApiError(400, "Invalid leaderboard page.");
       return Number(raw);
     };
+    const contract = url.searchParams.get("contractId") ?? DEFAULT_CONTRACT;
+    const mode = url.searchParams.get("mode") ?? DEFAULT_MODE;
+    bridgeStatistic(contract, mode);
     const version = integer("version");
     const period = url.searchParams.get("period") ?? "all-time";
     if (period !== "weekly" && period !== "all-time")
@@ -162,10 +189,27 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
       throw new AdminApiError(400, "Choose 10, 20 or 50 entries per page.");
     if (url.pathname === "/api/leaderboard/me") {
       if (!playerId) return json({ error: "Player sign-in is required." }, 401);
-      return json(await leaderboardRank(playerId, version, period));
+      return json(
+        await leaderboardRank(
+          playerId,
+          version,
+          period,
+          contract as LeaderboardContract,
+          mode as LeaderboardMode,
+        ),
+      );
     }
     if (url.pathname !== "/api/leaderboard") return json({ error: "Not found." }, 404);
-    return json(await leaderboardPage(integer("start", 0), version, period, pageSize));
+    return json(
+      await leaderboardPage(
+        integer("start", 0),
+        version,
+        period,
+        pageSize,
+        contract as LeaderboardContract,
+        mode as LeaderboardMode,
+      ),
+    );
   } catch (e) {
     return json(
       {

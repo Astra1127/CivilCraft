@@ -1,6 +1,12 @@
+import { DEFAULT_CONTRACT, DEFAULT_MODE } from "./leaderboard-shared";
 import { requireSessionTicket } from "./client";
 import type { LeaderboardEntry } from "./types";
-import type { LeaderboardPage, LeaderboardPeriod } from "./leaderboard-shared";
+import type {
+  LeaderboardPage,
+  LeaderboardPeriod,
+  LeaderboardContract,
+  LeaderboardMode,
+} from "./leaderboard-shared";
 export { LEADERBOARD_STATISTIC } from "./leaderboard-shared";
 async function request<T>(path: string, admin = false): Promise<T> {
   const response = await fetch(path, {
@@ -18,8 +24,16 @@ export function getLeaderboard(
   admin = false,
   period: LeaderboardPeriod = "all-time",
   pageSize = 20,
+  contractId: LeaderboardContract = DEFAULT_CONTRACT,
+  mode: LeaderboardMode = DEFAULT_MODE,
 ): Promise<LeaderboardPage> {
-  const params = new URLSearchParams({ start: String(start), period, pageSize: String(pageSize) });
+  const params = new URLSearchParams({
+    start: String(start),
+    period,
+    pageSize: String(pageSize),
+    contractId,
+    mode,
+  });
   if (version !== undefined) params.set("version", String(version));
   return request("/api/leaderboard?" + params, admin);
 }
@@ -27,9 +41,13 @@ export async function getPlayerRank(
   playFabId: string,
   version?: number,
   period: LeaderboardPeriod = "all-time",
+  contractId: LeaderboardContract = DEFAULT_CONTRACT,
+  mode: LeaderboardMode = DEFAULT_MODE,
 ): Promise<LeaderboardEntry | null> {
   const row = await request<LeaderboardEntry | null>(
-    "/api/leaderboard/me?period=" + period + (version === undefined ? "" : "&version=" + version),
+    "/api/leaderboard/me?" +
+      new URLSearchParams({ period, contractId, mode }) +
+      (version === undefined ? "" : "&version=" + version),
   );
   return row?.playFabId === playFabId ? row : null;
 }

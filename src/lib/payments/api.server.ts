@@ -1,5 +1,6 @@
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
 import { getProduct, PAYMENT_PRODUCTS, DEFAULT_PRODUCTS } from "./products.ts";
+import { getProductById, listActiveProducts } from "./products.server.ts";
 import {
   generateOrderId,
   getOrder,
@@ -110,8 +111,8 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       }
 
       const rawProductId = typeof body["productId"] === "string" ? body["productId"] : "";
-      const product = getProduct(rawProductId);
-      if (!product) {
+      const product = await getProductById(rawProductId);
+      if (!product || product.active === false) {
         return jsonResponse(
           { error: `Unknown or unavailable product: '${rawProductId}'` },
           400,
@@ -232,7 +233,8 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
     if (request.method !== "GET") {
       return jsonResponse({ error: "Method not allowed" }, 405);
     }
-    return jsonResponse({ products: DEFAULT_PRODUCTS });
+    const products = await listActiveProducts();
+    return jsonResponse({ products });
   }
 
   return null;
