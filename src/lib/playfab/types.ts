@@ -33,6 +33,8 @@ export interface PlayerProfile extends PlayerIdentity {
   challengesCompleted: number | null;
   achievementsUnlocked: number | null;
   achievementsTotal: number | null;
+  bestSingleBuildScore?: number | null;
+  characterSyncedAt?: string | undefined;
   lastActive?: string | undefined;
   /** Moderation state from the backend. Unavailable when absent. */
   accountStatus?: AccountStatus;
@@ -68,8 +70,8 @@ export interface RegionProgress {
   completed: boolean;
   missionsCompleted: number;
   missionsTotal: number;
-  bestScore?: number;
-  stars?: number;
+  bestScore?: number | undefined;
+  stars?: number | undefined;
 }
 
 export interface PlayerProgress {
@@ -85,9 +87,9 @@ export interface Achievement {
   description: string;
   icon: string;
   unlocked: boolean;
-  unlockedAt?: string;
-  progress?: number;
-  progressTarget?: number;
+  unlockedAt?: string | undefined;
+  progress?: number | undefined;
+  progressTarget?: number | undefined;
 }
 
 export type LeaderboardWindow = "weekly" | "all-time";
@@ -100,7 +102,7 @@ export interface LeaderboardEntry {
   displayName: string;
   level: number | null;
   score: number;
-  updatedAt?: string;
+  updatedAt?: string | undefined;
 }
 
 export interface PlayFabStatus {
@@ -122,8 +124,8 @@ export interface CosmeticItem {
   name: string;
   slot: CosmeticSlot;
   /** Catalog thumbnail. Absent until real catalog art is wired up. */
-  imageUrl?: string;
-  rarity?: string;
+  imageUrl?: string | undefined;
+  rarity?: string | undefined;
 }
 
 /**
@@ -132,9 +134,9 @@ export interface CosmeticItem {
  * missing the UI falls back to a generic Civil Craft engineer silhouette.
  */
 export interface PlayerCharacter {
-  portraitUrl?: string;
+  portraitUrl?: string | undefined;
   /** Timestamp of the last character sync from the game. */
-  syncedAt?: string;
+  syncedAt?: string | undefined;
   equipped: CosmeticItem[];
 }
 
@@ -182,10 +184,10 @@ export interface PlayerLevelCompletion {
   score: number;
   status: "success";
   /** Cloud/file-storage URL of the player's completed bridge. Never a blob. */
-  completionScreenshotUrl?: string;
+  completionScreenshotUrl?: string | undefined;
   completedAt: string;
   /** Set only when the backend confirms an achievement unlocked here. */
-  achievementId?: string;
+  achievementId?: string | undefined;
 }
 
 /** Level content: game-owned structure, website-owned educational annotation. */
@@ -193,12 +195,12 @@ export interface AlmanacLevel {
   levelId: string;
   regionId: string;
   /** Absent while the level is still hidden by the game. */
-  levelName?: string;
+  levelName?: string | undefined;
   order: number;
   status: LevelStatus;
   /** Engineering concepts encountered in this level (Almanac/CMS content). */
   engineeringConceptIds: string[];
-  completion?: PlayerLevelCompletion;
+  completion?: PlayerLevelCompletion | undefined;
 }
 
 export interface AlmanacRegion {
@@ -279,6 +281,7 @@ export const TRACKED_STATISTIC_KEYS = [
   "TotalScore",
   "BridgesCompleted",
   "ChallengesCompleted",
+  "BestSingleBuildScore",
   "BestBuildScore",
 ] as const;
 

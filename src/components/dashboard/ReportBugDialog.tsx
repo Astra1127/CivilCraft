@@ -1,3 +1,4 @@
+import { playerFetch } from "@/lib/playfab/client";
 import { Bug } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -38,7 +39,7 @@ export function ReportBugDialog() {
     }
     setSending(true);
     try {
-      const response = await fetch("/api/player/bug-reports", {
+      const response = await playerFetch("/api/player/bug-reports", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

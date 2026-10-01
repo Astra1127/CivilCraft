@@ -5,8 +5,11 @@
  * component ever builds a PlayFab URL itself. Only the Client API is reachable
  * from here. Privileged administrator APIs are not configured.
  */
-import { playFabConfig, playFabUrl } from "./config";
-import type { PlayerIdentity } from "./types";
+import { playFabConfig, playFabUrl } from "./config.ts";
+import { currentSessionTicket, expirePlayerSession, readSession } from "./session-store.ts";
+import { isInvalidPlayerTicket, SESSION_EXPIRED_MESSAGE } from "./session-errors.ts";
+export { readSession, writeSession, clearSession, currentSessionTicket } from "./session-store.ts";
+export type { AuthScope, PlayFabSession } from "./session-store.ts";
 
 export type PlayFabErrorKind =
   "network" | "credentials" | "session_expired" | "not_found" | "service" | "unknown";
@@ -34,7 +37,7 @@ interface PlayFabEnvelope<T> {
 function classify(errorCode: number | undefined, status: number): PlayFabErrorKind {
   // 1001-1003: account not found / invalid username-password combinations.
   if (errorCode === 1001 || errorCode === 1002 || errorCode === 1003) return "credentials";
-  if (status === 401 || errorCode === 1000) return "session_expired";
+
   if (status === 404) return "not_found";
   if (status >= 500) return "service";
   return "unknown";
@@ -55,6 +58,7 @@ export async function callPlayFab<T>(
       method: "POST",
       headers,
       body: JSON.stringify({ TitleId: playFabConfig.titleId, ...body }),
+      signal: AbortSignal.timeout(12_000),
     });
   } catch {
     throw new PlayFabError("Unable to connect to Civil Craft services.", "network");
@@ -68,12 +72,17 @@ export async function callPlayFab<T>(
   }
 
   if (!response.ok || !payload || payload.code >= 400) {
-    const kind = classify(payload?.errorCode, response.status);
+    const invalid =
+      !!options.sessionTicket &&
+      response.status < 500 &&
+      isInvalidPlayerTicket(payload?.error, payload?.errorCode);
+    if (invalid) expirePlayerSession(options.sessionTicket!);
+    const kind = invalid ? "session_expired" : classify(payload?.errorCode, response.status);
     const message =
       kind === "credentials"
         ? "Invalid username or password."
         : kind === "session_expired"
-          ? "Your session has expired. Please sign in again."
+          ? SESSION_EXPIRED_MESSAGE
           : (payload?.errorMessage ?? payload?.error ?? "Civil Craft services are unavailable.");
     throw new PlayFabError(message, kind, response.status);
   }
@@ -82,52 +91,6 @@ export async function callPlayFab<T>(
 }
 
 /* ------------------------------------------------------------- session */
-
-export type AuthScope = "player" | "admin";
-
-export interface PlayFabSession {
-  identity: PlayerIdentity;
-  sessionTicket: string;
-  entityToken?: string;
-  entityId?: string;
-  entityType?: string;
-}
-
-const SESSION_KEYS: Record<AuthScope, string> = {
-  player: "civilcraft.session.player.v1",
-  admin: "civilcraft.session.admin.v1",
-};
-/** Pre-split session key; always cleared so old sessions cannot linger. */
-const LEGACY_SESSION_KEY = "civilcraft.session.v1";
-
-export function readSession(scope: AuthScope): PlayFabSession | null {
-  if (typeof window === "undefined" || scope !== "player") return null;
-  try {
-    const raw = window.localStorage.getItem(SESSION_KEYS[scope]);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as PlayFabSession;
-    if (!parsed?.identity?.playFabId) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-export function writeSession(scope: AuthScope, session: PlayFabSession): void {
-  if (typeof window === "undefined" || scope !== "player") return;
-  window.localStorage.setItem(SESSION_KEYS[scope], JSON.stringify(session));
-}
-
-export function clearSession(scope: AuthScope): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(SESSION_KEYS[scope]);
-  window.localStorage.removeItem(LEGACY_SESSION_KEY);
-}
-
-/** Session ticket for authenticated Client API calls, or null when signed out. */
-export function currentSessionTicket(): string | null {
-  return readSession("player")?.sessionTicket ?? null;
-}
 
 export function requireSessionTicket(): string {
   const ticket = currentSessionTicket();
@@ -141,4 +104,42 @@ export async function callPlayerApi<T>(
   body: Record<string, unknown> = {},
 ): Promise<T> {
   return callPlayFab<T>(path, body, { sessionTicket: requireSessionTicket() });
+}
+
+/** Only first-party player authentication 401s clear the ticket used by that request. */
+export async function playerFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const ticket = new Headers(init.headers).get("Authorization")?.match(/^Bearer (\S+)$/)?.[1];
+  const response = await fetch(path, init);
+  const playerPath =
+    /^\/api\/(?:player\/|leaderboard(?:\?|\/|$)|contact(?:\?|$)|payments\/paymongo\/(?:create-checkout|player-orders)(?:\?|$))/.test(
+      path,
+    );
+  if (ticket && playerPath && response.status === 401) {
+    expirePlayerSession(ticket);
+    throw new PlayFabError(SESSION_EXPIRED_MESSAGE, "session_expired", 401);
+  }
+  return response;
+}
+
+/** Validate storage with PlayFab before trusting its identity. No browser expiry extension. */
+export async function validatePlayerSession() {
+  const session = readSession("player");
+  if (!session) return null;
+  const result = await callPlayFab<{
+    AccountInfo?: { PlayFabId?: string; Username?: string; TitleInfo?: { DisplayName?: string } };
+  }>("/Client/GetAccountInfo", {}, { sessionTicket: session.sessionTicket });
+  const info = result.AccountInfo;
+  if (!info?.PlayFabId)
+    throw new PlayFabError("Unable to verify your session. Please retry.", "service");
+  if (info.PlayFabId !== session.identity.playFabId) {
+    expirePlayerSession(session.sessionTicket);
+    throw new PlayFabError(SESSION_EXPIRED_MESSAGE, "session_expired");
+  }
+  return {
+    ...session.identity,
+    playFabId: info.PlayFabId,
+    displayName: info.TitleInfo?.DisplayName ?? info.Username ?? "Engineer",
+    role: "player" as const,
+    isAdmin: false,
+  };
 }

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Hammer, Medal, Star } from "lucide-react";
+import { Clock, Hammer, Medal, RefreshCw, Star, Target, Zap } from "lucide-react";
+import { useState } from "react";
 import { DemoBadge } from "@/components/common/DemoBadge";
 import { CharacterPreview } from "@/components/dashboard/CharacterPreview";
 import { SectionHeading } from "@/components/common/PageHeader";
@@ -17,6 +18,7 @@ import {
   progressService,
 } from "@/lib/playfab";
 import { getBridgeType } from "@/lib/almanac/content";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard/")({
   component: PlayerOverview,
@@ -25,31 +27,63 @@ export const Route = createFileRoute("/dashboard/")({
 function PlayerOverview() {
   const { player } = useAuth();
   const id = player?.playFabId ?? "";
+  const [refreshing, setRefreshing] = useState(false);
+
   const profile = useQuery({
     queryKey: ["profile", id],
     queryFn: () => profileService.getProfile(id),
     enabled: !!id,
+    refetchOnMount: "always",
   });
-  const progress = useQuery({ queryKey: ["progress", id], queryFn: progressService.getProgress });
+  const progress = useQuery({
+    queryKey: ["progress", id],
+    queryFn: progressService.getProgress,
+    refetchOnMount: "always",
+  });
   const achievements = useQuery({
     queryKey: ["achievements", id],
     queryFn: achievementsService.getAchievements,
+    refetchOnMount: "always",
   });
   const character = useQuery({
     queryKey: ["character", id],
     queryFn: profileService.getCharacter,
     enabled: !!id,
+    refetchOnMount: "always",
   });
   const journey = useQuery({
     queryKey: ["almanac-journey", id],
     queryFn: almanacService.getJourney,
+    refetchOnMount: "always",
   });
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        profile.refetch(),
+        progress.refetch(),
+        achievements.refetch(),
+        character.refetch(),
+        journey.refetch(),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   if (profile.isPending) return <LoadingState label="Loading your dashboard…" rows={4} />;
   if (profile.isError)
-    return <ErrorState description={(profile.error as Error).message} onRetry={profile.refetch} />;
+    return (
+      <ErrorState
+        title="Failed to load dashboard data"
+        description={(profile.error as Error).message}
+        onRetry={profile.refetch}
+      />
+    );
 
   const p = profile.data;
+  const isAwaitingSync = !p.characterSyncedAt && p.level === null && p.totalScore === null;
   const xpPercent =
     p.xp !== null && p.xpToNextLevel !== null
       ? Math.round((p.xp / Math.max(p.xpToNextLevel, 1)) * 100)
@@ -57,6 +91,7 @@ function PlayerOverview() {
 
   return (
     <div className="space-y-8">
+      {/* ------------------------------------------------ character & overview */}
       <section className="panel flex flex-col items-center gap-3 p-3 sm:flex-row sm:gap-5 sm:p-6">
         <CharacterPreview
           character={character.data}
@@ -70,10 +105,23 @@ function PlayerOverview() {
                 Welcome back
               </p>
               <h1 className="truncate text-2xl sm:text-3xl">{p.displayName}</h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Level {p.level ?? "\u2014"} · {p.xp?.toLocaleString() ?? "\u2014"} /{" "}
-                {p.xpToNextLevel?.toLocaleString() ?? "\u2014"} XP
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                <span>
+                  Level {p.level ?? 1} · {p.xp?.toLocaleString() ?? 0} /{" "}
+                  {p.xpToNextLevel?.toLocaleString() ?? 100} XP
+                </span>
+                <span>•</span>
+                {p.characterSyncedAt ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-gold">
+                    <Clock className="h-3.5 w-3.5" />
+                    Last game sync: {new Date(p.characterSyncedAt).toLocaleString()}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground/80">
+                    Awaiting game sync
+                  </span>
+                )}
+              </div>
             </div>
             <DemoBadge />
           </div>
@@ -81,34 +129,77 @@ function PlayerOverview() {
           <p className="mt-2 text-xs text-muted-foreground">
             {p.xpToNextLevel !== null && p.xp !== null
               ? Math.max(p.xpToNextLevel - p.xp, 0).toLocaleString()
-              : "\u2014"}{" "}
-            XP to level {p.level === null ? "\u2014" : p.level + 1}
+              : 100}{" "}
+            XP to level {p.level === null ? 2 : p.level + 1}
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <Button asChild variant="gold" size="sm">
               <Link to="/dashboard/almanac">Open Field Journal</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
               <Link to="/dashboard/profile">View Profile</Link>
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="gap-1.5"
+              title="Refresh game data from PlayFab"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </Button>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-3">
+      {/* ------------------------------------------------ first sync notification */}
+      {isAwaitingSync ? (
+        <div className="rounded-xl border border-dashed border-gold/40 bg-gold/5 p-4 text-sm text-foreground/80 flex items-start gap-3">
+          <Clock className="h-5 w-5 text-gold shrink-0 mt-0.5" />
+          <div>
+            <p className="font-semibold text-foreground">Awaiting First Game Sync</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Sign in to Civil Craft: Bridge Edition on your device to synchronize your level, bridge progress, and achievements to your web dashboard.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ------------------------------------------------ 4 core statistics */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={Star}
-          label="Engineering score"
-          value={p.totalScore?.toLocaleString() ?? "\u2014"}
+          label="Total Score"
+          value={p.totalScore !== null ? p.totalScore.toLocaleString() : "0"}
+          hint="Leaderboard score"
         />
-        <StatCard icon={Hammer} label="Bridges completed" value={p.bridgesCompleted ?? "\u2014"} />
         <StatCard
-          icon={Medal}
-          label="Achievements"
-          value={`${p.achievementsUnlocked ?? "\u2014"}/${p.achievementsTotal ?? "\u2014"}`}
+          icon={Hammer}
+          label="Bridges Completed"
+          value={p.bridgesCompleted !== null ? p.bridgesCompleted.toLocaleString() : "0"}
+          hint="Successful crossings"
+        />
+        <StatCard
+          icon={Target}
+          label="Challenges Completed"
+          value={p.challengesCompleted !== null ? p.challengesCompleted.toLocaleString() : "0"}
+          hint="Engineering trials"
+        />
+        <StatCard
+          icon={Zap}
+          label="Best Build Score"
+          value={
+            p.bestSingleBuildScore !== null && p.bestSingleBuildScore !== undefined
+              ? p.bestSingleBuildScore.toLocaleString()
+              : "0"
+          }
+          hint="Highest single bridge"
         />
       </section>
 
+      {/* ------------------------------------------------ story progress */}
       <section>
         <SectionHeading
           title="Story progress"
@@ -121,7 +212,7 @@ function PlayerOverview() {
         {progress.isPending ? (
           <LoadingState rows={2} />
         ) : progress.isError ? (
-          <ErrorState onRetry={progress.refetch} />
+          <ErrorState description="Unable to load story progress." onRetry={progress.refetch} />
         ) : (
           <div className="panel space-y-4 p-6">
             <div>
@@ -132,12 +223,13 @@ function PlayerOverview() {
               <Progress value={progress.data.overallPercent} className="mt-2" />
             </div>
             <p className="text-sm text-muted-foreground">
-              Current region: {progress.data.currentRegion ?? "—"}
+              Current region: {progress.data.currentRegion ?? "Pine Valley (Starting Area)"}
             </p>
           </div>
         )}
       </section>
 
+      {/* ------------------------------------------------ achievements */}
       <section>
         <SectionHeading
           title="Recent achievements"
@@ -149,10 +241,12 @@ function PlayerOverview() {
         />
         {achievements.isPending ? (
           <LoadingState rows={2} />
+        ) : achievements.isError ? (
+          <ErrorState description="Unable to load achievements." onRetry={achievements.refetch} />
         ) : (achievements.data ?? []).filter((a) => a.unlocked).length === 0 ? (
           <EmptyState
             title="No achievements yet"
-            description="Complete projects in the game and your unlocked achievements will appear here."
+            description="Complete projects in Civil Craft and your unlocked achievements will appear here."
           />
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -169,6 +263,7 @@ function PlayerOverview() {
         )}
       </section>
 
+      {/* ------------------------------------------------ recent builds */}
       <section>
         <SectionHeading
           title="Recent builds"
@@ -181,6 +276,8 @@ function PlayerOverview() {
         />
         {journey.isPending ? (
           <LoadingState rows={2} />
+        ) : journey.isError ? (
+          <ErrorState description="Unable to load build history." onRetry={journey.refetch} />
         ) : (journey.data?.regions ?? []).flatMap((r) => r.levels).filter((l) => l.completion)
             .length === 0 ? (
           <EmptyState

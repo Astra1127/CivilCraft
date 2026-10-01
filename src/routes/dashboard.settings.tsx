@@ -1,3 +1,4 @@
+import { playerFetch } from "@/lib/playfab/client";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Bell, Eye, Globe } from "lucide-react";
@@ -141,7 +142,7 @@ function SettingsPage() {
 }
 
 async function emailPreference(emailUpdates?: boolean): Promise<{ emailUpdates: boolean }> {
-  const response = await fetch("/api/player/email-preference", {
+  const response = await playerFetch("/api/player/email-preference", {
     method: emailUpdates === undefined ? "GET" : "POST",
     headers: {
       Authorization: "Bearer " + requireSessionTicket(),

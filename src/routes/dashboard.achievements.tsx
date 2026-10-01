@@ -30,7 +30,11 @@ function AchievementsPage() {
     <div className="space-y-6">
       <SectionHeading
         title="Achievements"
-        description={`${q.data.filter((a) => a.unlocked).length} of ${q.data.length} unlocked`}
+        description={
+          q.data.length
+            ? `${q.data.filter((a) => a.unlocked).length} of ${q.data.length} unlocked`
+            : "Sync your game to view unlocked achievements"
+        }
         action={<DemoBadge />}
       />
       <div className="flex flex-wrap gap-2">
@@ -47,7 +51,14 @@ function AchievementsPage() {
       </div>
 
       {list.length === 0 ? (
-        <EmptyState title="Nothing here yet" description="Keep playing to unlock achievements." />
+        <EmptyState
+          title={q.data.length === 0 ? "No achievements synced yet" : "No achievements match this filter"}
+          description={
+            q.data.length === 0
+              ? "Complete challenges and build bridges in Civil Craft to unlock achievements."
+              : "Try selecting another filter."
+          }
+        />
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {list.map((a) => (

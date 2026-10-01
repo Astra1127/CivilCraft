@@ -1,3 +1,4 @@
+import { playerReturnTo } from "@/lib/playfab/session-errors";
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -12,7 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect } from "react";
 import { DashboardShell, type DashboardNavItem } from "@/components/dashboard/DashboardShell";
-import { LoadingState } from "@/components/common/States";
+import { ErrorState, LoadingState } from "@/components/common/States";
 import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/dashboard")({
@@ -43,14 +44,38 @@ const items: DashboardNavItem[] = [
 ];
 
 function PlayerLayout() {
-  const { ready, isAuthenticated } = useAuth();
+  const { ready, isAuthenticated, sessionExpired, playerSessionError, retryPlayerSession } =
+    useAuth();
   const navigate = useNavigate();
 
   // Player sessions only: an administrator session grants no dashboard access.
   useEffect(() => {
     if (!ready) return;
-    if (!isAuthenticated) navigate({ to: "/login", replace: true });
-  }, [ready, isAuthenticated, navigate]);
+    if (!isAuthenticated)
+      navigate({
+        to: "/login",
+        search: {
+          redirect: playerReturnTo(
+            typeof window === "undefined"
+              ? "/dashboard"
+              : window.location.pathname + window.location.search + window.location.hash,
+          ),
+          ...(sessionExpired ? { reason: "expired" as const } : {}),
+        },
+        replace: true,
+      });
+  }, [ready, isAuthenticated, sessionExpired, navigate]);
+
+  if (!ready && playerSessionError)
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-20">
+        <ErrorState
+          title="Unable to verify your session."
+          description="Please check your connection and try again. Your saved session has not been removed."
+          onRetry={retryPlayerSession}
+        />
+      </div>
+    );
 
   if (!ready || !isAuthenticated) {
     return (

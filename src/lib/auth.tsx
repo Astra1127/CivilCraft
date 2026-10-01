@@ -1,3 +1,10 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { validatePlayerSession, PlayFabError } from "@/lib/playfab/client";
+import {
+  currentSessionTicket,
+  sessionEnded,
+  subscribePlayerSession,
+} from "@/lib/playfab/session-store";
 import {
   createContext,
   useCallback,
@@ -25,6 +32,9 @@ interface AuthContextValue {
   admin: AdminUser | null;
   ready: boolean;
   adminReady: boolean;
+  playerSessionError: boolean;
+  sessionExpired: boolean;
+  retryPlayerSession: () => void;
   adminConfigured: boolean;
   adminSessionError: boolean;
   /** Player session only. */
@@ -55,17 +65,94 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [adminConfigured, setAdminConfigured] = useState(false);
   const [adminSessionError, setAdminSessionError] = useState(false);
   const adminRequest = useRef(0);
+  const playerRequest = useRef(0);
+  const verifiedTicket = useRef<string | null>(null);
+  const [playerSessionError, setPlayerSessionError] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const retryRef = useRef<() => void>(() => {});
+  const retryPlayerSession = useCallback(() => retryRef.current(), []);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
-    setPlayer(authService.getCurrentUser("player"));
-    // Discard obsolete staff credentials; browser storage never grants admin access.
+    let mounted = true;
+    let pendingTicket: string | null = null;
+    let observedTicket = currentSessionTicket();
+    const refresh = async () => {
+      const ticket = currentSessionTicket();
+      if (observedTicket !== ticket) {
+        observedTicket = ticket;
+        ++playerRequest.current;
+        pendingTicket = null;
+        verifiedTicket.current = null;
+        setPlayer(null);
+        // Drop stale player data, including queries keyed only by feature name.
+        const filter = {
+          predicate: (q: { queryKey: readonly unknown[] }) =>
+            !q.queryKey.some((k) => typeof k === "string" && k.includes("admin")),
+        };
+        void queryClient.cancelQueries(filter);
+        queryClient.removeQueries(filter);
+      }
+      if (pendingTicket === ticket && ticket) return;
+      const request = ++playerRequest.current;
+      if (!ticket) {
+        pendingTicket = null;
+        verifiedTicket.current = null;
+        setPlayer(null);
+        setReady(true);
+        setPlayerSessionError(false);
+        setSessionExpired(sessionEnded());
+        return;
+      }
+      if (verifiedTicket.current !== ticket) {
+        setPlayer(null);
+        setReady(false);
+      }
+      pendingTicket = ticket;
+      try {
+        const identity = await validatePlayerSession();
+        if (!mounted || request !== playerRequest.current || currentSessionTicket() !== ticket)
+          return;
+        verifiedTicket.current = ticket;
+        setPlayer(identity);
+        setReady(true);
+        setPlayerSessionError(false);
+        setSessionExpired(false);
+      } catch {
+        if (!mounted || request !== playerRequest.current || currentSessionTicket() !== ticket)
+          return;
+        // A failed connection cannot revoke an already verified session. On startup,
+        // retain storage and show a retry state without trusting the stored identity.
+        setPlayerSessionError(true);
+      } finally {
+        if (pendingTicket === ticket) pendingTicket = null;
+      }
+    };
+    const changed = () => {
+      void refresh();
+    };
+    const unsubscribe = subscribePlayerSession(changed);
+    retryRef.current = () => {
+      void refresh();
+    };
+    void refresh();
+    window.addEventListener("focus", retryRef.current);
+    window.addEventListener("online", retryRef.current);
+    const onFocus = retryRef.current;
+    const timer = window.setInterval(onFocus, 60_000);
     try {
       window.localStorage.removeItem("civilcraft.session.admin.v1");
     } catch {
-      /* storage unavailable */
+      /* legacy only */
     }
-    setReady(true);
-  }, []);
+    return () => {
+      mounted = false;
+      unsubscribe();
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onFocus);
+    };
+  }, [queryClient]);
 
   useEffect(() => {
     let mounted = true;
@@ -100,11 +187,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const login = useCallback(async (input: Omit<LoginInput, "scope">) => {
-    const identity = await authService.login({ ...input, scope: "player" });
-    setPlayer(identity);
-    return identity;
-  }, []);
+  const login = useCallback(
+    async (input: Omit<LoginInput, "scope">) => {
+      const identity = await authService.login({ ...input, scope: "player" });
+      const ticket = currentSessionTicket();
+      if (!ticket)
+        throw new PlayFabError("Your session expired. Please log in again.", "session_expired");
+      ++playerRequest.current;
+      verifiedTicket.current = ticket;
+      setPlayer(identity);
+      setReady(true);
+      setPlayerSessionError(false);
+      setSessionExpired(false);
+
+      // Refresh player data after successful login
+      if (typeof queryClient?.invalidateQueries === "function") {
+        void queryClient.invalidateQueries({ queryKey: ["profile"] });
+        void queryClient.invalidateQueries({ queryKey: ["progress"] });
+        void queryClient.invalidateQueries({ queryKey: ["character"] });
+        void queryClient.invalidateQueries({ queryKey: ["achievements"] });
+        void queryClient.invalidateQueries({ queryKey: ["almanac-journey"] });
+        void queryClient.invalidateQueries({ queryKey: ["stats"] });
+      }
+
+      return identity;
+    },
+    [queryClient],
+  );
 
   const register = useCallback(async (input: RegisterInput) => authService.register(input), []);
   const loginAdmin = useCallback(async (input: { email: string; password: string }) => {
@@ -170,6 +279,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       admin,
       ready,
       adminReady,
+      playerSessionError,
+      sessionExpired,
+      retryPlayerSession,
       adminConfigured,
       adminSessionError,
       isAuthenticated: !!player,
@@ -186,6 +298,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       admin,
       ready,
       adminReady,
+      playerSessionError,
+      sessionExpired,
+      retryPlayerSession,
       adminConfigured,
       adminSessionError,
       login,

@@ -1,3 +1,4 @@
+import { playerFetch } from "./client";
 /**
  * Purchases and granted items, derived from the player's PlayFab inventory.
  * The website never keeps a duplicate purchase database.
@@ -39,7 +40,7 @@ async function fetchPlayerPaymentTransactions(playerId: string): Promise<Transac
   if (!ticket) return [];
 
   try {
-    const res = await fetch("/api/payments/paymongo/player-orders", {
+    const res = await playerFetch("/api/payments/paymongo/player-orders", {
       headers: { Authorization: `Bearer ${ticket}` },
     });
     if (!res.ok) return [];

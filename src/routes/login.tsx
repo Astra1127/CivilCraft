@@ -1,3 +1,4 @@
+import { playerReturnTo, SESSION_EXPIRED_MESSAGE } from "@/lib/playfab/session-errors";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { Eye, EyeOff, LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -12,9 +13,13 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import heroKeyart from "@/assets/hero-keyart.jpg";
 
-
-
 export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string; reason?: "expired" } => ({
+    ...(typeof search["redirect"] === "string"
+      ? { redirect: playerReturnTo(search["redirect"]) }
+      : {}),
+    ...(search["reason"] === "expired" ? { reason: "expired" as const } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Player Sign In — Civil Craft: Bridge Edition" },
@@ -44,7 +49,9 @@ const schema = z.object({
 });
 
 function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, sessionExpired } = useAuth();
+  const search = Route.useSearch();
+  const destination = playerReturnTo(search.redirect);
   const navigate = useNavigate();
   const [values, setValues] = useState({ email: "", password: "" });
   const [remember, setRemember] = useState(true);
@@ -52,10 +59,9 @@ function LoginPage() {
   const [pending, setPending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-
   useEffect(() => {
-    if (isAuthenticated) navigate({ to: "/dashboard", replace: true });
-  }, [isAuthenticated, navigate]);
+    if (isAuthenticated) navigate({ to: destination, replace: true });
+  }, [isAuthenticated, navigate, destination]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,14 +77,13 @@ function LoginPage() {
     try {
       const identity = await login(parsed.data);
       toast.success(`Welcome back, ${identity.displayName}`);
-      navigate({ to: "/dashboard", replace: true });
+      navigate({ to: destination, replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sign in failed");
     } finally {
       setPending(false);
     }
   };
-
 
   return (
     <PublicLayout>
@@ -103,6 +108,11 @@ function LoginPage() {
               Sign in with the same account you use in the game.
             </p>
 
+            {search.reason === "expired" || sessionExpired ? (
+              <p role="alert" className="mt-4 text-sm text-destructive">
+                {SESSION_EXPIRED_MESSAGE}
+              </p>
+            ) : null}
             <form onSubmit={submit} noValidate className="mt-6 space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="email">Email / Username</Label>
@@ -115,8 +125,8 @@ function LoginPage() {
                   value={values.email}
                   onChange={(e) => setValues((v) => ({ ...v, email: e.target.value }))}
                 />
-                {errors['email'] ? (
-                  <p className="text-xs font-semibold text-destructive">{errors['email']}</p>
+                {errors["email"] ? (
+                  <p className="text-xs font-semibold text-destructive">{errors["email"]}</p>
                 ) : null}
               </div>
               <div className="space-y-1.5">
@@ -143,8 +153,8 @@ function LoginPage() {
                     )}
                   </button>
                 </div>
-                {errors['password'] ? (
-                  <p className="text-xs font-semibold text-destructive">{errors['password']}</p>
+                {errors["password"] ? (
+                  <p className="text-xs font-semibold text-destructive">{errors["password"]}</p>
                 ) : null}
               </div>
 
@@ -158,7 +168,10 @@ function LoginPage() {
                   />
                   Remember Me
                 </label>
-                <Link to="/forgot-password" className="text-sm font-semibold text-gold hover:underline">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm font-semibold text-gold hover:underline"
+                >
                   Forgot Password?
                 </Link>
               </div>
@@ -170,8 +183,8 @@ function LoginPage() {
             </form>
 
             <IntegrationNotice>
-              Use the same Civil Craft account you play with — the website signs in to the same
-              game servers. Administrator accounts use the separate admin portal.
+              Use the same Civil Craft account you play with — the website signs in to the same game
+              servers. Administrator accounts use the separate admin portal.
             </IntegrationNotice>
 
             <p className="mt-4 text-center text-sm font-semibold">
@@ -186,4 +199,3 @@ function LoginPage() {
     </PublicLayout>
   );
 }
-

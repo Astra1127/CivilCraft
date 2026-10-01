@@ -14,7 +14,11 @@
 
 export const CIVIL_CRAFT_TITLE_ID = "17FA03";
 
-const envTitleId = (import.meta.env["VITE_PLAYFAB_TITLE_ID"] as string | undefined)?.trim();
+const envTitleId = (
+  typeof import.meta !== "undefined" && import.meta.env
+    ? (import.meta.env["VITE_PLAYFAB_TITLE_ID"] as string | undefined)
+    : undefined
+)?.trim();
 
 export const playFabConfig = {
   titleId: envTitleId && envTitleId.length > 0 ? envTitleId : CIVIL_CRAFT_TITLE_ID,
@@ -36,5 +40,7 @@ export function playFabUrl(path: string): string {
  * labelled in the UI.
  */
 export const demoMode =
-  import.meta.env.DEV &&
-  (import.meta.env["VITE_PLAYFAB_DEMO"] as string | undefined)?.toLowerCase() === "true";
+  Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV) &&
+  (typeof import.meta !== "undefined" && import.meta.env
+    ? (import.meta.env["VITE_PLAYFAB_DEMO"] as string | undefined)?.toLowerCase() === "true"
+    : false);

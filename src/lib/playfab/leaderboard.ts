@@ -1,3 +1,4 @@
+import { playerFetch } from "./client";
 import { DEFAULT_CONTRACT, DEFAULT_MODE } from "./leaderboard-shared";
 import { requireSessionTicket } from "./client";
 import type { LeaderboardEntry } from "./types";
@@ -9,7 +10,7 @@ import type {
 } from "./leaderboard-shared";
 export { LEADERBOARD_STATISTIC } from "./leaderboard-shared";
 async function request<T>(path: string, admin = false): Promise<T> {
-  const response = await fetch(path, {
+  const response = await playerFetch(path, {
     credentials: "same-origin",
     cache: "no-store",
     headers: admin ? {} : { Authorization: "Bearer " + requireSessionTicket() },

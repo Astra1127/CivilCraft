@@ -1,3 +1,5 @@
+import { playerReturnTo } from "@/lib/playfab/session-errors";
+import { playerFetch } from "@/lib/playfab/client";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -10,7 +12,8 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ErrorState, LoadingState } from "@/components/common/States";
 import { toast } from "sonner";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { SectionDivider } from "@/components/site/SectionDivider";
@@ -18,14 +21,11 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import { currentSessionTicket } from "@/lib/playfab/client";
 import { getVirtualCurrency } from "@/lib/playfab/inventory";
-import {
-  DEFAULT_PRODUCTS,
-  formatProductPrice,
-  type PaymentProduct,
-} from "@/lib/payments/products";
+import { DEFAULT_PRODUCTS, formatProductPrice, type PaymentProduct } from "@/lib/payments/products";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/shop")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Coin Shop — Civil Craft: Bridge Edition" },
@@ -46,6 +46,50 @@ export const Route = createFileRoute("/shop")({
 });
 
 function ShopPage() {
+  const { ready, isAuthenticated, sessionExpired, playerSessionError, retryPlayerSession } =
+    useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (ready && !isAuthenticated)
+      void navigate({
+        to: "/login",
+        search: {
+          redirect: playerReturnTo(
+            typeof window === "undefined"
+              ? "/shop"
+              : window.location.pathname + window.location.search + window.location.hash,
+          ),
+          ...(sessionExpired ? { reason: "expired" as const } : {}),
+        },
+        replace: true,
+      });
+  }, [ready, isAuthenticated, sessionExpired, navigate]);
+
+  if (!ready && playerSessionError)
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-20">
+        <ErrorState
+          title="Unable to verify your session."
+          description="Please check your connection and try again. Your saved session has not been removed."
+          onRetry={retryPlayerSession}
+        />
+      </div>
+    );
+
+  if (!ready || !isAuthenticated)
+    return (
+      <PublicLayout>
+        <div className="mx-auto max-w-3xl px-4 py-20">
+          <LoadingState label="Checking your session…" rows={2} />
+        </div>
+      </PublicLayout>
+    );
+
+  return <AuthenticatedShopPage />;
+}
+
+function AuthenticatedShopPage() {
   const { isAuthenticated, player } = useAuth();
   const navigate = useNavigate();
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
@@ -70,7 +114,7 @@ function ShopPage() {
     queryKey: ["shop-products"],
     queryFn: async () => {
       try {
-        const res = await fetch("/api/shop/products");
+        const res = await playerFetch("/api/shop/products");
         if (!res.ok) throw new Error("Failed to load catalog");
         const data = (await res.json()) as { products?: PaymentProduct[] };
         if (Array.isArray(data.products) && data.products.length > 0) {
@@ -105,7 +149,7 @@ function ShopPage() {
 
     try {
       setPurchasingId(product.id);
-      const res = await fetch("/api/payments/paymongo/create-checkout", {
+      const res = await playerFetch("/api/payments/paymongo/create-checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -155,7 +199,8 @@ function ShopPage() {
             </p>
 
             <p className="text-xs sm:text-sm text-muted-foreground font-semibold">
-              Optional coin packages are available for cosmetic items and customization. Core bridge-engineering lessons remain free.
+              Optional coin packages are available for cosmetic items and customization. Core
+              bridge-engineering lessons remain free.
             </p>
 
             {/* Player Balance Card */}
@@ -170,19 +215,12 @@ function ShopPage() {
                       🪙
                     </span>
                     <span className="font-display text-3xl sm:text-4xl font-extrabold text-foreground tracking-tight">
-                      {balanceQuery.isLoading
-                        ? "..."
-                        : (balanceQuery.data ?? 0).toLocaleString()}
+                      {balanceQuery.isLoading ? "..." : (balanceQuery.data ?? 0).toLocaleString()}
                     </span>
-                    <span className="text-sm font-extrabold text-gold tracking-wide">
-                      COINS
-                    </span>
+                    <span className="text-sm font-extrabold text-gold tracking-wide">COINS</span>
                   </div>
                   <div className="mt-2 flex items-center justify-center gap-3 text-xs text-muted-foreground">
-                    <Link
-                      to="/dashboard"
-                      className="font-bold text-gold hover:underline"
-                    >
+                    <Link to="/dashboard" className="font-bold text-gold hover:underline">
                       Dashboard →
                     </Link>
                     <span className="text-border">•</span>
@@ -242,7 +280,7 @@ function ShopPage() {
                       "panel relative flex flex-col justify-between p-6 sm:p-7 bg-card rounded-2xl border-2 transition-all hover-lift",
                       isPopular
                         ? "border-gold ring-2 ring-gold/20 shadow-lift"
-                        : "border-border/80"
+                        : "border-border/80",
                     )}
                   >
                     {/* Badge */}
@@ -253,7 +291,7 @@ function ShopPage() {
                             "inline-flex items-center gap-1.5 rounded-full px-3.5 py-0.5 text-xs font-extrabold uppercase tracking-wider shadow-sm",
                             isPopular
                               ? "bg-gold text-primary-foreground border border-gold"
-                              : "bg-secondary border border-border text-foreground"
+                              : "bg-secondary border border-border text-foreground",
                           )}
                         >
                           {isPopular && <Sparkles className="h-3 w-3" />}
@@ -293,10 +331,8 @@ function ShopPage() {
                         <div className="flex items-center gap-2.5">
                           <Check className="h-4 w-4 shrink-0 text-gold" />
                           <span>
-                            <strong>
-                              +{product.rewardCoins.toLocaleString()} Coins
-                            </strong>{" "}
-                            added to balance
+                            <strong>+{product.rewardCoins.toLocaleString()} Coins</strong> added to
+                            balance
                           </span>
                         </div>
                         <div className="flex items-center gap-2.5">
@@ -332,7 +368,8 @@ function ShopPage() {
                           ) : (
                             <>
                               <Coins className="mr-2 h-4 w-4" />
-                              Buy {product.rewardCoins.toLocaleString()} Coins — {formatProductPrice(product.amount, product.currency)}
+                              Buy {product.rewardCoins.toLocaleString()} Coins —{" "}
+                              {formatProductPrice(product.amount, product.currency)}
                               <ArrowRight className="ml-2 h-4 w-4" />
                             </>
                           )}
@@ -369,7 +406,8 @@ function ShopPage() {
                 </h3>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                Civil Craft's bridge-engineering lessons, structural mechanics activities, sandbox tools, and core gameplay remain completely accessible without purchasing coins.
+                Civil Craft's bridge-engineering lessons, structural mechanics activities, sandbox
+                tools, and core gameplay remain completely accessible without purchasing coins.
               </p>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Coins are optional and intended for builder customization, hats, and cosmetic gear.
@@ -380,15 +418,15 @@ function ShopPage() {
             <div className="panel border-2 border-border bg-card p-6 rounded-2xl shadow-sm space-y-3">
               <div className="flex items-center gap-2.5 text-gold">
                 <Lock className="h-5 w-5" />
-                <h3 className="font-display text-lg font-bold text-foreground">
-                  Secure Checkout
-                </h3>
+                <h3 className="font-display text-lg font-bold text-foreground">Secure Checkout</h3>
               </div>
               <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
-                Payments are securely handled by PayMongo, supporting QR Ph / QR payments, GCash, Maya, GrabPay, BPI/UBP direct, and credit/debit cards.
+                Payments are securely handled by PayMongo, supporting QR Ph / QR payments, GCash,
+                Maya, GrabPay, BPI/UBP direct, and credit/debit cards.
               </p>
               <div className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-xs text-foreground/90 font-medium">
-                <strong className="text-gold">TEST MODE:</strong> This shop is currently operating in PayMongo Test Mode. Simulated sandbox payments do not deduct real funds.
+                <strong className="text-gold">TEST MODE:</strong> This shop is currently operating
+                in PayMongo Test Mode. Simulated sandbox payments do not deduct real funds.
               </div>
             </div>
           </div>

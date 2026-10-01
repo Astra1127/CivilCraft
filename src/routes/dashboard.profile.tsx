@@ -97,6 +97,10 @@ function ProfilePage() {
               ["Current region", progress.data?.currentRegion ?? "—"],
               ["Member since", p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "—"],
               ["Last login", p.lastActive ? new Date(p.lastActive).toLocaleDateString() : "—"],
+              [
+                "Last game sync",
+                p.characterSyncedAt ? new Date(p.characterSyncedAt).toLocaleString() : "Awaiting first sync",
+              ],
             ].map(([k, v]) => (
               <div
                 key={k}
@@ -115,27 +119,35 @@ function ProfilePage() {
         <SectionHeading title="Career statistics" description="Recorded by the game backend." />
         {stats.isPending ? (
           <LoadingState rows={2} />
+        ) : stats.isError ? (
+          <ErrorState description={(stats.error as Error).message} onRetry={stats.refetch} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               icon={Star}
               label="Engineering score"
-              value={p.totalScore?.toLocaleString() ?? "\u2014"}
+              value={p.totalScore !== null ? p.totalScore.toLocaleString() : "0"}
             />
             <StatCard
               icon={Hammer}
               label="Bridges completed"
-              value={p.bridgesCompleted?.toLocaleString() ?? "\u2014"}
+              value={p.bridgesCompleted !== null ? p.bridgesCompleted.toLocaleString() : "0"}
             />
             <StatCard
               icon={Target}
               label="Challenges completed"
-              value={p.challengesCompleted?.toLocaleString() ?? "\u2014"}
+              value={p.challengesCompleted !== null ? p.challengesCompleted.toLocaleString() : "0"}
             />
             <StatCard
               icon={Zap}
               label="Best build score"
-              value={statValue(stats.data, "BestSingleBuildScore")}
+              value={
+                p.bestSingleBuildScore !== null && p.bestSingleBuildScore !== undefined
+                  ? p.bestSingleBuildScore.toLocaleString()
+                  : statValue(stats.data, "BestSingleBuildScore") !== "—"
+                    ? statValue(stats.data, "BestSingleBuildScore")
+                    : "0"
+              }
             />
           </div>
         )}

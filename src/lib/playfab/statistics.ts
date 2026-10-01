@@ -2,8 +2,8 @@
  * PlayFab player statistics. Only statistics the game actually reports are
  * returned — nothing is fabricated to fill a UI.
  */
-import { callPlayerApi } from "./client";
-import type { PlayerStatistic } from "./types";
+import { callPlayerApi } from "./client.ts";
+import type { PlayerStatistic } from "./types.ts";
 
 interface StatisticsResult {
   Statistics?: { StatisticName: string; Value: number; Version?: number }[];

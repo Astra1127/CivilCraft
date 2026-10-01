@@ -246,6 +246,7 @@ test("all privileged paths reject guests, player tickets, forged cookies before 
     "/api/admin/players",
     "/api/admin/playfab/status",
     "/api/admin/transactions",
+    "/api/admin/products",
     "/api/admin/players/ABC123",
     "/api/admin/players/ABC123/ban",
     "/api/admin/unknown",

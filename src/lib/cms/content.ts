@@ -1,8 +1,13 @@
+import { playerFetch } from "../playfab/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PublishedContent } from "./content-types";
 
 export async function contentFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { ...init, cache: "no-store", credentials: "same-origin" });
+  const response = await playerFetch(path, {
+    ...init,
+    cache: "no-store",
+    credentials: "same-origin",
+  });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || "Unable to load website content.");
   return body as T;

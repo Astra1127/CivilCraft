@@ -1,3 +1,4 @@
+import { isInvalidPlayerTicket, SESSION_EXPIRED_MESSAGE } from "./session-errors.ts";
 /** Privileged transport: imported only by the server entry and server modules. */
 export class AdminApiError extends Error {
   status: number;
@@ -50,6 +51,12 @@ export async function playFabAdmin(
     const value = (await response.json()) as Record<string, unknown>;
     if (!response.ok || value["code"] !== 200) {
       if (
+        operation === "Server/AuthenticateSessionTicket" &&
+        response.status < 500 &&
+        isInvalidPlayerTicket(value["error"], value["errorCode"])
+      )
+        throw new AdminApiError(401, SESSION_EXPIRED_MESSAGE);
+      if (
         operation === "Admin/ResetPassword" &&
         [
           "AuthTokenExpired",
@@ -65,7 +72,16 @@ export async function playFabAdmin(
         throw new AdminApiError(429, "Game services are busy. Please try again shortly.");
       throw new AdminApiError(503, "Civil Craft game services are temporarily unavailable.");
     }
-    return object(value["data"]);
+    const data = object(value["data"]);
+    if (operation === "Server/AuthenticateSessionTicket") {
+      if (data["IsSessionTicketExpired"] === true)
+        throw new AdminApiError(401, SESSION_EXPIRED_MESSAGE);
+      // Malformed upstream responses are service failures, not evidence of expiration.
+      const playerId = object(data["UserInfo"])["PlayFabId"];
+      if (typeof playerId !== "string" || !/^[a-f0-9]{1,32}$/i.test(playerId))
+        throw new AdminApiError(502, "Unable to verify player session.");
+    }
+    return data;
   } catch (error) {
     if (error instanceof AdminApiError) throw error;
     throw new AdminApiError(503, "Civil Craft game services are temporarily unavailable.");

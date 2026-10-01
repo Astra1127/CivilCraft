@@ -45,6 +45,7 @@ import {
   getPlayerData,
   getPlayerProfile as fetchProfile,
   getPlayerProgress,
+  parseAchievementProgress,
   jsonFrom,
 } from "./player";
 import { getPlayerStatistics as fetchStatistics } from "./statistics";
@@ -222,7 +223,8 @@ export const progressService = {
 export const achievementsService = {
   /**
    * Achievement progress written by the game under the `AchievementProgress`
-   * player data key. Absent key = no achievements to show yet.
+   * player data key via Cloud Script syncDashboardV1.
+   * Absent key = no achievements to show yet.
    */
   async getAchievements(): Promise<Achievement[]> {
     if (demoMode) {
@@ -230,7 +232,7 @@ export const achievementsService = {
       return mockAchievements;
     }
     const data = await getPlayerData(["AchievementProgress"]);
-    return jsonFrom<Achievement[]>(data, "AchievementProgress") ?? [];
+    return parseAchievementProgress(data["AchievementProgress"]);
   },
 };
 

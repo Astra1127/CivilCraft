@@ -1,23 +1,54 @@
-import { LEADERBOARD_STATISTIC } from "./leaderboard-shared";
+import { LEADERBOARD_STATISTIC } from "./leaderboard-shared.ts";
 /**
  * Player profile & game data read from PlayFab (Client API, read-only).
  *
- * The Unity game owns every value. Keys that the game has not written yet are
- * simply absent — the website reports them as unavailable instead of
- * inventing numbers.
+ * The Unity game publishes data via Cloud Script function `syncDashboardV1`.
+ * We query only the dedicated dashboard keys to ensure the encrypted full
+ * player-save file is never requested or transmitted over the wire.
  */
-import { callPlayerApi } from "./client";
-import { getPlayerStatisticMap } from "./statistics";
-import type { EquippedCosmetics, PlayerCharacter, PlayerProfile, PlayerProgress } from "./types";
+import { callPlayerApi } from "./client.ts";
+import { getPlayerStatisticMap } from "./statistics.ts";
+import type {
+  Achievement,
+  CosmeticItem,
+  CosmeticSlot,
+  EquippedCosmetics,
+  PlayerCharacter,
+  PlayerProfile,
+  PlayerProgress,
+  RegionProgress,
+} from "./types.ts";
 
 interface UserDataResult {
   Data?: Record<string, { Value?: string; LastUpdated?: string }>;
 }
 
+/**
+ * User Data keys published by Unity via Cloud Script `syncDashboardV1`.
+ * Explicitly requested to prevent fetching large/encrypted save files.
+ */
+export const DASHBOARD_USER_DATA_KEYS = [
+  "CurrentLevel",
+  "XP",
+  "XPToNextLevel",
+  "CurrentRegion",
+  "AchievementsUnlocked",
+  "AchievementsTotal",
+  "MapProgress",
+  "AchievementProgress",
+  "EquippedCosmetics",
+  "AlmanacProgress",
+  "CharacterSyncedAt",
+  "CharacterName",
+  "CharacterPortraitUrl",
+] as const;
+
 /** Raw title data written by the game for the signed-in player. */
-export async function getPlayerData(keys?: string[]): Promise<Record<string, string>> {
+export async function getPlayerData(
+  keys: readonly string[] = DASHBOARD_USER_DATA_KEYS,
+): Promise<Record<string, string>> {
   const result = await callPlayerApi<UserDataResult>("/Client/GetUserData", {
-    ...(keys?.length ? { Keys: keys } : {}),
+    Keys: [...keys],
   });
   const out: Record<string, string> = {};
   for (const [key, entry] of Object.entries(result.Data ?? {})) {
@@ -43,6 +74,224 @@ export function jsonFrom<T>(data: Record<string, string>, key: string): T | unde
   }
 }
 
+/** Safely parse MapProgress from JSON or return an empty structure */
+export function parseMapProgress(raw: string | undefined, fallbackRegion?: string): PlayerProgress {
+  if (!raw || !raw.trim()) {
+    return {
+      overallPercent: 0,
+      storyPercent: 0,
+      currentRegion: fallbackRegion ?? null,
+      regions: [],
+    };
+  }
+
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!parsed || typeof parsed !== "object") {
+      return { overallPercent: 0, storyPercent: 0, currentRegion: fallbackRegion ?? null, regions: [] };
+    }
+
+    const sanitizeRegion = (r: unknown, idx: number): RegionProgress => {
+      const obj = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+      const id = String(obj["id"] ?? obj["Id"] ?? obj["regionId"] ?? `region_${idx}`);
+      const name = String(obj["name"] ?? obj["Name"] ?? id);
+      const completed = Boolean(obj["completed"] ?? obj["Completed"]);
+      const rawMissionsCompleted = obj["missionsCompleted"] ?? obj["MissionsCompleted"];
+      const missionsCompleted =
+        typeof rawMissionsCompleted === "number"
+          ? Math.max(0, rawMissionsCompleted)
+          : completed
+            ? 1
+            : 0;
+      const rawMissionsTotal = obj["missionsTotal"] ?? obj["MissionsTotal"];
+      const missionsTotal =
+        typeof rawMissionsTotal === "number"
+          ? Math.max(missionsCompleted, rawMissionsTotal)
+          : Math.max(missionsCompleted, 1);
+      const rawBestScore = obj["bestScore"] ?? obj["BestScore"];
+      const bestScore = typeof rawBestScore === "number" ? rawBestScore : undefined;
+      const rawStars = obj["stars"] ?? obj["Stars"];
+      const stars = typeof rawStars === "number" ? rawStars : undefined;
+
+      return {
+        id,
+        name,
+        completed,
+        missionsCompleted,
+        missionsTotal,
+        ...(bestScore !== undefined ? { bestScore } : {}),
+        ...(stars !== undefined ? { stars } : {}),
+      };
+    };
+
+    if (Array.isArray(parsed)) {
+      const regions = parsed.map(sanitizeRegion);
+      const completed = regions.filter((r) => r.completed).length;
+      const percent = regions.length ? Math.round((completed / regions.length) * 100) : 0;
+      return {
+        overallPercent: percent,
+        storyPercent: percent,
+        currentRegion: fallbackRegion ?? (regions[0]?.name ?? null),
+        regions,
+      };
+    }
+
+    const obj = parsed as Record<string, unknown>;
+    const rawRegions = Array.isArray(obj["regions"])
+      ? (obj["regions"] as unknown[])
+      : Array.isArray(obj["Regions"])
+        ? (obj["Regions"] as unknown[])
+        : [];
+    const regions = rawRegions.map(sanitizeRegion);
+
+    const rawOverall =
+      obj["overallPercent"] ?? obj["OverallPercent"] ?? obj["overallPercentage"] ?? obj["percent"];
+    const overallPercent =
+      typeof rawOverall === "number" && Number.isFinite(rawOverall)
+        ? Math.max(0, Math.min(100, Math.round(rawOverall)))
+        : regions.length
+          ? Math.round((regions.filter((r) => r.completed).length / regions.length) * 100)
+          : 0;
+
+    const rawStory = obj["storyPercent"] ?? obj["StoryPercent"];
+    const storyPercent =
+      typeof rawStory === "number" && Number.isFinite(rawStory)
+        ? Math.max(0, Math.min(100, Math.round(rawStory)))
+        : overallPercent;
+
+    const rawCurrentRegion = obj["currentRegion"] ?? obj["CurrentRegion"];
+    const currentRegion =
+      (typeof rawCurrentRegion === "string"
+        ? rawCurrentRegion
+        : fallbackRegion) ?? null;
+
+    return { overallPercent, storyPercent, currentRegion, regions };
+  } catch (err) {
+    console.warn("[playfab/player] Error parsing MapProgress safely:", err);
+    return { overallPercent: 0, storyPercent: 0, currentRegion: fallbackRegion ?? null, regions: [] };
+  }
+}
+
+/** Safely parse AchievementProgress from JSON */
+export function parseAchievementProgress(raw: string | undefined): Achievement[] {
+  if (!raw || !raw.trim()) return [];
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!parsed) return [];
+
+    let list: unknown[] = [];
+    if (Array.isArray(parsed)) {
+      list = parsed;
+    } else if (typeof parsed === "object") {
+      const obj = parsed as Record<string, unknown>;
+      if (Array.isArray(obj["achievements"])) list = obj["achievements"] as unknown[];
+      else if (Array.isArray(obj["Achievements"])) list = obj["Achievements"] as unknown[];
+      else if (Array.isArray(obj["items"])) list = obj["items"] as unknown[];
+      else {
+        list = Object.entries(obj).map(([key, val]) => {
+          if (val && typeof val === "object") {
+            return { id: key, ...(val as Record<string, unknown>) };
+          }
+          return { id: key, unlocked: Boolean(val) };
+        });
+      }
+    }
+
+    return list
+      .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
+      .map((item, idx) => {
+        const id = String(item["id"] ?? item["Id"] ?? item["achievementId"] ?? `ach_${idx}`);
+        const name = String(item["name"] ?? item["Name"] ?? item["title"] ?? id);
+        const description = String(item["description"] ?? item["Description"] ?? "");
+        const unlocked = Boolean(item["unlocked"] ?? item["Unlocked"] ?? item["isUnlocked"] ?? item["completed"]);
+        const rawUnlockedAt = item["unlockedAt"] ?? item["UnlockedAt"];
+        const unlockedAt = typeof rawUnlockedAt === "string" ? rawUnlockedAt : undefined;
+        const rawProgress = item["progress"] ?? item["Progress"];
+        const progress = typeof rawProgress === "number" ? rawProgress : undefined;
+        const rawTarget = item["progressTarget"] ?? item["ProgressTarget"] ?? item["target"];
+        const progressTarget = typeof rawTarget === "number" ? rawTarget : undefined;
+        const icon = String(item["icon"] ?? item["Icon"] ?? "medal");
+
+        return {
+          id,
+          name,
+          description,
+          icon,
+          unlocked,
+          ...(unlockedAt ? { unlockedAt } : {}),
+          ...(progress !== undefined ? { progress } : {}),
+          ...(progressTarget !== undefined ? { progressTarget } : {}),
+        };
+      });
+  } catch (err) {
+    console.warn("[playfab/player] Error parsing AchievementProgress safely:", err);
+    return [];
+  }
+}
+
+/** Safely parse EquippedCosmetics from JSON */
+export function parseEquippedCosmetics(raw: string | undefined): CosmeticItem[] {
+  if (!raw || !raw.trim()) return [];
+  try {
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!parsed) return [];
+
+    const items: CosmeticItem[] = [];
+    if (Array.isArray(parsed)) {
+      for (const entry of parsed) {
+        if (entry && typeof entry === "object") {
+          const e = entry as Record<string, unknown>;
+          const rawSlot = e["slot"] ?? e["Slot"] ?? "accessory";
+          const slot = String(rawSlot).toLowerCase() as CosmeticSlot;
+          const itemId = String(e["itemId"] ?? e["ItemId"] ?? e["id"] ?? "");
+          if (itemId) {
+            const rawImageUrl = e["imageUrl"] ?? e["ImageUrl"];
+            const imageUrl = typeof rawImageUrl === "string" ? rawImageUrl : undefined;
+            const rawRarity = e["rarity"] ?? e["Rarity"];
+            const rarity = typeof rawRarity === "string" ? rawRarity : undefined;
+
+            items.push({
+              slot,
+              itemId,
+              name: String(e["name"] ?? e["Name"] ?? itemId),
+              ...(imageUrl ? { imageUrl } : {}),
+              ...(rarity ? { rarity } : {}),
+            });
+          }
+        }
+      }
+    } else if (typeof parsed === "object") {
+      for (const [slotKey, val] of Object.entries(parsed as Record<string, unknown>)) {
+        const slot = slotKey.toLowerCase() as CosmeticSlot;
+        if (typeof val === "string" && val.trim()) {
+          items.push({ slot, itemId: val.trim(), name: val.trim() });
+        } else if (val && typeof val === "object") {
+          const v = val as Record<string, unknown>;
+          const itemId = String(v["itemId"] ?? v["ItemId"] ?? v["id"] ?? "");
+          if (itemId) {
+            const rawImageUrl = v["imageUrl"] ?? v["ImageUrl"];
+            const imageUrl = typeof rawImageUrl === "string" ? rawImageUrl : undefined;
+            const rawRarity = v["rarity"] ?? v["Rarity"];
+            const rarity = typeof rawRarity === "string" ? rawRarity : undefined;
+
+            items.push({
+              slot,
+              itemId,
+              name: String(v["name"] ?? v["Name"] ?? itemId),
+              ...(imageUrl ? { imageUrl } : {}),
+              ...(rarity ? { rarity } : {}),
+            });
+          }
+        }
+      }
+    }
+    return items;
+  } catch (err) {
+    console.warn("[playfab/player] Error parsing EquippedCosmetics safely:", err);
+    return [];
+  }
+}
+
 interface AccountInfoResult {
   AccountInfo?: {
     PlayFabId?: string;
@@ -57,7 +306,7 @@ interface AccountInfoResult {
 export async function getPlayerProfile(playFabId?: string): Promise<PlayerProfile> {
   const [account, data, stats] = await Promise.all([
     callPlayerApi<AccountInfoResult>("/Client/GetAccountInfo", {}),
-    getPlayerData().catch(() => ({}) as Record<string, string>),
+    getPlayerData(DASHBOARD_USER_DATA_KEYS).catch(() => ({}) as Record<string, string>),
     getPlayerStatisticMap().catch(() => ({}) as Record<string, number>),
   ]);
 
@@ -70,6 +319,7 @@ export async function getPlayerProfile(playFabId?: string): Promise<PlayerProfil
   const createdAt = info?.TitleInfo?.Created ?? info?.Created;
   const lastActive = info?.TitleInfo?.LastLogin;
   const currentRegion = data["CurrentRegion"];
+  const characterSyncedAt = data["CharacterSyncedAt"];
 
   return {
     playFabId: info.PlayFabId,
@@ -82,32 +332,33 @@ export async function getPlayerProfile(playFabId?: string): Promise<PlayerProfil
     level: numberFrom(data, "CurrentLevel") ?? null,
     xp: numberFrom(data, "XP") ?? null,
     xpToNextLevel: numberFrom(data, "XPToNextLevel") ?? null,
-    totalScore: stats[LEADERBOARD_STATISTIC] ?? null,
+    totalScore: stats["TotalScore"] ?? stats[LEADERBOARD_STATISTIC] ?? numberFrom(data, "TotalScore") ?? null,
     bridgesCompleted: stats["BridgesCompleted"] ?? numberFrom(data, "BridgesCompleted") ?? null,
     challengesCompleted:
       stats["ChallengesCompleted"] ?? numberFrom(data, "ChallengesCompleted") ?? null,
+    bestSingleBuildScore:
+      stats["BestSingleBuildScore"] ?? stats["BestBuildScore"] ?? numberFrom(data, "BestSingleBuildScore") ?? null,
     achievementsUnlocked: numberFrom(data, "AchievementsUnlocked") ?? null,
     achievementsTotal: numberFrom(data, "AchievementsTotal") ?? null,
     ...(currentRegion ? { currentRegion } : {}),
+    ...(characterSyncedAt ? { characterSyncedAt } : {}),
   };
 }
 
 /** Progress summary written by the game (`MapProgress`). Empty when absent. */
 export async function getPlayerProgress(): Promise<PlayerProgress> {
-  const data = await getPlayerData();
-  const map = jsonFrom<PlayerProgress>(data, "MapProgress");
-  if (map && Array.isArray(map.regions)) return map;
-  return {
-    overallPercent: 0,
-    storyPercent: 0,
-    currentRegion: data["CurrentRegion"] ?? null,
-    regions: [],
-  };
+  const data = await getPlayerData(["MapProgress", "CurrentRegion"]);
+  return parseMapProgress(data["MapProgress"], data["CurrentRegion"]);
 }
 
 export async function getEquippedCosmetics(): Promise<EquippedCosmetics> {
   const data = await getPlayerData(["EquippedCosmetics"]);
-  return jsonFrom<EquippedCosmetics>(data, "EquippedCosmetics") ?? {};
+  const items = parseEquippedCosmetics(data["EquippedCosmetics"]);
+  const record: EquippedCosmetics = {};
+  for (const item of items) {
+    record[item.slot] = item.itemId;
+  }
+  return record;
 }
 
 /** The in-game character as last synced by the game. */
@@ -117,19 +368,12 @@ export async function getPlayerCharacter(): Promise<PlayerCharacter> {
     "CharacterPortraitUrl",
     "CharacterSyncedAt",
   ]);
-  const equippedMap = jsonFrom<Record<string, { itemId: string; name?: string }>>(
-    data,
-    "EquippedCosmetics",
-  );
+  const equipped = parseEquippedCosmetics(data["EquippedCosmetics"]);
   const portraitUrl = data["CharacterPortraitUrl"];
   const syncedAt = data["CharacterSyncedAt"];
   return {
     ...(portraitUrl ? { portraitUrl } : {}),
     ...(syncedAt ? { syncedAt } : {}),
-    equipped: Object.entries(equippedMap ?? {}).map(([slot, item]) => ({
-      itemId: item.itemId,
-      name: item.name ?? item.itemId,
-      slot: slot as PlayerCharacter["equipped"][number]["slot"],
-    })),
+    equipped,
   };
 }
