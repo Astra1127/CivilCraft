@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { playerActivity } from "@/lib/playfab/directory-filters";
 import { Ban, ShieldCheck, UserRound } from "lucide-react";
 import { DataRow, SectionLabel, StatusPill } from "@/components/admin/ui";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ export function AccountStatusBadge({ status }: { status: AccountStatus }) {
         status === "banned" ? "border-destructive/40 bg-destructive/10 text-destructive" : ""
       }
     >
-      {status ?? "Not available"}
+      {status === "active" ? "Active" : status === "banned" ? "Banned" : "Not available"}
     </StatusPill>
   );
 }
@@ -137,6 +138,7 @@ export function PlayerRecordModal({
                       <DataRow label="First login" value={formatDate(player.firstLogin)} />
                     ) : null}
                     <DataRow label="Last login" value={formatDate(player.lastActive)} />
+                    <DataRow label="Activity" value={playerActivity(player.lastActive).label} />
                     <DataRow
                       label="Account status"
                       value={<AccountStatusBadge status={status} />}
@@ -260,19 +262,19 @@ export function PlayerRecordModal({
                           }}
                         >
                           <Ban className="mr-1.5 h-4 w-4" />
-                          Ban Account
+                          Ban Player
                         </Button>
                       ) : status === "banned" ? (
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="default"
                           onClick={() => {
                             setError(null);
                             setPending({ status: "active", requireReason: false });
                           }}
                         >
                           <ShieldCheck className="mr-1.5 h-4 w-4" />
-                          Revoke Bans
+                          Unban Player
                         </Button>
                       ) : (
                         <p className="text-xs text-muted-foreground">
@@ -302,68 +304,70 @@ export function PlayerRecordModal({
           }
         }}
       >
-        <DialogContent className="border-2 border-border bg-card sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-display">
-              {pending?.status === "banned"
-                ? `Ban ${player?.displayName ?? player?.playFabId}?`
-                : `Revoke all bans for ${player?.displayName ?? player?.playFabId}?`}
-            </DialogTitle>
-            <DialogDescription>
-              {pending?.status === "banned"
-                ? "This action restricts the player's account."
-                : "All active bans on this player will be revoked."}
-            </DialogDescription>
-          </DialogHeader>
-          {pending?.requireReason ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="mod-reason">Reason (required, up to 140 characters)</Label>
-              <Textarea
-                id="mod-reason"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                maxLength={140}
-                disabled={busy}
-                rows={3}
-                placeholder="Recorded with the moderation action."
-              />
-            </div>
-          ) : null}
-          {pending?.status === "banned" ? (
-            <div className="space-y-2">
-              <Label htmlFor="ban-duration">Duration</Label>
-              <select
-                id="ban-duration"
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={hours}
-                disabled={busy}
-                onChange={(e) => setHours(e.target.value)}
+        {pending ? (
+          <DialogContent className="border-2 border-border bg-card sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-display">
+                {pending.status === "banned"
+                  ? `Ban ${player?.displayName ?? player?.username ?? player?.playFabId}?`
+                  : "Unban this player?"}
+              </DialogTitle>
+              <DialogDescription>
+                {pending.status === "banned"
+                  ? "This action restricts the player's account."
+                  : "This will restore the player's access to CivilCraft."}
+              </DialogDescription>
+            </DialogHeader>
+            {pending.requireReason ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="mod-reason">Reason (required, up to 140 characters)</Label>
+                <Textarea
+                  id="mod-reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  maxLength={140}
+                  disabled={busy}
+                  rows={3}
+                  placeholder="Recorded with the moderation action."
+                />
+              </div>
+            ) : null}
+            {pending.status === "banned" ? (
+              <div className="space-y-2">
+                <Label htmlFor="ban-duration">Duration</Label>
+                <select
+                  id="ban-duration"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={hours}
+                  disabled={busy}
+                  onChange={(e) => setHours(e.target.value)}
+                >
+                  <option value="permanent">Permanent</option>
+                  <option value="24">24 hours</option>
+                  <option value="168">7 days</option>
+                  <option value="720">30 days</option>
+                </select>
+              </div>
+            ) : null}
+            {error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+            <DialogFooter>
+              <Button variant="outline" disabled={busy} onClick={() => setPending(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant={pending.status === "active" ? "default" : "destructive"}
+                disabled={busy || (pending.requireReason ? !reason.trim() : false)}
+                onClick={confirm}
               >
-                <option value="permanent">Permanent</option>
-                <option value="24">24 hours</option>
-                <option value="168">7 days</option>
-                <option value="720">30 days</option>
-              </select>
-            </div>
-          ) : null}
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button variant="outline" disabled={busy} onClick={() => setPending(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant={pending?.status === "active" ? "default" : "destructive"}
-              disabled={busy || (pending?.requireReason ? !reason.trim() : false)}
-              onClick={confirm}
-            >
-              {pending?.status === "banned" ? "Ban Player" : "Revoke Bans"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+                {pending.status === "banned" ? "Ban Player" : "Unban Player"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        ) : null}
       </Dialog>
     </>
   );

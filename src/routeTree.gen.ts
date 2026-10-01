@@ -51,6 +51,7 @@ import { Route as DashboardLeaderboardsRouteImport } from './routes/dashboard.le
 import { Route as DashboardMessagesRouteImport } from './routes/dashboard.messages'
 import { Route as DashboardProfileRouteImport } from './routes/dashboard.profile'
 import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
+import { Route as DashboardShopRouteImport } from './routes/dashboard.shop'
 import { Route as DashboardTransactionsRouteImport } from './routes/dashboard.transactions'
 import { Route as PaymentCancelRouteImport } from './routes/payment.cancel'
 import { Route as PaymentSuccessRouteImport } from './routes/payment.success'
@@ -58,6 +59,8 @@ import { Route as UpdatesIndexRouteImport } from './routes/updates.index'
 import { Route as UpdatesSlugRouteImport } from './routes/updates.$slug'
 import { Route as CommunityNewsIndexRouteImport } from './routes/community.news.index'
 import { Route as CommunityNewsSlugRouteImport } from './routes/community.news.$slug'
+import { Route as DashboardPaymentCancelRouteImport } from './routes/dashboard.payment.cancel'
+import { Route as DashboardPaymentSuccessRouteImport } from './routes/dashboard.payment.success'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -269,6 +272,11 @@ const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardShopRoute = DashboardShopRouteImport.update({
+  id: '/shop',
+  path: '/shop',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardTransactionsRoute = DashboardTransactionsRouteImport.update({
   id: '/transactions',
   path: '/transactions',
@@ -303,6 +311,16 @@ const CommunityNewsSlugRoute = CommunityNewsSlugRouteImport.update({
   id: '/news/$slug',
   path: '/news/$slug',
   getParentRoute: () => CommunityRoute,
+} as any)
+const DashboardPaymentCancelRoute = DashboardPaymentCancelRouteImport.update({
+  id: '/payment/cancel',
+  path: '/payment/cancel',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardPaymentSuccessRoute = DashboardPaymentSuccessRouteImport.update({
+  id: '/payment/success',
+  path: '/payment/success',
+  getParentRoute: () => DashboardRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -345,6 +363,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/messages': typeof DashboardMessagesRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/shop': typeof DashboardShopRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/payment/cancel': typeof PaymentCancelRoute
   '/payment/success': typeof PaymentSuccessRoute
@@ -354,6 +373,8 @@ export interface FileRoutesByFullPath {
   '/dashboard/': typeof DashboardIndexRoute
   '/updates/': typeof UpdatesIndexRoute
   '/community/news/$slug': typeof CommunityNewsSlugRoute
+  '/dashboard/payment/cancel': typeof DashboardPaymentCancelRoute
+  '/dashboard/payment/success': typeof DashboardPaymentSuccessRoute
   '/community/news/': typeof CommunityNewsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -393,6 +414,7 @@ export interface FileRoutesByTo {
   '/dashboard/messages': typeof DashboardMessagesRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/shop': typeof DashboardShopRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/payment/cancel': typeof PaymentCancelRoute
   '/payment/success': typeof PaymentSuccessRoute
@@ -402,6 +424,8 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardIndexRoute
   '/updates': typeof UpdatesIndexRoute
   '/community/news/$slug': typeof CommunityNewsSlugRoute
+  '/dashboard/payment/cancel': typeof DashboardPaymentCancelRoute
+  '/dashboard/payment/success': typeof DashboardPaymentSuccessRoute
   '/community/news': typeof CommunityNewsIndexRoute
 }
 export interface FileRoutesById {
@@ -445,6 +469,7 @@ export interface FileRoutesById {
   '/dashboard/messages': typeof DashboardMessagesRoute
   '/dashboard/profile': typeof DashboardProfileRoute
   '/dashboard/settings': typeof DashboardSettingsRoute
+  '/dashboard/shop': typeof DashboardShopRoute
   '/dashboard/transactions': typeof DashboardTransactionsRoute
   '/payment/cancel': typeof PaymentCancelRoute
   '/payment/success': typeof PaymentSuccessRoute
@@ -454,6 +479,8 @@ export interface FileRoutesById {
   '/dashboard/': typeof DashboardIndexRoute
   '/updates/': typeof UpdatesIndexRoute
   '/community/news/$slug': typeof CommunityNewsSlugRoute
+  '/dashboard/payment/cancel': typeof DashboardPaymentCancelRoute
+  '/dashboard/payment/success': typeof DashboardPaymentSuccessRoute
   '/community/news/': typeof CommunityNewsIndexRoute
 }
 export interface FileRouteTypes {
@@ -498,6 +525,7 @@ export interface FileRouteTypes {
     | '/dashboard/messages'
     | '/dashboard/profile'
     | '/dashboard/settings'
+    | '/dashboard/shop'
     | '/dashboard/transactions'
     | '/payment/cancel'
     | '/payment/success'
@@ -507,6 +535,8 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/updates/'
     | '/community/news/$slug'
+    | '/dashboard/payment/cancel'
+    | '/dashboard/payment/success'
     | '/community/news/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -546,6 +576,7 @@ export interface FileRouteTypes {
     | '/dashboard/messages'
     | '/dashboard/profile'
     | '/dashboard/settings'
+    | '/dashboard/shop'
     | '/dashboard/transactions'
     | '/payment/cancel'
     | '/payment/success'
@@ -555,6 +586,8 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/updates'
     | '/community/news/$slug'
+    | '/dashboard/payment/cancel'
+    | '/dashboard/payment/success'
     | '/community/news'
   id:
     | '__root__'
@@ -597,6 +630,7 @@ export interface FileRouteTypes {
     | '/dashboard/messages'
     | '/dashboard/profile'
     | '/dashboard/settings'
+    | '/dashboard/shop'
     | '/dashboard/transactions'
     | '/payment/cancel'
     | '/payment/success'
@@ -606,6 +640,8 @@ export interface FileRouteTypes {
     | '/dashboard/'
     | '/updates/'
     | '/community/news/$slug'
+    | '/dashboard/payment/cancel'
+    | '/dashboard/payment/success'
     | '/community/news/'
   fileRoutesById: FileRoutesById
 }
@@ -930,6 +966,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardSettingsRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/shop': {
+      id: '/dashboard/shop'
+      path: '/shop'
+      fullPath: '/dashboard/shop'
+      preLoaderRoute: typeof DashboardShopRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/transactions': {
       id: '/dashboard/transactions'
       path: '/transactions'
@@ -978,6 +1021,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/community/news/$slug'
       preLoaderRoute: typeof CommunityNewsSlugRouteImport
       parentRoute: typeof CommunityRoute
+    }
+    '/dashboard/payment/cancel': {
+      id: '/dashboard/payment/cancel'
+      path: '/payment/cancel'
+      fullPath: '/dashboard/payment/cancel'
+      preLoaderRoute: typeof DashboardPaymentCancelRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/payment/success': {
+      id: '/dashboard/payment/success'
+      path: '/payment/success'
+      fullPath: '/dashboard/payment/success'
+      preLoaderRoute: typeof DashboardPaymentSuccessRouteImport
+      parentRoute: typeof DashboardRoute
     }
   }
 }
@@ -1045,8 +1102,11 @@ interface DashboardRouteChildren {
   DashboardMessagesRoute: typeof DashboardMessagesRoute
   DashboardProfileRoute: typeof DashboardProfileRoute
   DashboardSettingsRoute: typeof DashboardSettingsRoute
+  DashboardShopRoute: typeof DashboardShopRoute
   DashboardTransactionsRoute: typeof DashboardTransactionsRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
+  DashboardPaymentCancelRoute: typeof DashboardPaymentCancelRoute
+  DashboardPaymentSuccessRoute: typeof DashboardPaymentSuccessRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
@@ -1056,8 +1116,11 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardMessagesRoute: DashboardMessagesRoute,
   DashboardProfileRoute: DashboardProfileRoute,
   DashboardSettingsRoute: DashboardSettingsRoute,
+  DashboardShopRoute: DashboardShopRoute,
   DashboardTransactionsRoute: DashboardTransactionsRoute,
   DashboardIndexRoute: DashboardIndexRoute,
+  DashboardPaymentCancelRoute: DashboardPaymentCancelRoute,
+  DashboardPaymentSuccessRoute: DashboardPaymentSuccessRoute,
 }
 
 const DashboardRouteWithChildren = DashboardRoute._addFileChildren(

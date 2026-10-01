@@ -47,6 +47,21 @@ const env = {
 const previousEnv = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
 const originalFetch = globalThis.fetch;
 
+test("checkout returns stay inside the authenticated dashboard and preserve the order ID", async () => {
+  await createPayMongoCheckout({
+    orderId: "order /?test",
+    product: getProduct("coins_500")!,
+    playFabId: TEST_PLAYER_ID,
+    requestOrigin: "https://civil-craft.vercel.app",
+  });
+  const attributes = payMongoApiRequests[0]!.body.data.attributes;
+  for (const kind of ["success", "cancel"]) {
+    const url = new URL(attributes[`${kind}_url`]);
+    assert.equal(url.pathname, `/dashboard/payment/${kind}`);
+    assert.equal(url.searchParams.get("order_id"), "order /?test");
+  }
+});
+
 let internalData: Record<string, string> = {};
 let awardedCoinsLog: Array<{ playFabId: string; currency: string; amount: number }> = [];
 let payMongoApiRequests: Array<{ url: string; headers: Record<string, string>; body: any }> = [];

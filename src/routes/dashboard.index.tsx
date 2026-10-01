@@ -83,7 +83,7 @@ function PlayerOverview() {
     );
 
   const p = profile.data;
-  const isAwaitingSync = !p.characterSyncedAt && p.level === null && p.totalScore === null;
+  const isAwaitingSync = !p.characterSyncedAt;
   const xpPercent =
     p.xp !== null && p.xpToNextLevel !== null
       ? Math.round((p.xp / Math.max(p.xpToNextLevel, 1)) * 100)
@@ -107,8 +107,8 @@ function PlayerOverview() {
               <h1 className="truncate text-2xl sm:text-3xl">{p.displayName}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
                 <span>
-                  Level {p.level ?? 1} · {p.xp?.toLocaleString() ?? 0} /{" "}
-                  {p.xpToNextLevel?.toLocaleString() ?? 100} XP
+                  Level {p.level ?? "\u2014"} · {p.xp?.toLocaleString() ?? "\u2014"} /{" "}
+                  {p.xpToNextLevel?.toLocaleString() ?? "\u2014"} XP
                 </span>
                 <span>•</span>
                 {p.characterSyncedAt ? (
@@ -117,20 +117,20 @@ function PlayerOverview() {
                     Last game sync: {new Date(p.characterSyncedAt).toLocaleString()}
                   </span>
                 ) : (
-                  <span className="text-xs text-muted-foreground/80">
-                    Awaiting game sync
-                  </span>
+                  <span className="text-xs text-muted-foreground/80">Awaiting game sync</span>
                 )}
               </div>
             </div>
             <DemoBadge />
           </div>
-          <Progress value={xpPercent} className="mt-3 max-w-sm" />
+          {p.xp !== null && p.xpToNextLevel !== null && (
+            <Progress value={xpPercent} className="mt-3 max-w-sm" />
+          )}
           <p className="mt-2 text-xs text-muted-foreground">
             {p.xpToNextLevel !== null && p.xp !== null
               ? Math.max(p.xpToNextLevel - p.xp, 0).toLocaleString()
-              : 100}{" "}
-            XP to level {p.level === null ? 2 : p.level + 1}
+              : "\u2014"}{" "}
+            XP to level {p.level === null ? "\u2014" : p.level + 1}
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Button asChild variant="gold" size="sm">
@@ -159,9 +159,10 @@ function PlayerOverview() {
         <div className="rounded-xl border border-dashed border-gold/40 bg-gold/5 p-4 text-sm text-foreground/80 flex items-start gap-3">
           <Clock className="h-5 w-5 text-gold shrink-0 mt-0.5" />
           <div>
-            <p className="font-semibold text-foreground">Awaiting First Game Sync</p>
+            <p className="font-semibold text-foreground">Awaiting game sync</p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Sign in to Civil Craft: Bridge Edition on your device to synchronize your level, bridge progress, and achievements to your web dashboard.
+              No dashboard snapshot has been published for this player. Progress will appear after
+              the game integration successfully publishes it.
             </p>
           </div>
         </div>
@@ -172,19 +173,19 @@ function PlayerOverview() {
         <StatCard
           icon={Star}
           label="Total Score"
-          value={p.totalScore !== null ? p.totalScore.toLocaleString() : "0"}
+          value={p.totalScore !== null ? p.totalScore.toLocaleString() : "\u2014"}
           hint="Leaderboard score"
         />
         <StatCard
           icon={Hammer}
           label="Bridges Completed"
-          value={p.bridgesCompleted !== null ? p.bridgesCompleted.toLocaleString() : "0"}
+          value={p.bridgesCompleted !== null ? p.bridgesCompleted.toLocaleString() : "\u2014"}
           hint="Successful crossings"
         />
         <StatCard
           icon={Target}
           label="Challenges Completed"
-          value={p.challengesCompleted !== null ? p.challengesCompleted.toLocaleString() : "0"}
+          value={p.challengesCompleted !== null ? p.challengesCompleted.toLocaleString() : "\u2014"}
           hint="Engineering trials"
         />
         <StatCard
@@ -193,7 +194,7 @@ function PlayerOverview() {
           value={
             p.bestSingleBuildScore !== null && p.bestSingleBuildScore !== undefined
               ? p.bestSingleBuildScore.toLocaleString()
-              : "0"
+              : "\u2014"
           }
           hint="Highest single bridge"
         />
@@ -213,6 +214,8 @@ function PlayerOverview() {
           <LoadingState rows={2} />
         ) : progress.isError ? (
           <ErrorState description="Unable to load story progress." onRetry={progress.refetch} />
+        ) : isAwaitingSync ? (
+          <p className="panel p-4 text-muted-foreground">Awaiting game sync</p>
         ) : (
           <div className="panel space-y-4 p-6">
             <div>
@@ -223,7 +226,7 @@ function PlayerOverview() {
               <Progress value={progress.data.overallPercent} className="mt-2" />
             </div>
             <p className="text-sm text-muted-foreground">
-              Current region: {progress.data.currentRegion ?? "Pine Valley (Starting Area)"}
+              Current region: {progress.data.currentRegion ?? "Not available"}
             </p>
           </div>
         )}
@@ -243,6 +246,8 @@ function PlayerOverview() {
           <LoadingState rows={2} />
         ) : achievements.isError ? (
           <ErrorState description="Unable to load achievements." onRetry={achievements.refetch} />
+        ) : isAwaitingSync ? (
+          <p className="panel p-4 text-muted-foreground">Awaiting game sync</p>
         ) : (achievements.data ?? []).filter((a) => a.unlocked).length === 0 ? (
           <EmptyState
             title="No achievements yet"
@@ -278,6 +283,8 @@ function PlayerOverview() {
           <LoadingState rows={2} />
         ) : journey.isError ? (
           <ErrorState description="Unable to load build history." onRetry={journey.refetch} />
+        ) : isAwaitingSync ? (
+          <p className="panel p-4 text-muted-foreground">Awaiting game sync</p>
         ) : (journey.data?.regions ?? []).flatMap((r) => r.levels).filter((l) => l.completion)
             .length === 0 ? (
           <EmptyState

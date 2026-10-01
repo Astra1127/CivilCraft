@@ -50,8 +50,8 @@ export async function createPayMongoCheckout(
   }
 
   const baseOrigin = input.requestOrigin.replace(/\/+$/, "") || appUrl;
-  const successUrl = `${baseOrigin}/payment/success?order_id=${encodeURIComponent(input.orderId)}`;
-  const cancelUrl = `${baseOrigin}/payment/cancel?order_id=${encodeURIComponent(input.orderId)}`;
+  const successUrl = `${baseOrigin}/dashboard/payment/success?order_id=${encodeURIComponent(input.orderId)}`;
+  const cancelUrl = `${baseOrigin}/dashboard/payment/cancel?order_id=${encodeURIComponent(input.orderId)}`;
 
   const payload = {
     data: {

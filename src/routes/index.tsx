@@ -17,7 +17,6 @@ import { GameProp, GameArt } from "@/components/site/GameProp";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
-import heroKeyart from "@/assets/hero-keyart.jpg";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
 import shotExplore from "@/assets/explore-world.jpg";
 import shotBuild from "@/assets/build-mode.jpg";
@@ -77,24 +76,28 @@ const shots = [
     id: "explore",
     label: "Explore",
     src: shotExplore,
+    thumbnailSrc: "/images/gameplay/explore-thumbnail.jpg",
     alt: "Chibi engineer walking through the low-poly canyon in Civil Craft",
   },
   {
     id: "build",
     label: "Build",
     src: shotBuild,
+    thumbnailSrc: "/images/gameplay/build-thumbnail.jpg",
     alt: "Civil Craft blueprint build mode with beams placed on a grid",
   },
   {
     id: "test",
     label: "Test",
     src: shotTest,
+    thumbnailSrc: "/images/gameplay/test-thumbnail.jpg",
     alt: "A completed wooden bridge crossing the canyon during a Civil Craft simulation",
   },
   {
     id: "learn",
     label: "Learn",
     src: shotTest,
+    thumbnailSrc: "/images/gameplay/learn-thumbnail.png",
     alt: "Bridge load test showing member stress and the load carried by the structure",
   },
 ] as const;
@@ -193,11 +196,11 @@ function HomePage() {
           <div className="relative lg:-mr-16 xl:-mr-24">
             <div className="game-frame relative overflow-visible p-2">
               <img
-                src={heroKeyart}
-                alt="Chibi Civil Craft engineers on a wooden truss bridge spanning a low-poly canyon"
+                src="/images/gameplay/home-hero.png"
+                alt="Civil Craft canyon settlement and bridge crossings"
                 width={1280}
                 height={800}
-                className="w-full rounded-2xl"
+                className="aspect-[4/3] w-full rounded-2xl object-cover object-center"
               />
               <GameArt
                 kind="engineer"
@@ -336,12 +339,12 @@ function HomePage() {
               <div className="rounded-2xl border-2 border-primary/70 bg-card p-1.5 shadow-[inset_0_2px_10px_oklch(0.305_0.036_55/25%)]">
                 <img
                   key={shot.id}
-                  src={shot.src}
+                  src={shot.id === "explore" ? "/images/gameplay/about-gameplay.png" : shot.src}
                   alt={shot.alt}
                   loading="lazy"
                   width={1280}
                   height={800}
-                  className="aspect-[16/10] w-full rounded-xl object-cover"
+                  className="aspect-[16/10] w-full rounded-xl object-cover object-center"
                 />
               </div>
 
@@ -363,7 +366,7 @@ function HomePage() {
                         }`}
                       >
                         <img
-                          src={s.src}
+                          src={s.thumbnailSrc}
                           alt=""
                           aria-hidden="true"
                           loading="lazy"
@@ -437,12 +440,12 @@ function HomePage() {
         <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-12 lg:grid-cols-2 lg:gap-10">
           <div className="game-frame min-w-0 p-2">
             <img
-              src={shotExplore}
+              src="/images/gameplay/explore-section.jpg"
               alt="Chibi engineer exploring a low-poly canyon path lined with cacti and rope fences"
               loading="lazy"
               width={1280}
               height={800}
-              className="w-full rounded-2xl"
+              className="aspect-[16/10] w-full rounded-2xl object-cover object-center"
             />
           </div>
           <div className="min-w-0">
@@ -483,12 +486,12 @@ function HomePage() {
           </div>
           <div className="game-frame relative min-w-0 p-2">
             <img
-              src={shotBuild}
+              src="/images/gameplay/build-thumbnail.jpg"
               alt="Civil Craft blueprint build mode showing a bridge drafted on a grid"
               loading="lazy"
               width={1920}
               height={886}
-              className="w-full rounded-2xl"
+              className="aspect-[16/9] w-full rounded-2xl object-cover object-center"
             />
             <span
               aria-hidden="true"
@@ -503,12 +506,12 @@ function HomePage() {
         <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 sm:py-12 lg:grid-cols-2 lg:gap-10">
           <div className="game-frame min-w-0 p-2">
             <img
-              src={shotTest}
+              src="/images/gameplay/test-thumbnail.jpg"
               alt="A truck crossing a player-built bridge while stress colours show member loads"
               loading="lazy"
               width={1280}
               height={800}
-              className="w-full rounded-2xl"
+              className="aspect-[16/10] w-full rounded-2xl object-cover object-center"
             />
           </div>
           <div className="min-w-0">
@@ -565,12 +568,12 @@ function HomePage() {
           </div>
           <div className="game-frame min-w-0 p-2">
             <img
-              src={shotTest}
+              src="/images/gameplay/learn-section.jpg"
               alt="Civil Craft load test showing stress colours on a bridge carrying a truck"
               loading="lazy"
               width={1280}
               height={800}
-              className="h-auto w-full rounded-2xl"
+              className="aspect-[2/1] h-auto w-full rounded-2xl object-cover object-center"
             />
           </div>
         </div>

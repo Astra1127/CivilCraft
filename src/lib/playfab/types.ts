@@ -54,7 +54,7 @@ export interface EquippedCosmetics {
   pants?: string;
   gloves?: string;
   shoes?: string;
-  accessory?: string;
+  accessory?: string | string[];
 }
 
 export interface PlayerStatistic {
@@ -134,6 +134,8 @@ export interface CosmeticItem {
  * missing the UI falls back to a generic Civil Craft engineer silhouette.
  */
 export interface PlayerCharacter {
+  equipmentSlots?: CosmeticSlot[];
+  syncStatus?: "missing" | "invalid" | "synced";
   portraitUrl?: string | undefined;
   /** Timestamp of the last character sync from the game. */
   syncedAt?: string | undefined;
@@ -265,7 +267,7 @@ export interface PlayerInventory {
   /** Catalog item ids the player owns (purchases, rewards, grants). */
   ownedItemIds: string[];
   /** Catalog item ids currently equipped, keyed by cosmetic slot. */
-  equippedItemIds: Partial<Record<CosmeticSlot, string>>;
+  equippedItemIds: EquippedCosmetics;
   /** Last time the game synced inventory to the backend. */
   syncedAt?: string;
 }

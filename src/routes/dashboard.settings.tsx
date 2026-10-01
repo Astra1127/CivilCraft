@@ -1,4 +1,5 @@
 import { playerFetch } from "@/lib/playfab/client";
+import { AccountSettings } from "@/components/dashboard/AccountSettings";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Bell, Eye, Globe } from "lucide-react";
@@ -59,6 +60,7 @@ function SettingsPage() {
         description="Dashboard preferences for your Civil Craft account."
       />
 
+      <AccountSettings />
       <div className="panel space-y-6 p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">

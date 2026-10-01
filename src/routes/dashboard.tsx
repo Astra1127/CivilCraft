@@ -37,7 +37,7 @@ const items: DashboardNavItem[] = [
   { to: "/dashboard/leaderboards", label: "Leaderboard", icon: Trophy, section: "Overview" },
   { to: "/dashboard/achievements", label: "Achievements", icon: Medal, section: "Overview" },
   { to: "/dashboard/transactions", label: "Transactions", icon: Receipt, section: "Overview" },
-  { to: "/shop", label: "Coin Shop", icon: Coins, section: "Account" },
+  { to: "/dashboard/shop", label: "Coin Shop", icon: Coins, section: "Account" },
   { to: "/dashboard/profile", label: "Profile", icon: User, section: "Account" },
   { to: "/dashboard/messages", label: "Messages", icon: Mail, section: "Account" },
   { to: "/dashboard/settings", label: "Settings", icon: Settings, section: "Account" },

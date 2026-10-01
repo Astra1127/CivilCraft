@@ -1,3 +1,4 @@
+import { equipmentRecord, equipmentSnapshot, resolveEquipment } from "./equipment.ts";
 import { LEADERBOARD_STATISTIC } from "./leaderboard-shared.ts";
 /**
  * Player profile & game data read from PlayFab (Client API, read-only).
@@ -34,6 +35,8 @@ export const DASHBOARD_USER_DATA_KEYS = [
   "CurrentRegion",
   "AchievementsUnlocked",
   "AchievementsTotal",
+  "BridgesCompleted",
+  "ChallengesCompleted",
   "MapProgress",
   "AchievementProgress",
   "EquippedCosmetics",
@@ -88,7 +91,12 @@ export function parseMapProgress(raw: string | undefined, fallbackRegion?: strin
   try {
     const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (!parsed || typeof parsed !== "object") {
-      return { overallPercent: 0, storyPercent: 0, currentRegion: fallbackRegion ?? null, regions: [] };
+      return {
+        overallPercent: 0,
+        storyPercent: 0,
+        currentRegion: fallbackRegion ?? null,
+        regions: [],
+      };
     }
 
     const sanitizeRegion = (r: unknown, idx: number): RegionProgress => {
@@ -131,7 +139,7 @@ export function parseMapProgress(raw: string | undefined, fallbackRegion?: strin
       return {
         overallPercent: percent,
         storyPercent: percent,
-        currentRegion: fallbackRegion ?? (regions[0]?.name ?? null),
+        currentRegion: fallbackRegion ?? regions[0]?.name ?? null,
         regions,
       };
     }
@@ -161,14 +169,17 @@ export function parseMapProgress(raw: string | undefined, fallbackRegion?: strin
 
     const rawCurrentRegion = obj["currentRegion"] ?? obj["CurrentRegion"];
     const currentRegion =
-      (typeof rawCurrentRegion === "string"
-        ? rawCurrentRegion
-        : fallbackRegion) ?? null;
+      (typeof rawCurrentRegion === "string" ? rawCurrentRegion : fallbackRegion) ?? null;
 
     return { overallPercent, storyPercent, currentRegion, regions };
   } catch (err) {
     console.warn("[playfab/player] Error parsing MapProgress safely:", err);
-    return { overallPercent: 0, storyPercent: 0, currentRegion: fallbackRegion ?? null, regions: [] };
+    return {
+      overallPercent: 0,
+      storyPercent: 0,
+      currentRegion: fallbackRegion ?? null,
+      regions: [],
+    };
   }
 }
 
@@ -203,7 +214,9 @@ export function parseAchievementProgress(raw: string | undefined): Achievement[]
         const id = String(item["id"] ?? item["Id"] ?? item["achievementId"] ?? `ach_${idx}`);
         const name = String(item["name"] ?? item["Name"] ?? item["title"] ?? id);
         const description = String(item["description"] ?? item["Description"] ?? "");
-        const unlocked = Boolean(item["unlocked"] ?? item["Unlocked"] ?? item["isUnlocked"] ?? item["completed"]);
+        const unlocked = Boolean(
+          item["unlocked"] ?? item["Unlocked"] ?? item["isUnlocked"] ?? item["completed"],
+        );
         const rawUnlockedAt = item["unlockedAt"] ?? item["UnlockedAt"];
         const unlockedAt = typeof rawUnlockedAt === "string" ? rawUnlockedAt : undefined;
         const rawProgress = item["progress"] ?? item["Progress"];
@@ -231,65 +244,7 @@ export function parseAchievementProgress(raw: string | undefined): Achievement[]
 
 /** Safely parse EquippedCosmetics from JSON */
 export function parseEquippedCosmetics(raw: string | undefined): CosmeticItem[] {
-  if (!raw || !raw.trim()) return [];
-  try {
-    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
-    if (!parsed) return [];
-
-    const items: CosmeticItem[] = [];
-    if (Array.isArray(parsed)) {
-      for (const entry of parsed) {
-        if (entry && typeof entry === "object") {
-          const e = entry as Record<string, unknown>;
-          const rawSlot = e["slot"] ?? e["Slot"] ?? "accessory";
-          const slot = String(rawSlot).toLowerCase() as CosmeticSlot;
-          const itemId = String(e["itemId"] ?? e["ItemId"] ?? e["id"] ?? "");
-          if (itemId) {
-            const rawImageUrl = e["imageUrl"] ?? e["ImageUrl"];
-            const imageUrl = typeof rawImageUrl === "string" ? rawImageUrl : undefined;
-            const rawRarity = e["rarity"] ?? e["Rarity"];
-            const rarity = typeof rawRarity === "string" ? rawRarity : undefined;
-
-            items.push({
-              slot,
-              itemId,
-              name: String(e["name"] ?? e["Name"] ?? itemId),
-              ...(imageUrl ? { imageUrl } : {}),
-              ...(rarity ? { rarity } : {}),
-            });
-          }
-        }
-      }
-    } else if (typeof parsed === "object") {
-      for (const [slotKey, val] of Object.entries(parsed as Record<string, unknown>)) {
-        const slot = slotKey.toLowerCase() as CosmeticSlot;
-        if (typeof val === "string" && val.trim()) {
-          items.push({ slot, itemId: val.trim(), name: val.trim() });
-        } else if (val && typeof val === "object") {
-          const v = val as Record<string, unknown>;
-          const itemId = String(v["itemId"] ?? v["ItemId"] ?? v["id"] ?? "");
-          if (itemId) {
-            const rawImageUrl = v["imageUrl"] ?? v["ImageUrl"];
-            const imageUrl = typeof rawImageUrl === "string" ? rawImageUrl : undefined;
-            const rawRarity = v["rarity"] ?? v["Rarity"];
-            const rarity = typeof rawRarity === "string" ? rawRarity : undefined;
-
-            items.push({
-              slot,
-              itemId,
-              name: String(v["name"] ?? v["Name"] ?? itemId),
-              ...(imageUrl ? { imageUrl } : {}),
-              ...(rarity ? { rarity } : {}),
-            });
-          }
-        }
-      }
-    }
-    return items;
-  } catch (err) {
-    console.warn("[playfab/player] Error parsing EquippedCosmetics safely:", err);
-    return [];
-  }
+  return equipmentSnapshot(raw).items;
 }
 
 interface AccountInfoResult {
@@ -306,7 +261,7 @@ interface AccountInfoResult {
 export async function getPlayerProfile(playFabId?: string): Promise<PlayerProfile> {
   const [account, data, stats] = await Promise.all([
     callPlayerApi<AccountInfoResult>("/Client/GetAccountInfo", {}),
-    getPlayerData(DASHBOARD_USER_DATA_KEYS).catch(() => ({}) as Record<string, string>),
+    getPlayerData(DASHBOARD_USER_DATA_KEYS),
     getPlayerStatisticMap().catch(() => ({}) as Record<string, number>),
   ]);
 
@@ -332,12 +287,16 @@ export async function getPlayerProfile(playFabId?: string): Promise<PlayerProfil
     level: numberFrom(data, "CurrentLevel") ?? null,
     xp: numberFrom(data, "XP") ?? null,
     xpToNextLevel: numberFrom(data, "XPToNextLevel") ?? null,
-    totalScore: stats["TotalScore"] ?? stats[LEADERBOARD_STATISTIC] ?? numberFrom(data, "TotalScore") ?? null,
+    totalScore:
+      stats["TotalScore"] ?? stats[LEADERBOARD_STATISTIC] ?? numberFrom(data, "TotalScore") ?? null,
     bridgesCompleted: stats["BridgesCompleted"] ?? numberFrom(data, "BridgesCompleted") ?? null,
     challengesCompleted:
       stats["ChallengesCompleted"] ?? numberFrom(data, "ChallengesCompleted") ?? null,
     bestSingleBuildScore:
-      stats["BestSingleBuildScore"] ?? stats["BestBuildScore"] ?? numberFrom(data, "BestSingleBuildScore") ?? null,
+      stats["BestSingleBuildScore"] ??
+      stats["BestBuildScore"] ??
+      numberFrom(data, "BestSingleBuildScore") ??
+      null,
     achievementsUnlocked: numberFrom(data, "AchievementsUnlocked") ?? null,
     achievementsTotal: numberFrom(data, "AchievementsTotal") ?? null,
     ...(currentRegion ? { currentRegion } : {}),
@@ -354,11 +313,7 @@ export async function getPlayerProgress(): Promise<PlayerProgress> {
 export async function getEquippedCosmetics(): Promise<EquippedCosmetics> {
   const data = await getPlayerData(["EquippedCosmetics"]);
   const items = parseEquippedCosmetics(data["EquippedCosmetics"]);
-  const record: EquippedCosmetics = {};
-  for (const item of items) {
-    record[item.slot] = item.itemId;
-  }
-  return record;
+  return equipmentRecord(items);
 }
 
 /** The in-game character as last synced by the game. */
@@ -368,12 +323,26 @@ export async function getPlayerCharacter(): Promise<PlayerCharacter> {
     "CharacterPortraitUrl",
     "CharacterSyncedAt",
   ]);
-  const equipped = parseEquippedCosmetics(data["EquippedCosmetics"]);
+  const snapshot = equipmentSnapshot(data["EquippedCosmetics"]);
+  let equipped = snapshot.items;
+  if (equipped.length) {
+    try {
+      const catalog = await callPlayerApi<{
+        Catalog?: { ItemId: string; DisplayName?: string; ItemImageUrl?: string }[];
+      }>("/Client/GetCatalogItems", {});
+      equipped = resolveEquipment(equipped, catalog.Catalog ?? []);
+    } catch {
+      /* Preserve published IDs/names and resolve static website catalog when API catalog is unavailable. */
+      equipped = resolveEquipment(equipped, []);
+    }
+  }
   const portraitUrl = data["CharacterPortraitUrl"];
   const syncedAt = data["CharacterSyncedAt"];
   return {
     ...(portraitUrl ? { portraitUrl } : {}),
     ...(syncedAt ? { syncedAt } : {}),
     equipped,
+    syncStatus: snapshot.status,
+    ...(snapshot.slots ? { equipmentSlots: snapshot.slots } : {}),
   };
 }

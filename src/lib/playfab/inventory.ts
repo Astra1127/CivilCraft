@@ -4,7 +4,7 @@
  */
 import { callPlayerApi } from "./client";
 import { getEquippedCosmetics } from "./player";
-import type { CosmeticSlot, PlayerInventory } from "./types";
+import type { PlayerInventory } from "./types";
 
 export interface InventoryItem {
   ItemId: string;
@@ -30,13 +30,9 @@ export async function getInventory(): Promise<PlayerInventory> {
     getRawInventory(),
     getEquippedCosmetics().catch(() => ({})),
   ]);
-  const equippedItemIds: Partial<Record<CosmeticSlot, string>> = {};
-  for (const [slot, itemId] of Object.entries(equipped)) {
-    if (typeof itemId === "string") equippedItemIds[slot as CosmeticSlot] = itemId;
-  }
   return {
     ownedItemIds: (inventory.Inventory ?? []).map((i) => i.ItemId),
-    equippedItemIds,
+    equippedItemIds: equipped,
   };
 }
 

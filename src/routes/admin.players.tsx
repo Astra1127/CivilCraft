@@ -1,3 +1,4 @@
+import { playerActivity } from "@/lib/playfab/directory-filters";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Users } from "lucide-react";
@@ -272,6 +273,7 @@ function AdminPlayers() {
                   <TableHead>Player ID</TableHead>
                   <TableHead className="text-right">Level</TableHead>
                   <TableHead className="text-right">Score</TableHead>
+                  <TableHead>Activity</TableHead>
                   <TableHead>Account status</TableHead>
                   <TableHead>Last login</TableHead>
                   <TableHead className="text-right">Details</TableHead>
@@ -289,6 +291,14 @@ function AdminPlayers() {
                     <TableCell className="text-right">{p.level ?? "\u2014"}</TableCell>
                     <TableCell className="text-right font-display">
                       {p.totalScore?.toLocaleString() ?? "\u2014"}
+                    </TableCell>
+                    <TableCell>
+                      {
+                        playerActivity(
+                          p.lastActive,
+                          q.data.snapshotAt ? Date.parse(q.data.snapshotAt) : Date.now(),
+                        ).label
+                      }
                     </TableCell>
                     <TableCell>
                       <AccountStatusBadge status={p.accountStatus} />
@@ -401,21 +411,30 @@ function AdminPlayers() {
         moderationEnabled
         onModerate={async (status, reason, hours) => {
           if (!selected || !status) return;
+          const action = status === "banned" ? "ban" : "unban";
           await adminPlayerService.moderate(
             selected.playFabId,
-            status === "banned" ? "ban" : "unban",
+            action,
             reason,
             hours,
           );
           logActivity({
             area: "System",
-            action: status === "banned" ? "Player banned" : "Player bans revoked",
+            action: action === "ban" ? "Player banned" : "Player unbanned",
             target: selected.playFabId,
           });
-          toast.success("Moderation applied. Refreshing the player record.");
+          toast.success(
+            action === "ban"
+              ? "Player banned successfully."
+              : "Player unbanned successfully.",
+          );
           const id = selected.playFabId;
-          setSelected(null);
-          await openPlayer(id);
+          try {
+            const updated = await adminPlayerService.getPlayer(id);
+            setSelected(updated);
+          } catch {
+            await openPlayer(id);
+          }
           await q.refetch();
         }}
       />

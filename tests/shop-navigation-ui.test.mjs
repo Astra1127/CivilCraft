@@ -29,6 +29,11 @@ function load(path, auth, navigations, queries = [], adminSession = null) {
             React.createElement("a", { ...props, href: to }, children),
           useNavigate: () => navigate,
           createFileRoute: () => (config) => config,
+          Outlet: () => {
+            const child = load("../src/routes/dashboard.shop.tsx", auth, navigations, queries).Route
+              .component;
+            return React.createElement(child);
+          },
           redirect: (args) => Object.assign(new Error("redirect"), args),
         };
       if (name === "@/lib/auth") return { useAuth: () => auth };
@@ -87,7 +92,7 @@ test("direct shop access waits for player auth and does not accept admin-only au
   ]) {
     const navigations = [],
       queries = [];
-    const { Route } = load("../src/routes/shop.tsx", auth, navigations, queries);
+    const { Route } = load("../src/routes/dashboard.tsx", auth, navigations, queries);
     assert.equal(Route.ssr, false);
     let renderer;
     try {
@@ -114,5 +119,21 @@ test("admin products inherits the admin-only direct route guard", async () => {
     const run = () => Route.beforeLoad({ location: { pathname: "/admin/products" } });
     if (session?.authenticated) await assert.doesNotReject(run);
     else await assert.rejects(run, (e) => e.to === "/admin/login");
+  }
+});
+
+test("legacy shop and checkout callbacks redirect into the dashboard without losing the order", () => {
+  const shop = load("../src/routes/shop.tsx", {}, []).Route;
+  assert.throws(
+    () => shop.beforeLoad(),
+    (e) => e.to === "/dashboard/shop" && e.replace,
+  );
+  for (const kind of ["success", "cancel"]) {
+    const route = load(`../src/routes/payment.${kind}.tsx`, {}, []).Route;
+    const search = route.validateSearch({ order_id: "order-123" });
+    assert.throws(
+      () => route.beforeLoad({ search }),
+      (e) => e.to === `/dashboard/payment/${kind}` && e.search.order_id === "order-123",
+    );
   }
 });

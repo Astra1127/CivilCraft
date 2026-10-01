@@ -12,7 +12,7 @@ import {
 } from "@/components/dashboard/CharacterPreview";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth";
-import { profileService, progressService, statisticsService } from "@/lib/playfab";
+import { profileService, statisticsService } from "@/lib/playfab";
 
 export const Route = createFileRoute("/dashboard/profile")({
   head: () => ({
@@ -43,7 +43,6 @@ function ProfilePage() {
   });
   const character = useQuery({ queryKey: ["character", id], queryFn: profileService.getCharacter });
   const stats = useQuery({ queryKey: ["stats", id], queryFn: statisticsService.getStatistics });
-  const progress = useQuery({ queryKey: ["progress", id], queryFn: progressService.getProgress });
 
   if (profile.isPending) return <LoadingState label="Loading profile…" rows={4} />;
   if (profile.isError)
@@ -54,7 +53,7 @@ function ProfilePage() {
     p.xp !== null && p.xpToNextLevel !== null
       ? Math.round((p.xp / Math.max(p.xpToNextLevel, 1)) * 100)
       : 0;
-  const equippedBySlot = new Map((character.data?.equipped ?? []).map((i) => [i.slot, i]));
+  const equipmentSlots = character.data?.equipmentSlots ?? SLOT_ORDER;
 
   return (
     <div className="space-y-4 md:space-y-10">
@@ -87,19 +86,22 @@ function ProfilePage() {
                 {p.xpToNextLevel?.toLocaleString() ?? "\u2014"} XP
               </span>
             </div>
-            <Progress value={xpPercent} className="mt-2" />
+            {p.xp !== null && p.xpToNextLevel !== null && (
+              <Progress value={xpPercent} className="mt-2" />
+            )}
           </div>
 
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             {[
               ["Player ID", p.playFabId],
               ["Email", p.email ?? "—"],
-              ["Current region", progress.data?.currentRegion ?? "—"],
               ["Member since", p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "—"],
               ["Last login", p.lastActive ? new Date(p.lastActive).toLocaleDateString() : "—"],
               [
                 "Last game sync",
-                p.characterSyncedAt ? new Date(p.characterSyncedAt).toLocaleString() : "Awaiting first sync",
+                p.characterSyncedAt
+                  ? new Date(p.characterSyncedAt).toLocaleString()
+                  : "Awaiting game sync",
               ],
             ].map(([k, v]) => (
               <div
@@ -126,17 +128,19 @@ function ProfilePage() {
             <StatCard
               icon={Star}
               label="Engineering score"
-              value={p.totalScore !== null ? p.totalScore.toLocaleString() : "0"}
+              value={p.totalScore !== null ? p.totalScore.toLocaleString() : "\u2014"}
             />
             <StatCard
               icon={Hammer}
               label="Bridges completed"
-              value={p.bridgesCompleted !== null ? p.bridgesCompleted.toLocaleString() : "0"}
+              value={p.bridgesCompleted !== null ? p.bridgesCompleted.toLocaleString() : "\u2014"}
             />
             <StatCard
               icon={Target}
               label="Challenges completed"
-              value={p.challengesCompleted !== null ? p.challengesCompleted.toLocaleString() : "0"}
+              value={
+                p.challengesCompleted !== null ? p.challengesCompleted.toLocaleString() : "\u2014"
+              }
             />
             <StatCard
               icon={Zap}
@@ -146,7 +150,7 @@ function ProfilePage() {
                   ? p.bestSingleBuildScore.toLocaleString()
                   : statValue(stats.data, "BestSingleBuildScore") !== "—"
                     ? statValue(stats.data, "BestSingleBuildScore")
-                    : "0"
+                    : "\u2014"
               }
             />
           </div>
@@ -157,19 +161,34 @@ function ProfilePage() {
       <section>
         <SectionHeading
           title="Equipped loadout"
-          description="Exactly what your engineer is wearing in Civil Craft."
+          description="Equipment from your latest game synchronization."
         />
         {character.isPending ? (
           <LoadingState rows={2} />
+        ) : character.isError ? (
+          <ErrorState
+            description="Unable to load equipment. Please try again."
+            onRetry={character.refetch}
+          />
+        ) : character.data?.syncStatus === "missing" ? (
+          <p role="status" className="panel p-4 text-muted-foreground">
+            Awaiting game sync. No equipment snapshot has been published for this player. The game
+            integration must publish a snapshot before equipment can appear here.
+          </p>
+        ) : character.data?.syncStatus === "invalid" ? (
+          <p role="alert" className="panel p-4">
+            The game equipment snapshot uses an unsupported format. Equipment cannot be displayed
+            reliably.
+          </p>
         ) : (
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {SLOT_ORDER.map((slot) => {
-              const item = equippedBySlot.get(slot);
-              return item ? (
-                <EquipmentSlot key={slot} slot={slot} item={item} />
-              ) : (
-                <EquipmentSlot key={slot} slot={slot} />
-              );
+            {equipmentSlots.flatMap((slot) => {
+              const items = (character.data?.equipped ?? []).filter((item) => item.slot === slot);
+              return items.length
+                ? items.map((item) => (
+                    <EquipmentSlot key={`${slot}:${item.itemId}`} slot={slot} item={item} />
+                  ))
+                : [<EquipmentSlot key={slot} slot={slot} />];
             })}
           </ul>
         )}

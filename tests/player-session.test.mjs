@@ -406,7 +406,7 @@ test("protected dashboard and shop preserve destination and distinguish expirati
     search: "?contract=VancesContract",
     hash: "#rank",
   };
-  for (const path of ["../src/routes/dashboard.tsx", "../src/routes/shop.tsx"]) {
+  for (const path of ["../src/routes/dashboard.tsx"]) {
     for (const outage of [false, true]) {
       const navigations = [];
       const component = ({ children }) => React.createElement("div", null, children);

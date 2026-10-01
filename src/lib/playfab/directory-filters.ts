@@ -16,20 +16,28 @@ export const defaultDirectoryOptions: DirectoryOptions = {
   activity: "all",
   status: "all",
 };
+
+/** Last-login activity is independent of the backend ban state. */
+export function playerActivity(lastLogin: string | null, now = Date.now()) {
+  if (!lastLogin) return { key: "inactive", label: "Inactive (never logged in)" };
+  const login = Date.parse(lastLogin);
+  if (!Number.isFinite(login) || login > now) return { key: "unknown", label: "Unknown" };
+  const age = now - login;
+  if (age <= 7 * 86400000) return { key: "recent", label: "Recently active" };
+  if (age > 30 * 86400000) return { key: "inactive", label: "Inactive" };
+  return { key: "other", label: "Last login 7–30 days ago" };
+}
 export function filterSortPlayers(
   players: AdminPlayer[],
   options: DirectoryOptions,
   now = Date.now(),
 ) {
   const date = (v: string | null) => (v && Number.isFinite(Date.parse(v)) ? Date.parse(v) : null);
-  const day = 86400000;
   return players
     .filter((p) => {
       if (options.status !== "all" && p.accountStatus !== options.status) return false;
-      const login = date(p.lastActive);
-      if (options.activity === "recent")
-        return login !== null && login <= now && now - login <= 7 * day;
-      if (options.activity === "inactive") return login === null || now - login > 30 * day;
+      if (options.activity !== "all")
+        return playerActivity(p.lastActive, now).key === options.activity;
       return true;
     })
     .sort((a, b) => {

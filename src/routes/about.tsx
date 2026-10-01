@@ -36,9 +36,8 @@ import { useAuth } from "@/lib/auth";
 import type { TeamMember } from "@/lib/cms/types";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
 import chibiEngineer from "@/assets/chibi-engineer.png";
-import shotExplore from "@/assets/explore-world.jpg";
+import chibiDuo from "@/assets/chibi-duo.png";
 import shotBuild from "@/assets/build-mode.jpg";
-import shotTest from "@/assets/load-test.jpg";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -289,12 +288,12 @@ function AboutPage() {
         <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
           <div className="game-frame p-2">
             <img
-              src={shotExplore}
+              src="/images/gameplay/about-gameplay.png"
               alt="Civil Craft gameplay: a chibi engineer surveying a canyon crossing"
               loading="lazy"
               width={1920}
               height={886}
-              className="w-full rounded-2xl"
+              className="aspect-[16/10] w-full rounded-2xl object-cover object-center"
             />
           </div>
           <ul className="mt-6 grid gap-6 sm:grid-cols-3 sm:divide-x-2 sm:divide-dashed sm:divide-border">
@@ -421,12 +420,12 @@ function AboutPage() {
           <div className="grid gap-10 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:items-center">
             <div className="game-frame p-2">
               <img
-                src={shotTest}
+                src="/images/gameplay/test-thumbnail.jpg"
                 alt="A Civil Craft bridge deforming under a load simulation"
                 loading="lazy"
                 width={1920}
                 height={886}
-                className="w-full rounded-2xl"
+                className="aspect-[16/10] w-full rounded-2xl object-cover object-center"
               />
             </div>
             <div className="min-w-0">
@@ -504,20 +503,49 @@ function AboutPage() {
               </div>
             </article>
 
-            <article className="blueprint min-w-0 overflow-hidden rounded-3xl border-2 border-dashed border-border bg-card/50">
-              <div className="grid h-44 place-items-center border-b-2 border-dashed border-border sm:h-56">
-                <Users className="h-14 w-14 text-muted-foreground/60" aria-hidden="true" />
+            <article className="min-w-0 overflow-hidden rounded-3xl border-2 border-border bg-card shadow-[var(--shadow-soft)]">
+              <div className="blueprint relative flex h-44 w-full items-center justify-center overflow-hidden border-b-2 border-border bg-secondary/35 sm:h-56">
+                <div
+                  className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3.5 font-mono text-[10px] uppercase tracking-wider select-none"
+                  aria-hidden="true"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-bold text-foreground/80">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-gold" />
+                      Arcadia Co-op // 2-Player
+                    </span>
+                    <span className="rounded-full border border-gold/40 bg-card/90 px-2.5 py-0.5 text-[10px] font-extrabold tracking-[0.16em] text-foreground shadow-sm">
+                      Co-op Mode
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[9px] text-muted-foreground/75">
+                    <span>REF: CC-ENG-CONTRACT</span>
+                    <span>MOBILE SESSION</span>
+                  </div>
+                </div>
+
+                <img
+                  src={chibiDuo}
+                  alt="Civil Craft cooperative engineers reviewing bridge blueprints"
+                  loading="lazy"
+                  width={600}
+                  height={600}
+                  className="relative z-10 h-[82%] w-auto select-none object-contain drop-shadow-xl"
+                />
               </div>
               <div className="p-6">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h3 className="font-display text-2xl">Construction contracts</h3>
+                  <div className="flex items-center gap-3">
+                    <Users className="h-6 w-6 text-gold shrink-0" aria-hidden="true" />
+                    <h3 className="font-display text-2xl">Construction contracts</h3>
+                  </div>
                   <span className="rounded-full border-2 border-border bg-secondary px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
                     Across Arcadia
                   </span>
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">
-                  Professor Bhan guides your early projects. As you gain experience, regional
-                  contractors provide new construction projects while Bhan remains your mentor.
+                  Team up with a fellow engineer to tackle regional bridge-building contracts across Arcadia.
+                  Collaborate in real-time mobile co-op sessions to plan trusses, balance load forces, and solve structural challenges together.
                 </p>
               </div>
             </article>
