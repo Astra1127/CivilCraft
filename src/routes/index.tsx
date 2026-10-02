@@ -195,10 +195,13 @@ function HomePage() {
                 height={800}
                 className="aspect-[4/3] w-full rounded-2xl object-cover object-center"
               />
-              <GameArt
-                kind="engineer"
-                alt=""
-                className="pointer-events-none absolute -bottom-10 -left-12 w-28 sm:w-36 lg:-left-20 lg:w-44"
+              <img
+                src="/images/decor/female-engineer-wrench.png"
+                alt="Civil Craft construction engineer holding a wrench"
+                loading="lazy"
+                width={1024}
+                height={1536}
+                className="pointer-events-none absolute -bottom-10 -left-10 w-24 object-contain select-none drop-shadow-xl sm:-left-12 sm:w-32 lg:-bottom-12 lg:-left-16 lg:w-36"
               />
               <GameProp kind="tools" className="-right-8 -top-12 w-36 opacity-95" />
             </div>

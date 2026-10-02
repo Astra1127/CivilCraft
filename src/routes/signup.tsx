@@ -12,7 +12,6 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { passwordRules } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
-import heroKeyart from "@/assets/hero-keyart.jpg";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -152,10 +151,10 @@ function SignupPage() {
         <div className="mx-auto grid max-w-6xl items-stretch gap-8 lg:grid-cols-2">
           <div className="game-frame relative order-2 hidden lg:block">
             <img
-              src={heroKeyart}
-              alt="Chibi engineers on a wooden bridge in the Civil Craft desert canyon"
+              src="/images/gameplay/about-gameplay.png"
+              alt="Civil Craft gameplay showing the player and constructed bridge"
               loading="lazy"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover object-center"
             />
           </div>
 

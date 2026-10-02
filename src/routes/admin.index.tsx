@@ -270,7 +270,7 @@ function AdminOverview() {
           className="min-w-0"
           actions={
             <Button asChild size="sm" variant="outline">
-              <Link to="/admin/leaderboard">View leaderboard →</Link>
+              <Link to="/leaderboard">View leaderboard →</Link>
             </Button>
           }
         >

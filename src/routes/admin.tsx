@@ -16,7 +16,6 @@ import {
   Receipt,
   Settings,
   Users,
-  Trophy,
 } from "lucide-react";
 import { useEffect } from "react";
 import { LoadingState } from "@/components/common/States";
@@ -49,7 +48,6 @@ export const Route = createFileRoute("/admin")({
 const items: DashboardNavItem[] = [
   { to: "/admin", label: "Overview", icon: LayoutDashboard, section: "Dashboard" },
   { to: "/admin/players", label: "Players", icon: Users, section: "Game" },
-  { to: "/admin/leaderboard", label: "Leaderboard", icon: Trophy, section: "Game" },
   { to: "/admin/releases", label: "Game & Download", icon: Package, section: "Game" },
   { to: "/admin/products", label: "Coin Products", icon: Coins, section: "Game" },
   { to: "/admin/transactions", label: "Transactions", icon: Receipt, section: "Game" },

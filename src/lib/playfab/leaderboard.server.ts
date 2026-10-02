@@ -148,6 +148,40 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
   try {
     configured = !!adminGameConfig().secret;
     if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+    // Anonymous access is limited to this explicit, field-whitelisted endpoint.
+    // Existing player/admin endpoints below retain their authentication checks.
+    if (url.pathname === "/api/leaderboard/public") {
+      const integer = (key: string, fallback?: number) => {
+        const value = url.searchParams.get(key);
+        if (value === null) return fallback;
+        if (!/^\d{1,9}$/.test(value)) throw new AdminApiError(400, "Invalid leaderboard page.");
+        return Number(value);
+      };
+      const contract = url.searchParams.get("contractId") ?? DEFAULT_CONTRACT;
+      const mode = url.searchParams.get("mode") ?? DEFAULT_MODE;
+      bridgeStatistic(contract, mode);
+      const pageSize = integer("pageSize", LEADERBOARD_PAGE_SIZE)!;
+      if (![10, 20, 50].includes(pageSize))
+        throw new AdminApiError(400, "Choose 10, 20 or 50 entries per page.");
+      const page = await leaderboardPage(
+        integer("start", 0),
+        integer("version"),
+        "all-time",
+        pageSize,
+        contract as LeaderboardContract,
+        mode as LeaderboardMode,
+      );
+      return json({
+        entries: page.entries.map(({ rank, displayName, cost, peakStress }) => ({
+          rank,
+          displayName,
+          cost,
+          peakStress,
+        })),
+        version: page.version,
+        nextStart: page.nextStart,
+      });
+    }
     let playerId: string | null = null;
     const ticket = request.headers.get("authorization")?.match(/^Bearer (\S+)$/)?.[1];
     if (ticket && ticket.length <= 4096) {

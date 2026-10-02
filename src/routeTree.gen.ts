@@ -20,6 +20,7 @@ import { Route as DownloadRouteImport } from './routes/download'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as GalleryRouteImport } from './routes/gallery'
+import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as LeaderboardsRouteImport } from './routes/leaderboards'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PrivacyRouteImport } from './routes/privacy'
@@ -115,6 +116,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const GalleryRoute = GalleryRouteImport.update({
   id: '/gallery',
   path: '/gallery',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeaderboardRoute = LeaderboardRouteImport.update({
+  id: '/leaderboard',
+  path: '/leaderboard',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LeaderboardsRoute = LeaderboardsRouteImport.update({
@@ -335,6 +341,7 @@ export interface FileRoutesByFullPath {
   '/faq': typeof FaqRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/gallery': typeof GalleryRoute
+  '/leaderboard': typeof LeaderboardRoute
   '/leaderboards': typeof LeaderboardsRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
@@ -386,6 +393,7 @@ export interface FileRoutesByTo {
   '/faq': typeof FaqRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/gallery': typeof GalleryRoute
+  '/leaderboard': typeof LeaderboardRoute
   '/leaderboards': typeof LeaderboardsRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
@@ -441,6 +449,7 @@ export interface FileRoutesById {
   '/faq': typeof FaqRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/gallery': typeof GalleryRoute
+  '/leaderboard': typeof LeaderboardRoute
   '/leaderboards': typeof LeaderboardsRoute
   '/login': typeof LoginRoute
   '/privacy': typeof PrivacyRoute
@@ -497,6 +506,7 @@ export interface FileRouteTypes {
     | '/faq'
     | '/forgot-password'
     | '/gallery'
+    | '/leaderboard'
     | '/leaderboards'
     | '/login'
     | '/privacy'
@@ -548,6 +558,7 @@ export interface FileRouteTypes {
     | '/faq'
     | '/forgot-password'
     | '/gallery'
+    | '/leaderboard'
     | '/leaderboards'
     | '/login'
     | '/privacy'
@@ -602,6 +613,7 @@ export interface FileRouteTypes {
     | '/faq'
     | '/forgot-password'
     | '/gallery'
+    | '/leaderboard'
     | '/leaderboards'
     | '/login'
     | '/privacy'
@@ -657,6 +669,7 @@ export interface RootRouteChildren {
   FaqRoute: typeof FaqRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   GalleryRoute: typeof GalleryRoute
+  LeaderboardRoute: typeof LeaderboardRoute
   LeaderboardsRoute: typeof LeaderboardsRoute
   LoginRoute: typeof LoginRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -747,6 +760,13 @@ declare module '@tanstack/react-router' {
       path: '/gallery'
       fullPath: '/gallery'
       preLoaderRoute: typeof GalleryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/leaderboard': {
+      id: '/leaderboard'
+      path: '/leaderboard'
+      fullPath: '/leaderboard'
+      preLoaderRoute: typeof LeaderboardRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/leaderboards': {
@@ -1139,6 +1159,7 @@ const rootRouteChildren: RootRouteChildren = {
   FaqRoute: FaqRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   GalleryRoute: GalleryRoute,
+  LeaderboardRoute: LeaderboardRoute,
   LeaderboardsRoute: LeaderboardsRoute,
   LoginRoute: LoginRoute,
   PrivacyRoute: PrivacyRoute,

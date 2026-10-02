@@ -750,6 +750,46 @@ test("leaderboard distinguishes empty, failure, missing access and unranked user
     "PlayFab administrative access is not configured.",
   );
 });
+test("public leaderboard allows anonymous reads and whitelists only public measurements", async () => {
+  rankingRows = [
+    {
+      PlayFabId: "ABC123",
+      Position: 0,
+      DisplayName: "Engineer",
+      StatValue: 2147483647 - 10010,
+      Email: "private@example.test",
+      Bans: [{ Reason: "private" }],
+      Profile: { AccountId: "internal" },
+    },
+  ];
+  const response = await board("/public");
+  assert.equal(response!.status, 200);
+  assert.deepEqual(await response!.json(), {
+    entries: [{ rank: 1, displayName: "Engineer", cost: 10, peakStress: 0 }],
+    version: 3,
+    nextStart: null,
+  });
+  assert.deepEqual(
+    calls.map((call) => call.operation),
+    ["Server/GetLeaderboard"],
+  );
+  assert.equal((await board())!.status, 401);
+  assert.equal((await board("/me"))!.status, 401);
+});
+test("public leaderboard validates paging and statistics and sanitizes failures", async () => {
+  for (const query of [
+    "start=-1",
+    "version=bad",
+    "pageSize=100",
+    "contractId=unknown",
+    "mode=unknown",
+  ])
+    assert.equal((await board("/public?" + query))!.status, 400);
+  failOperation = "Server/GetLeaderboard";
+  const response = await board("/public");
+  assert.equal(response!.status, 503);
+  assert.deepEqual(await response!.json(), { error: "Unable to load the leaderboard." });
+});
 test("leaderboard ranks come from backend positions and malformed rows fail closed", () => {
   assert.equal(
     mapLeaderboard([
