@@ -4,6 +4,7 @@ import { Clock, Hammer, Medal, RefreshCw, Star, Target, Zap } from "lucide-react
 import { useState } from "react";
 import { DemoBadge } from "@/components/common/DemoBadge";
 import { CharacterPreview } from "@/components/dashboard/CharacterPreview";
+import { YourRanking } from "@/components/dashboard/YourRanking";
 import { SectionHeading } from "@/components/common/PageHeader";
 import { StatCard } from "@/components/common/StatCard";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/States";
@@ -201,6 +202,8 @@ function PlayerOverview() {
       </section>
 
       {/* ------------------------------------------------ story progress */}
+      <YourRanking />
+
       <section>
         <SectionHeading
           title="Story progress"

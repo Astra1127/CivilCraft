@@ -221,17 +221,18 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
     const pageSize = integer("pageSize", LEADERBOARD_PAGE_SIZE)!;
     if (![10, 20, 50].includes(pageSize))
       throw new AdminApiError(400, "Choose 10, 20 or 50 entries per page.");
-    if (url.pathname === "/api/leaderboard/me") {
+    if (url.pathname === "/api/leaderboard/me" || url.pathname === "/api/leaderboard/standing") {
       if (!playerId) return json({ error: "Player sign-in is required." }, 401);
-      return json(
-        await leaderboardRank(
-          playerId,
-          version,
-          period,
-          contract as LeaderboardContract,
-          mode as LeaderboardMode,
-        ),
+      const row = await leaderboardRank(
+        playerId,
+        version,
+        period,
+        contract as LeaderboardContract,
+        mode as LeaderboardMode,
       );
+      if (url.pathname === "/api/leaderboard/standing")
+        return json(row ? { rank: row.rank, cost: row.cost, peakStress: row.peakStress } : null);
+      return json(row);
     }
     if (url.pathname !== "/api/leaderboard") return json({ error: "Not found." }, 404);
     return json(

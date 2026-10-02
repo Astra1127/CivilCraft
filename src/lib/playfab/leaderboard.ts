@@ -9,6 +9,18 @@ import type {
   LeaderboardMode,
 } from "./leaderboard-shared";
 export { LEADERBOARD_STATISTIC } from "./leaderboard-shared";
+export interface PlayerStanding {
+  rank: number;
+  cost: number;
+  peakStress: number;
+}
+export function getOwnStanding(
+  contractId: LeaderboardContract = DEFAULT_CONTRACT,
+  mode: LeaderboardMode = DEFAULT_MODE,
+): Promise<PlayerStanding | null> {
+  // Identity comes exclusively from the verified ticket, never a client-supplied ID.
+  return request("/api/leaderboard/standing?" + new URLSearchParams({ contractId, mode }));
+}
 async function request<T>(path: string, admin = false): Promise<T> {
   const response = await playerFetch(path, {
     credentials: "same-origin",

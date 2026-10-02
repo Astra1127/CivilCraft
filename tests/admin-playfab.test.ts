@@ -790,6 +790,34 @@ test("public leaderboard validates paging and statistics and sanitizes failures"
   assert.equal(response!.status, 503);
   assert.deepEqual(await response!.json(), { error: "Unable to load the leaderboard." });
 });
+test("personal standing uses only the verified player identity and exposes measurements", async () => {
+  rankingRows = [
+    { PlayFabId: "ABC123", Position: 0, DisplayName: "First", StatValue: 2147483647 - 10010 },
+    { PlayFabId: "DEF456", Position: 1, DisplayName: "Second", StatValue: 2147483647 - 20020 },
+  ];
+  const response = await board("/standing?playFabId=DEF456", "valid-player");
+  assert.equal(response!.status, 200);
+  assert.deepEqual(await response!.json(), { rank: 1, cost: 10, peakStress: 0 });
+  assert.equal(
+    calls.find((call) => call.operation === "Server/GetLeaderboardAroundUser")!.body["PlayFabId"],
+    "ABC123",
+  );
+  assert.deepEqual(await (await board("/standing", "second-player"))!.json(), {
+    rank: 2,
+    cost: 20,
+    peakStress: 0,
+  });
+  assert.equal((await board("/standing"))!.status, 401);
+  assert.equal((await board("/standing", "expired"))!.status, 401);
+  assert.equal((await board("/standing", "", await session()))!.status, 401);
+});
+test("personal standing distinguishes unranked players from service failures", async () => {
+  assert.equal(await (await board("/standing", "valid-player"))!.json(), null);
+  failOperation = "Server/GetLeaderboardAroundUser";
+  const response = await board("/standing", "valid-player");
+  assert.equal(response!.status, 503);
+  assert.deepEqual(await response!.json(), { error: "Unable to load the leaderboard." });
+});
 test("leaderboard ranks come from backend positions and malformed rows fail closed", () => {
   assert.equal(
     mapLeaderboard([
