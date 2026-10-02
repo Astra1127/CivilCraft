@@ -36,8 +36,6 @@ import { useAuth } from "@/lib/auth";
 import type { TeamMember } from "@/lib/cms/types";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
 import chibiEngineer from "@/assets/chibi-engineer.png";
-import chibiDuo from "@/assets/chibi-duo.png";
-import shotBuild from "@/assets/build-mode.jpg";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -484,12 +482,12 @@ function AboutPage() {
           <div className="mt-8 grid gap-6 lg:grid-cols-2">
             <article className="min-w-0 overflow-hidden rounded-3xl border-2 border-border bg-card shadow-[var(--shadow-soft)]">
               <img
-                src={shotBuild}
+                src="/images/gameplay/story-mode.png"
                 alt="Civil Craft story mode build screen over a canyon contract"
                 loading="lazy"
                 width={1920}
                 height={886}
-                className="h-44 w-full border-b-2 border-border object-cover sm:h-56"
+                className="h-44 w-full border-b-2 border-border object-cover object-center sm:h-56"
               />
               <div className="p-6">
                 <div className="flex items-center gap-3">
@@ -506,46 +504,43 @@ function AboutPage() {
             <article className="min-w-0 overflow-hidden rounded-3xl border-2 border-border bg-card shadow-[var(--shadow-soft)]">
               <div className="blueprint relative flex h-44 w-full items-center justify-center overflow-hidden border-b-2 border-border bg-secondary/35 sm:h-56">
                 <div
-                  className="pointer-events-none absolute inset-0 flex flex-col justify-between p-3.5 font-mono text-[10px] uppercase tracking-wider select-none"
+                  className="pointer-events-none absolute inset-0 z-10 flex flex-col justify-between p-3.5 font-mono text-[10px] uppercase tracking-wider select-none"
                   aria-hidden="true"
                 >
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 font-bold text-foreground/80">
                       <span className="inline-block h-1.5 w-1.5 rounded-full bg-gold" />
-                      Arcadia Co-op // 2-Player
+                      Multiplayer // 2-Player
                     </span>
                     <span className="rounded-full border border-gold/40 bg-card/90 px-2.5 py-0.5 text-[10px] font-extrabold tracking-[0.16em] text-foreground shadow-sm">
                       Co-op Mode
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-[9px] text-muted-foreground/75">
-                    <span>REF: CC-ENG-CONTRACT</span>
+                    <span>Multiplayer</span>
                     <span>MOBILE SESSION</span>
                   </div>
                 </div>
 
                 <img
-                  src={chibiDuo}
-                  alt="Civil Craft cooperative engineers reviewing bridge blueprints"
+                  src="/images/gameplay/multiplayer-mode.png"
+                  alt="Civil Craft multiplayer menu with the Play With Friends option"
                   loading="lazy"
-                  width={600}
-                  height={600}
-                  className="relative z-10 h-[82%] w-auto select-none object-contain drop-shadow-xl"
+                  width={1600}
+                  height={720}
+                  className="absolute inset-0 h-full w-full object-cover object-center"
                 />
               </div>
               <div className="p-6">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-3">
                     <Users className="h-6 w-6 text-gold shrink-0" aria-hidden="true" />
-                    <h3 className="font-display text-2xl">Construction contracts</h3>
+                    <h3 className="font-display text-2xl">Multiplayer</h3>
                   </div>
-                  <span className="rounded-full border-2 border-border bg-secondary px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-muted-foreground">
-                    Across Arcadia
-                  </span>
                 </div>
                 <p className="mt-3 text-sm text-muted-foreground">
-                  Team up with a fellow engineer to tackle regional bridge-building contracts across Arcadia.
-                  Collaborate in real-time mobile co-op sessions to plan trusses, balance load forces, and solve structural challenges together.
+                  Team up with another engineer and build bridges together. Collaborate,
+                  construct, and test your designs in multiplayer sessions.
                 </p>
               </div>
             </article>
