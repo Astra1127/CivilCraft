@@ -630,7 +630,7 @@ function HomePage() {
         <div className="mx-auto grid max-w-6xl items-center gap-6 px-4 sm:px-6 md:grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto]">
           <GameArt
             kind="duo"
-            alt="Small group of chibi Civil Craft student developers"
+            alt="Male blueprint and female wrench Civil Craft engineers"
             className="mx-auto w-28 md:w-32"
           />
           <div className="min-w-0 text-center md:text-left">
@@ -670,7 +670,7 @@ function HomePage() {
         <div className="relative mx-auto max-w-3xl px-4 pb-12 pt-12 text-center sm:px-6">
           <GameArt
             kind="engineer"
-            alt="Chibi Civil Craft engineer waving beside a finished bridge"
+            alt="Male Civil Craft engineer holding a blueprint"
             className="mx-auto w-32 sm:w-40"
           />
           <h2 className="mt-4 text-3xl sm:text-4xl">Ready to start building?</h2>

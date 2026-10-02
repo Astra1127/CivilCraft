@@ -249,8 +249,8 @@ function DownloadPage() {
             )}
           </div>
           <GameArt
-            kind="engineer"
-            alt="Chibi Civil Craft engineer pointing at the install steps"
+            kind="wrench"
+            alt="Female Civil Craft engineer holding a wrench"
             className="mx-auto hidden w-full lg:block"
           />
         </div>

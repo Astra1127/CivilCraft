@@ -3,7 +3,7 @@ import { PageHeader, SectionHeading } from "@/components/common/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { bridgeTypes, engineeringConcepts, materials } from "@/lib/almanac/content";
-import chibiEngineer from "@/assets/chibi-engineer.png";
+const chibiEngineer = "/images/decor/engineer-blueprint.png";
 import buildMode from "@/assets/build-mode.jpg";
 
 const bridges = bridgeTypes.map((b) => ({
@@ -60,7 +60,7 @@ export function AlmanacContent() {
               loading="lazy"
               width={768}
               height={768}
-              className="mx-auto w-40 drop-shadow-xl md:w-full"
+              className="mx-auto aspect-square w-40 object-contain drop-shadow-xl md:w-full"
             />
           </div>
         </div>

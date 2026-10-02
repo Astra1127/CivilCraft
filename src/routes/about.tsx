@@ -35,7 +35,7 @@ import { useCms } from "@/lib/cms/store";
 import { useAuth } from "@/lib/auth";
 import type { TeamMember } from "@/lib/cms/types";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
-import chibiEngineer from "@/assets/chibi-engineer.png";
+const chibiEngineer = "/images/decor/female-engineer-wrench.png";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -383,8 +383,8 @@ function AboutPage() {
                 repeat in every region.
               </p>
               <GameArt
-                kind="engineer"
-                alt="Chibi Civil Craft engineer holding a clipboard"
+                kind="wrench"
+                alt="Female Civil Craft engineer holding a wrench"
                 className="mt-6 hidden w-44 lg:block"
               />
             </div>
