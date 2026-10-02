@@ -18,9 +18,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
-import shotExplore from "@/assets/explore-world.jpg";
-import shotBuild from "@/assets/build-mode.jpg";
-import shotTest from "@/assets/load-test.jpg";
 import worldBreak from "@/assets/world-break-strip.png";
 
 export const Route = createFileRoute("/")({
@@ -75,29 +72,25 @@ const shots = [
   {
     id: "explore",
     label: "Explore",
-    src: shotExplore,
-    thumbnailSrc: "/images/gameplay/explore-thumbnail.jpg",
+    src: "/images/gameplay/explore-thumbnail.jpg",
     alt: "Chibi engineer walking through the low-poly canyon in Civil Craft",
   },
   {
     id: "build",
     label: "Build",
-    src: shotBuild,
-    thumbnailSrc: "/images/gameplay/build-thumbnail.jpg",
+    src: "/images/gameplay/build-thumbnail.jpg",
     alt: "Civil Craft blueprint build mode with beams placed on a grid",
   },
   {
     id: "test",
     label: "Test",
-    src: shotTest,
-    thumbnailSrc: "/images/gameplay/test-thumbnail.jpg",
+    src: "/images/gameplay/test-thumbnail.jpg",
     alt: "A completed wooden bridge crossing the canyon during a Civil Craft simulation",
   },
   {
     id: "learn",
     label: "Learn",
-    src: shotTest,
-    thumbnailSrc: "/images/gameplay/learn-thumbnail.png",
+    src: "/images/gameplay/learn-thumbnail.png",
     alt: "Bridge load test showing member stress and the load carried by the structure",
   },
 ] as const;
@@ -339,7 +332,7 @@ function HomePage() {
               <div className="rounded-2xl border-2 border-primary/70 bg-card p-1.5 shadow-[inset_0_2px_10px_oklch(0.305_0.036_55/25%)]">
                 <img
                   key={shot.id}
-                  src={shot.id === "explore" ? "/images/gameplay/about-gameplay.png" : shot.src}
+                  src={shot.src}
                   alt={shot.alt}
                   loading="lazy"
                   width={1280}
@@ -366,7 +359,7 @@ function HomePage() {
                         }`}
                       >
                         <img
-                          src={s.thumbnailSrc}
+                          src={s.src}
                           alt=""
                           aria-hidden="true"
                           loading="lazy"

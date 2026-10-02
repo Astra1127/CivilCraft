@@ -12,7 +12,11 @@ import { getAdminAuthConfig } from "../src/lib/admin-auth/config.server.ts";
 import { cookieName, issueAdminSession } from "../src/lib/admin-auth/session.server.ts";
 import { handlePlayFabAdminRequest } from "../src/lib/playfab/admin-api.server.ts";
 import { exportUrl, readExportPage } from "../src/lib/playfab/admin-directory.server.ts";
-import { mapAchievements, mapBans } from "../src/lib/playfab/admin-players.server.ts";
+import {
+  accountStatusFromBans,
+  mapAchievements,
+  mapBans,
+} from "../src/lib/playfab/admin-players.server.ts";
 
 // All network calls are intercepted; no real players, credentials or moderation are used.
 const origin = "https://civilcraft.test";
@@ -47,6 +51,8 @@ const tsv =
       `17FA03\t${(i + 1).toString(16).toUpperCase()}\tEngineer ${i}\t2026-01-01 00:00:00\t2026-09-01 00:00:00\t[{"Name":"TotalScore","StatisticValue":${i}}]`,
   ).join("\n");
 let exportSerial = 0;
+let bansByPlayer = new Map<string, unknown[]>();
+let identityBanFlag: boolean | undefined;
 let fragmentFiles: string[] | null = null;
 beforeEach(() => {
   imageStorage.configuration = async () => "Unavailable";
@@ -59,6 +65,8 @@ beforeEach(() => {
   data = {};
   stats = [];
   bans = [];
+  bansByPlayer = new Map();
+  identityBanFlag = undefined;
   failOperation = "";
   exportPending = false;
   malformedAccount = false;
@@ -172,6 +180,7 @@ beforeEach(() => {
               ? {}
               : {
                   TitleInfo: {
+                    isBanned: identityBanFlag,
                     DisplayName: "Engineer",
                     Created: "2026-01-01T00:00:00Z",
                     LastLogin: "2026-09-01T00:00:00Z",
@@ -199,7 +208,7 @@ beforeEach(() => {
         };
         break;
       case "Admin/GetUserBans":
-        result = { BanData: bans };
+        result = { BanData: bansByPlayer.get(String(body["PlayFabId"])) ?? bans };
         break;
       case "Admin/BanUsers":
         bans = [{ Active: true, Reason: "Test reason", PlayFabId: "ABC123" }];
@@ -452,7 +461,7 @@ test("export pagination returns 20 then 5 without exposing URLs, raw records, or
   assert.equal(first.players.length, 20);
   assert.equal(first.players[0].totalScore, 0);
   assert.equal(first.players[0].level, null);
-  assert.equal(first.players[0].accountStatus, null);
+  assert.equal(first.players[0].accountStatus, "active");
   assert.ok(!JSON.stringify(first).includes("private-"));
   assert.ok(!JSON.stringify(first).includes("blob.core"));
   const next = await (
@@ -894,8 +903,14 @@ test("leaderboard supports 10, 20 and 50 backend entries per page", async () => 
   }
 });
 
-test("directory filters and sorts the full 53-player snapshot before pagination without per-row calls", async () => {
+test("directory filters current bans across the full snapshot before pagination", async () => {
   const time = Date.now();
+  bansByPlayer = new Map(
+    Array.from({ length: 53 }, (_, i) => [
+      (i + 1).toString(16).toUpperCase(),
+      i % 2 === 0 ? [{ Active: true }] : [],
+    ]),
+  );
   fragmentFiles = [
     "PlayerId\tDisplayName\tCreated\tLastLogin\tisBanned\n" +
       Array.from({ length: 53 }, (_, i) =>
@@ -930,4 +945,71 @@ test("directory filters and sorts the full 53-player snapshot before pagination 
   assert.ok(calls.every((call) => call.operation !== "Admin/GetUserAccountInfo"));
   const oldest = await (await request("/api/admin/players?sort=oldest&pageSize=10", auth)).json();
   assert.equal(oldest.players[0].playFabId, "35");
+});
+
+test("current access ignores revoked/expired history and stale identity flags", async () => {
+  const cookie = await session();
+  const cases = [
+    { bans: [], expected: "active" },
+    { bans: [{ Active: true }], expected: "banned" },
+    { bans: [{ Active: false, BanId: "revoked" }], expected: "active" },
+    { bans: [{ Active: true, Expires: "2020-01-01T00:00:00Z" }], expected: "active" },
+    { bans: [{ Active: false }, { Active: true }], expected: "banned" },
+  ];
+  for (const item of cases) {
+    bans = item.bans;
+    identityBanFlag = item.expected === "active";
+    assert.equal(accountStatusFromBans(mapBans(bans)), item.expected);
+    const modal = await (await request("/api/admin/players/ABC123", cookie)).json();
+    const directory = await (await request("/api/admin/players", cookie)).json();
+    assert.equal(modal.accountStatus, item.expected);
+    assert.equal(directory.players[0].accountStatus, item.expected);
+  }
+  failOperation = "Admin/GetUserBans";
+  assert.equal(
+    (await (await request("/api/admin/players/ABC123", cookie)).json()).accountStatus,
+    null,
+  );
+  assert.equal(
+    (await (await request("/api/admin/players", cookie)).json()).players[0].accountStatus,
+    null,
+  );
+});
+
+test("ban/unban refreshes directory and modal despite a stale export and reused cursor", async () => {
+  fragmentFiles = ["PlayerId\tDisplayName\tisBanned\nABC123\thyakkimaru\ttrue\n"];
+  const cookie = await session();
+  const first = await (await request("/api/admin/players", cookie)).json();
+  const directory = "/api/admin/players?cursor=" + encodeURIComponent(first.snapshotCursor);
+  assert.equal(first.players[0].accountStatus, "active");
+  const path = "/api/admin/players/ABC123";
+  assert.equal(
+    (await request(path + "/ban", cookie, { confirm: true, reason: "test" })).status,
+    200,
+  );
+  assert.equal((await (await request(path, cookie)).json()).accountStatus, "banned");
+  assert.equal(
+    (await (await request(directory, cookie)).json()).players[0].accountStatus,
+    "banned",
+  );
+  bans.push({ Active: true, BanId: "second" }, { Active: true, Expires: "2020-01-01T00:00:00Z" });
+  assert.equal((await request(path + "/unban", cookie, { confirm: true })).status, 200);
+  // PlayFab can retain revoked history; current access must still be Active.
+  bans = [
+    { Active: false, BanId: "first" },
+    { Active: false, BanId: "second" },
+    { Active: true, Expires: "2020-01-01T00:00:00Z" },
+  ];
+  assert.equal((await (await request(path, cookie)).json()).accountStatus, "active");
+  assert.equal(
+    (await (await request(directory, cookie)).json()).players[0].accountStatus,
+    "active",
+  );
+  const filtered = await (await request(directory + "&status=banned", cookie)).json();
+  assert.equal(filtered.totalPlayers, 0);
+  assert.ok(
+    !calls.some((c) =>
+      /SetUserData|UpdatePlayerStatistics|GrantItems|ExecuteCloudScript/.test(c.operation),
+    ),
+  );
 });

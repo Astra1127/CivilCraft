@@ -34,8 +34,7 @@ export function mapIdentity(raw: unknown): AdminPlayer {
     createdAt: dateValue(title["Created"]) ?? dateValue(info["Created"]),
     firstLogin: dateValue(title["FirstLogin"]),
     lastActive: dateValue(title["LastLogin"]),
-    accountStatus:
-      typeof title["isBanned"] === "boolean" ? (title["isBanned"] ? "banned" : "active") : null,
+    accountStatus: null,
     level: null,
     xp: null,
     xpToNextLevel: null,
@@ -61,6 +60,15 @@ export function mapBans(raw: unknown): NonNullable<AdminPlayerDetail["bans"]> {
       active: b["Active"] === true && (!expiresAt || Date.parse(expiresAt) > Date.now()),
     };
   });
+}
+export function accountStatusFromBans(
+  bans: AdminPlayerDetail["bans"],
+): AdminPlayer["accountStatus"] {
+  return bans === null ? null : bans.some((ban) => ban.active) ? "banned" : "active";
+}
+export async function getPlayerBanStatus(id: string): Promise<AdminPlayer["accountStatus"]> {
+  const result = await playFabAdmin("Admin/GetUserBans", { PlayFabId: id });
+  return accountStatusFromBans(mapBans(result["BanData"] ?? []));
 }
 export function mapAchievements(raw: unknown): AdminPlayerDetail["achievements"] {
   if (typeof raw !== "string") return null;
@@ -149,8 +157,7 @@ export async function getAdminPlayer(id: string): Promise<AdminPlayerDetail> {
     currentRegion: textValue(value("CurrentRegion")),
     achievements: mapAchievements(value("AchievementProgress")),
     statistics,
-    accountStatus:
-      player.accountStatus ?? (bans ? (bans.some((b) => b.active) ? "banned" : "active") : null),
+    accountStatus: accountStatusFromBans(bans),
     bans,
     unavailable,
     currencies: economy

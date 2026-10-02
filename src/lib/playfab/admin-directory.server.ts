@@ -9,7 +9,7 @@ import {
   object,
   playFabAdmin,
 } from "./admin-client.server.ts";
-import { mapIdentity } from "./admin-players.server.ts";
+import { getPlayerBanStatus, mapIdentity } from "./admin-players.server.ts";
 import type { AdminPlayer, AdminPlayerPage } from "./admin-types.ts";
 
 import {
@@ -287,27 +287,28 @@ export async function directoryPage(
   }
   if (typeof exported["IndexUrl"] !== "string")
     throw new AdminApiError(502, "The player directory index is unavailable.");
-  const rawPlayers = await readSnapshot(
+  const snapshotPlayers = await readSnapshot(
     state.exportId,
     title,
     String(exported["IndexUrl"]),
     snapshotTime,
   );
+  // Snapshot identity/progression only. Never persist current access status in export rows.
+  const rawPlayers: AdminPlayer[] = includeAll
+    ? snapshotPlayers
+    : snapshotPlayers.map((player) => ({ ...player, accountStatus: null }));
   if (options.status !== "all") {
-    const complete = await enrichStatuses(rawPlayers);
-    if (!complete)
-      return {
-        players: [],
-        pending: true,
-        nextCursor: await save(state),
-        snapshotAt: state.snapshotAt,
-      };
+    await enrichStatuses(rawPlayers);
+    if (rawPlayers.some((player) => player.accountStatus === null))
+      throw new AdminApiError(503, "Ban status is unavailable. Retry the directory.");
   }
   const all = includeAll ? rawPlayers : filterSortPlayers(rawPlayers, options, snapshotTime);
   const start = requestedPage === undefined ? state.offset : (requestedPage - 1) * pageSize;
   const end = Math.min(start + pageSize, all.length);
+  const players = includeAll ? all : all.slice(start, end);
+  if (!includeAll && options.status === "all") await enrichStatuses(players);
   return {
-    players: includeAll ? all : all.slice(start, end),
+    players,
     pending: false,
     nextCursor: end < all.length ? await save({ ...state, offset: end }) : null,
     snapshotCursor: await save({ ...state, offset: 0 }),
@@ -392,38 +393,24 @@ async function readSnapshot(
   return cached.value;
 }
 
-const statusCache = new Map<string, { expires: number; value: Promise<"active" | "banned"> }>();
 async function enrichStatuses(players: AdminPlayer[]) {
-  const now = Date.now();
-  for (const [key, value] of statusCache) if (value.expires <= now) statusCache.delete(key);
-  const missing = players.filter((p) => p.accountStatus === null);
-  // Bounded enrichment only when the export omitted ban information and a status filter needs it.
-  for (let i = 0; i < Math.min(missing.length, 20); i += 4) {
+  // Fetch current bans on every request, with at most four PlayFab requests in flight.
+  const started = Date.now();
+  for (let i = 0; i < players.length; i += 4) {
+    if (Date.now() - started > 25000)
+      throw new AdminApiError(
+        503,
+        "Ban status checks exceeded the time limit. Retry the directory.",
+      );
     await Promise.all(
-      missing.slice(i, i + 4).map(async (p) => {
-        const key = adminGameConfig().titleId + ":" + p.playFabId;
-        let cached = statusCache.get(key);
-        if (!cached) {
-          if (statusCache.size >= 50000)
-            throw new AdminApiError(503, "Account status cache is full. Retry later.");
-          const value = playFabAdmin("Admin/GetUserAccountInfo", { PlayFabId: p.playFabId }).then(
-            (result) => {
-              const banned = object(object(result["UserInfo"])["TitleInfo"])["isBanned"];
-              if (typeof banned !== "boolean")
-                throw new AdminApiError(
-                  503,
-                  "PlayFab account status is unavailable. Use All account statuses or retry.",
-                );
-              return banned ? ("banned" as const) : ("active" as const);
-            },
-          );
-          cached = { expires: now + 5 * 60_000, value };
-          statusCache.set(key, cached);
-          value.catch(() => statusCache.delete(key));
+      players.slice(i, i + 4).map(async (player) => {
+        try {
+          player.accountStatus = await getPlayerBanStatus(player.playFabId);
+        } catch {
+          // Unavailable is distinct from Active; never reuse an export's old ban flag.
+          player.accountStatus = null;
         }
-        p.accountStatus = await cached.value;
       }),
     );
   }
-  return players.every((p) => p.accountStatus !== null);
 }

@@ -1,6 +1,6 @@
 import { playerActivity } from "@/lib/playfab/directory-filters";
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AdminHeading, AdminPage, Panel, StatusPill } from "@/components/admin/ui";
@@ -37,6 +37,7 @@ import {
 } from "@/lib/playfab/directory-filters";
 
 function AdminPlayers() {
+  const queryClient = useQueryClient();
   const [filters, setFilters] = useState<DirectoryOptions>(defaultDirectoryOptions);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<AdminPlayerDetail | null>(null);
@@ -401,8 +402,9 @@ function AdminPlayers() {
       </div>
       <IntegrationNotice>
         Search requires an exact PlayFab ID, display name, or username. Display-name lookup may be
-        unavailable when the title allows duplicate names. The directory uses a 15-minute snapshot;
-        open a record for current progression and ban status. No demo players are substituted.
+        unavailable when the title allows duplicate names. Identity and progression use a 15-minute
+        snapshot; account status is checked against current bans. Open a record for current
+        progression. No demo players are substituted.
       </IntegrationNotice>
 
       <PlayerRecordModal
@@ -412,21 +414,14 @@ function AdminPlayers() {
         onModerate={async (status, reason, hours) => {
           if (!selected || !status) return;
           const action = status === "banned" ? "ban" : "unban";
-          await adminPlayerService.moderate(
-            selected.playFabId,
-            action,
-            reason,
-            hours,
-          );
+          await adminPlayerService.moderate(selected.playFabId, action, reason, hours);
           logActivity({
             area: "System",
             action: action === "ban" ? "Player banned" : "Player unbanned",
             target: selected.playFabId,
           });
           toast.success(
-            action === "ban"
-              ? "Player banned successfully."
-              : "Player unbanned successfully.",
+            action === "ban" ? "Player banned successfully." : "Player unbanned successfully.",
           );
           const id = selected.playFabId;
           try {
@@ -435,7 +430,7 @@ function AdminPlayers() {
           } catch {
             await openPlayer(id);
           }
-          await q.refetch();
+          await queryClient.invalidateQueries({ queryKey: ["admin-players"] });
         }}
       />
     </AdminPage>
