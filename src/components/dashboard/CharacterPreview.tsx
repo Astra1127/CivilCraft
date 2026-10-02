@@ -12,6 +12,8 @@ import type { LucideIcon } from "lucide-react";
 import chibiEngineer from "@/assets/chibi-engineer.png";
 import type { CosmeticItem, CosmeticSlot, PlayerCharacter } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { useCharacterPortrait } from "./useCharacterPortrait";
 
 export const SLOT_ORDER: CosmeticSlot[] = [
   "helmet",
@@ -39,8 +41,8 @@ export const SLOT_META: Record<CosmeticSlot, { label: string; icon: LucideIcon }
  * Renders the player's Civil Craft character.
  *
  * Order of preference (the GAME is the source of truth):
- *   1. Character snapshot rendered by the game (`character.portraitUrl`)
- *   2. Pre-rendered image derived from equipped cosmetics (same field)
+ *   1. Authenticated Entity File portrait, independent of dashboard sync
+ *   2. Existing CharacterPortraitUrl compatibility source
  *   3. Generic Civil Craft engineer silhouette (fallback below)
  *
  * The website never composes a 3D character itself.
@@ -54,7 +56,11 @@ export function CharacterPreview({
   displayName: string;
   className?: string;
 }) {
-  const portrait = character?.portraitUrl;
+  const entityPortrait = useCharacterPortrait();
+  const [failed, setFailed] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState<string>();
+  const candidates = [entityPortrait, character?.portraitUrl];
+  const portrait = candidates.find((url) => url && !failed.includes(url));
   return (
     <div className={cn("panel relative flex w-full flex-col overflow-hidden p-0", className)}>
       <div className="blueprint absolute inset-0 bg-secondary/60" aria-hidden="true" />
@@ -62,7 +68,7 @@ export function CharacterPreview({
         className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-gold/25 to-transparent"
         aria-hidden="true"
       />
-      {!portrait ? (
+      {!portrait || loaded !== portrait ? (
         <p className="relative z-10 mx-2 mt-2 rounded-lg border border-dashed border-gold/60 bg-gold/10 px-2 py-1 text-center text-[11px] font-semibold text-foreground/80">
           Awaiting character snapshot from the game
         </p>
@@ -70,6 +76,10 @@ export function CharacterPreview({
       <div className="relative z-10 aspect-[3/4] w-full p-2">
         <img
           src={portrait ?? chibiEngineer}
+          onLoad={() => setLoaded(portrait)}
+          onError={() => {
+            if (portrait) setFailed((urls) => [...urls, portrait]);
+          }}
           alt={
             portrait
               ? `${displayName}'s Civil Craft character with their equipped cosmetics`
