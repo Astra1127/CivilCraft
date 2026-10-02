@@ -117,6 +117,10 @@ function preview(url) {
     require: (name) => {
       if (name === "react" || name === "react/jsx-runtime") return require(name);
       if (name === "./useCharacterPortrait") return { useCharacterPortrait: () => url };
+      if (name === "./portrait-bounds")
+        return {
+          portraitBounds: () => ({ width: 0.25, height: 0.5, centerX: 0.5, centerY: 0.6 }),
+        };
       if (name === "@/lib/utils") return { cn: (...args) => args.filter(Boolean).join(" ") };
       if (name.includes("chibi-engineer")) return { default: "fallback.png" };
       return {};
@@ -135,7 +139,11 @@ test("real portrait displays with and without dashboard snapshot; notice hidden 
     const image = renderer.root.findByType("img");
     assert.equal(image.props.src, "blob:portrait");
     assert.ok(image.props.className.includes("object-contain"));
-    await act(async () => image.props.onLoad());
+    await act(async () =>
+      image.props.onLoad({ currentTarget: { naturalWidth: 512, naturalHeight: 512 } }),
+    );
+    assert.equal(renderer.root.findByType("img").props.style.width, "min(400cqw, 200cqh)");
+    assert.equal(renderer.root.findByType("img").props.style.transform, "translate(-50%, -60%)");
     assert.ok(!JSON.stringify(renderer.toJSON()).includes("Awaiting character snapshot"));
     await act(async () => renderer.unmount());
   }
@@ -222,5 +230,46 @@ test("portrait loader uses existing bearer session, falls back on missing/outage
     await act(async () => renderer.unmount());
     assert.ok(cleared);
     if (status === 200) assert.equal(revoked.length, 2);
+  }
+});
+import { portraitBounds } from "../src/components/dashboard/portrait-bounds.ts";
+
+test("visible pixel bounds retain edge accessories and fit overview/profile/mobile frames", () => {
+  const original = globalThis.document;
+  const width = 100,
+    height = 100;
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 20; y <= 79; y++) for (let x = 40; x <= 59; x++) data[(y * width + x) * 4 + 3] = 255;
+  data[(50 * width + 20) * 4 + 3] = 1; // faint equipment at the left edge
+  const canvas = {
+    width: 0,
+    height: 0,
+    getContext: () => ({ drawImage: () => {}, getImageData: () => ({ data }) }),
+  };
+  globalThis.document = { createElement: () => canvas };
+  try {
+    const bounds = portraitBounds({ naturalWidth: width, naturalHeight: height });
+    assert.deepEqual(bounds, { width: 0.44, height: 0.64, centerX: 0.4, centerY: 0.5 });
+    for (const [frameWidth, frameHeight] of [
+      [128, (128 * 4) / 3],
+      [144, 192],
+      [280, (280 * 4) / 3],
+      [320, 280],
+    ]) {
+      const areaWidth = frameWidth * 0.88,
+        areaHeight = frameHeight * 0.88;
+      const imageWidth = Math.min(areaWidth / bounds.width, areaHeight / bounds.height);
+      assert.ok(imageWidth * bounds.width <= areaWidth + 0.00001);
+      assert.ok(imageWidth * bounds.height <= areaHeight + 0.00001);
+      assert.ok(Math.abs((imageWidth * bounds.height) / frameHeight - 0.88) < 0.00001);
+    }
+    data.fill(0);
+    assert.equal(portraitBounds({ naturalWidth: width, naturalHeight: height }), undefined);
+    canvas.getContext = () => {
+      throw new Error("pixel access denied");
+    };
+    assert.equal(portraitBounds({ naturalWidth: width, naturalHeight: height }), undefined);
+  } finally {
+    globalThis.document = original;
   }
 });
