@@ -221,9 +221,25 @@ test("read-only health is allowed before verification and remote certificate val
   assert.equal(result.databaseId, DATABASE);
   assert.equal(options[0].config.ssl.rejectUnauthorized, true);
   assert.equal(options[0].config.max, 2);
-  assert.equal(options[0].config.connection.statement_timeout, 15000);
+  assert.equal(options[0].config.connection.application_name, "civilcraft-currency");
+  assert.equal(Object.hasOwn(options[0].config.connection, "statement_timeout"), false);
   assert.equal(options[0].config.prepare, false);
   assert.equal(calls[0].operation, "health");
+});
+
+test("Neon pooled endpoints receive only tracked application_name startup settings and no session SET", async () => {
+  process.env.CURRENCY_DATABASE_URL =
+    "postgresql://currency-runtime:fixture-password@ep-example-pooler.us-east-2.aws.neon.tech/civilcraft?sslmode=require&channel_binding=require";
+  await api.assertCurrencyDatabaseHealthy();
+  assert.deepEqual(Object.keys(options[0].config.connection), ["application_name"]);
+  assert.equal(options[0].config.connection.application_name, "civilcraft-currency");
+  assert.equal(options[0].config.ssl.rejectUnauthorized, true);
+  assert.equal(options[0].config.prepare, false);
+  assert.deepEqual(
+    calls.map((call) => call.operation),
+    ["health"],
+  );
+  assert.ok(calls.every((call) => !/\bSET\b/i.test(call.query)));
 });
 
 test("health rejects unrestricted credentials, wrong installation, title, or schema", async () => {

@@ -66,13 +66,13 @@ ALTER TABLE civilcraft_currency.receipts ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON ALL TABLES IN SCHEMA civilcraft_currency FROM PUBLIC, civilcraft_currency_app;
 
 CREATE FUNCTION civilcraft_currency._protect_installation() RETURNS trigger
-LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 BEGIN RAISE EXCEPTION 'Currency installation identity is immutable'; END $$;
 CREATE TRIGGER immutable_installation BEFORE UPDATE OR DELETE ON civilcraft_currency.installation
 FOR EACH ROW EXECUTE FUNCTION civilcraft_currency._protect_installation();
 
 CREATE FUNCTION civilcraft_currency._protect_account() RETURNS trigger
-LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Currency accounts must not be deleted'; END IF;
   IF (NEW.title_id, NEW.player_id, NEW.entity_id, NEW.entity_type) IS DISTINCT FROM
@@ -85,7 +85,7 @@ CREATE TRIGGER permanent_account BEFORE UPDATE OR DELETE ON civilcraft_currency.
 FOR EACH ROW EXECUTE FUNCTION civilcraft_currency._protect_account();
 
 CREATE FUNCTION civilcraft_currency._protect_receipt() RETURNS trigger
-LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 BEGIN
   IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Purchase receipts must never be deleted'; END IF;
   IF (NEW.title_id, NEW.order_id, NEW.player_id, NEW.entity_id, NEW.entity_type, NEW.currency,
@@ -101,7 +101,7 @@ CREATE TRIGGER permanent_receipt BEFORE UPDATE OR DELETE ON civilcraft_currency.
 FOR EACH ROW EXECUTE FUNCTION civilcraft_currency._protect_receipt();
 
 CREATE FUNCTION civilcraft_currency._require_installation(p_database uuid, p_title text, p_version integer)
-RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency AS $$
+RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM civilcraft_currency.installation i WHERE i.singleton
     AND i.database_id = p_database AND i.title_id = p_title AND i.schema_version = p_version
@@ -111,7 +111,7 @@ BEGIN
 END $$;
 
 CREATE FUNCTION civilcraft_currency._require_identity(p_title text, p_player text, p_entity text, p_type text)
-RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency AS $$
+RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 BEGIN
   IF p_player IS NULL OR p_entity IS NULL OR p_type IS DISTINCT FROM 'title_player_account'
     OR p_player !~ '^[A-F0-9]{1,128}$' OR p_entity !~ '^[A-F0-9]{1,128}$' THEN
@@ -126,7 +126,7 @@ END $$;
 CREATE FUNCTION civilcraft_currency._require_request(
   p_database uuid, p_title text, p_version integer, p_order text, p_player text,
   p_entity text, p_type text, p_currency text, p_amount bigint, p_fingerprint text)
-RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency AS $$
+RETURNS void LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 BEGIN
   PERFORM civilcraft_currency._require_installation(p_database, p_title, p_version);
   PERFORM civilcraft_currency._require_identity(p_title, p_player, p_entity, p_type);
@@ -141,7 +141,7 @@ END $$;
 CREATE FUNCTION civilcraft_currency._matching_receipt(
   p_title text, p_order text, p_player text, p_entity text, p_type text,
   p_currency text, p_amount bigint, p_fingerprint text)
-RETURNS civilcraft_currency.receipts LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency AS $$
+RETURNS civilcraft_currency.receipts LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 DECLARE r civilcraft_currency.receipts;
 BEGIN
   SELECT * INTO r FROM civilcraft_currency.receipts WHERE title_id = p_title AND order_id = p_order;
@@ -153,7 +153,7 @@ BEGIN
 END $$;
 
 CREATE FUNCTION civilcraft_currency._lock_account(p_title text, p_player text, p_entity text, p_type text)
-RETURNS bigint LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency AS $$
+RETURNS bigint LANGUAGE plpgsql SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 DECLARE a civilcraft_currency.accounts;
 BEGIN
   INSERT INTO civilcraft_currency.accounts(title_id, player_id, entity_id, entity_type)
@@ -165,7 +165,7 @@ END $$;
 
 CREATE FUNCTION civilcraft_currency.health(p_database uuid, p_title text, p_version integer)
 RETURNS TABLE(healthy boolean, database_id uuid, title_id text, schema_version integer)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 DECLARE restricted boolean;
 BEGIN
   PERFORM civilcraft_currency._require_installation(p_database, p_title, p_version);
@@ -195,7 +195,7 @@ BEGIN
         to_regprocedure('civilcraft_currency.coin_capacity(uuid,text,integer,text,text,text,text,text,bigint,text)'),
         to_regprocedure('civilcraft_currency.claim_coins(uuid,text,integer,text,text,text,text,text,bigint,text,uuid)'),
         to_regprocedure('civilcraft_currency.complete_coins(uuid,text,integer,text,text,text,text,text,bigint,text,uuid)'))
-      AND p.prosecdef AND p.proconfig @> ARRAY['search_path=pg_catalog, civilcraft_currency']
+      AND p.prosecdef AND p.proconfig @> ARRAY['search_path=pg_catalog, civilcraft_currency, pg_temp']
       AND has_function_privilege(session_user, p.oid, 'EXECUTE')) = 7
     AND NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'civilcraft_currency'
@@ -219,7 +219,7 @@ END $$;
 CREATE FUNCTION civilcraft_currency.diamond_balance(
   p_database uuid, p_title text, p_version integer, p_player text, p_entity text, p_type text)
 RETURNS TABLE(balance bigint)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 BEGIN
   PERFORM civilcraft_currency._require_installation(p_database, p_title, p_version);
   PERFORM civilcraft_currency._require_identity(p_title, p_player, p_entity, p_type);
@@ -231,7 +231,7 @@ CREATE FUNCTION civilcraft_currency.receipt_status(
   p_database uuid, p_title text, p_version integer, p_order text, p_player text,
   p_entity text, p_type text, p_currency text, p_amount bigint, p_fingerprint text)
 RETURNS TABLE(state text)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 DECLARE r civilcraft_currency.receipts;
 BEGIN
   PERFORM civilcraft_currency._require_request(p_database, p_title, p_version, p_order, p_player,
@@ -244,7 +244,7 @@ CREATE FUNCTION civilcraft_currency.grant_diamonds(
   p_database uuid, p_title text, p_version integer, p_order text, p_player text,
   p_entity text, p_type text, p_currency text, p_amount bigint, p_fingerprint text)
 RETURNS TABLE(already_granted boolean, balance bigint)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 DECLARE r civilcraft_currency.receipts; current_balance bigint;
 BEGIN
   PERFORM civilcraft_currency._require_request(p_database, p_title, p_version, p_order, p_player,
@@ -270,7 +270,7 @@ CREATE FUNCTION civilcraft_currency.coin_capacity(
   p_database uuid, p_title text, p_version integer, p_order text, p_player text,
   p_entity text, p_type text, p_currency text, p_amount bigint, p_fingerprint text)
 RETURNS TABLE(pending_amount bigint)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 BEGIN
   PERFORM civilcraft_currency._require_request(p_database, p_title, p_version, p_order, p_player,
     p_entity, p_type, p_currency, p_amount, p_fingerprint);
@@ -284,7 +284,7 @@ CREATE FUNCTION civilcraft_currency.claim_coins(
   p_database uuid, p_title text, p_version integer, p_order text, p_player text,
   p_entity text, p_type text, p_currency text, p_amount bigint, p_fingerprint text, p_attempt uuid)
 RETURNS TABLE(claimed boolean)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 DECLARE r civilcraft_currency.receipts; pending_total bigint;
 BEGIN
   PERFORM civilcraft_currency._require_request(p_database, p_title, p_version, p_order, p_player,
@@ -309,7 +309,7 @@ CREATE FUNCTION civilcraft_currency.complete_coins(
   p_database uuid, p_title text, p_version integer, p_order text, p_player text,
   p_entity text, p_type text, p_currency text, p_amount bigint, p_fingerprint text, p_attempt uuid)
 RETURNS TABLE(completed boolean)
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, civilcraft_currency, pg_temp AS $$
 DECLARE r civilcraft_currency.receipts;
 BEGIN
   PERFORM civilcraft_currency._require_request(p_database, p_title, p_version, p_order, p_player,

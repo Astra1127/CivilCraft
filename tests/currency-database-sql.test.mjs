@@ -270,3 +270,77 @@ test("public RPC or column-level privileges invalidate readiness", async () => {
   }
   assert.equal((await health()).healthy, true);
 });
+
+test("all currency functions explicitly put pg_temp last and unsafe RPC paths invalidate readiness", async () => {
+  const result = await admin(
+    "SELECT p.proname, p.proconfig FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'civilcraft_currency'",
+  );
+  assert.equal(result[0].rows.length, 15);
+  for (const row of result[0].rows) {
+    assert.ok(
+      row.proconfig.includes("search_path=pg_catalog, civilcraft_currency, pg_temp"),
+      `${row.proname} must explicitly search the temporary schema last`,
+    );
+  }
+  await admin(
+    "ALTER FUNCTION civilcraft_currency.grant_diamonds(uuid,text,integer,text,text,text,text,text,bigint,text) SET search_path = pg_catalog, civilcraft_currency",
+  );
+  try {
+    assert.equal((await health()).healthy, false);
+  } finally {
+    await admin(
+      "ALTER FUNCTION civilcraft_currency.grant_diamonds(uuid,text,integer,text,text,text,text,text,bigint,text) SET search_path = pg_catalog, civilcraft_currency, pg_temp",
+    );
+  }
+  assert.equal((await health()).healthy, true);
+});
+
+test("temporary catalog shadows cannot interfere with SECURITY DEFINER health or grants", async () => {
+  // A fresh PostgreSQL instance ensures the health function has not cached any
+  // catalog relation plans before the attacker's temporary tables are present.
+  const isolated = await PGlite.create();
+  try {
+    await isolated.exec(migration);
+    const metadata = (await isolated.query("SELECT * FROM civilcraft_currency.installation"))
+      .rows[0];
+    await isolated.exec(
+      "CREATE ROLE shadow_runtime LOGIN; GRANT civilcraft_currency_app TO shadow_runtime; SET SESSION AUTHORIZATION shadow_runtime; CREATE TEMP TABLE pg_roles (attacker text); CREATE TEMP TABLE pg_class (attacker text); CREATE TEMP TABLE pg_namespace (attacker text); CREATE TEMP TABLE pg_proc (attacker text); SET search_path = pg_temp, public;",
+    );
+    const probe = await isolated.query("SELECT * FROM civilcraft_currency.health($1,'17FA03',1)", [
+      metadata.database_id,
+    ]);
+    assert.equal(probe.rows[0].healthy, true);
+    const args = [
+      metadata.database_id,
+      "17FA03",
+      1,
+      "shadow-order",
+      "AAA123",
+      "EEE123",
+      "title_player_account",
+      "DI",
+      500,
+    ];
+    const request = [...args, hash(args)];
+    const query =
+      "SELECT * FROM civilcraft_currency.grant_diamonds($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)";
+    assert.equal((await isolated.query(query, request)).rows[0].already_granted, false);
+    const retry = (await isolated.query(query, request)).rows[0];
+    assert.equal(retry.already_granted, true);
+    assert.equal(Number(retry.balance), 500);
+    await assert.rejects(
+      isolated.exec("DELETE FROM civilcraft_currency.receipts"),
+      /permission denied/,
+    );
+    assert.equal(
+      (
+        await isolated.query("SELECT * FROM civilcraft_currency.health($1,'17FA03',1)", [
+          metadata.database_id,
+        ])
+      ).rows[0].healthy,
+      true,
+    );
+  } finally {
+    await isolated.close();
+  }
+});

@@ -16,7 +16,7 @@
     "test:content": "node --test tests/public-content.test.ts",
     "test:reset": "node --test tests/reset-password.test.ts tests/reset-password-ui.test.mjs",
     "test:payments": "node --test tests/paymongo.test.ts",
-    "test:currencies": "node --test tests/paymongo.test.ts tests/premium-wallet.test.ts tests/entity-diamond-wallet.test.mjs tests/currency-products.test.ts tests/diamonds-setup.test.mjs tests/diamond-shop-ui.test.mjs tests/shop-navigation-ui.test.mjs tests/diamond-dev-config.test.mjs tests/coin-receipts.test.mjs tests/coins-setup.test.mjs tests/currency-database.test.mjs tests/currency-database-sql.test.mjs tests/currency-database-setup.test.mjs tests/postgres-coin-receipts.test.mjs tests/postgres-payment-integration.test.mjs",
+    "test:currencies": "node --test tests/paymongo.test.ts tests/paymongo-webhook-envelopes.test.mjs tests/premium-wallet.test.ts tests/entity-diamond-wallet.test.mjs tests/currency-products.test.ts tests/diamonds-setup.test.mjs tests/diamond-shop-ui.test.mjs tests/shop-navigation-ui.test.mjs tests/diamond-dev-config.test.mjs tests/coin-receipts.test.mjs tests/coins-setup.test.mjs tests/currency-database.test.mjs tests/currency-database-sql.test.mjs tests/currency-database-setup.test.mjs tests/postgres-coin-receipts.test.mjs tests/postgres-payment-integration.test.mjs",
     "verify:currencies": "node --env-file=.env scripts/verify-currency-database.mjs"
   },
   "overrides": {

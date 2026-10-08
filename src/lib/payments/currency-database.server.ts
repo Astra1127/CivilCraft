@@ -142,7 +142,10 @@ function connection(): ReturnType<typeof postgres> {
       max_lifetime: 300,
       prepare: false,
       onnotice: () => undefined,
-      connection: { statement_timeout: 15_000, application_name: "civilcraft-currency" },
+      // PgBouncer can reject statement_timeout in the startup packet. Configure
+      // the restricted login's timeout with ALTER ROLE instead of session SET,
+      // which would not persist reliably through transaction-mode pooling.
+      connection: { application_name: "civilcraft-currency" },
     });
     poolKey = key;
   }

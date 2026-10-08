@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { AdminApiError, object } from "../playfab/admin-client.server.ts";
 import { grantDiamonds, hasDiamondReceipt } from "../playfab/premium-wallet.server.ts";
 import { normalizeOrderReward } from "./products.ts";
@@ -191,6 +192,56 @@ function paymentEvidence(
   return "complete";
 }
 
+interface VerifiedEnvelopeEvent {
+  readonly id: string;
+  readonly attributes: Record<string, unknown>;
+}
+
+/** Normalize only the two signed PayMongo transport shapes, never a browser callback. */
+function normalizeWebhookEvent(
+  envelope: Record<string, unknown>,
+  rawBody: string,
+): VerifiedEnvelopeEvent {
+  const event = object(envelope["data"]);
+  const invalid = () => new AdminApiError(400, "Malformed or conflicting PayMongo event payload");
+  const validId = (value: unknown) =>
+    typeof value === "string" && /^[a-z0-9_-]{1,128}$/i.test(value);
+  const validType = (value: unknown) =>
+    typeof value === "string" && /^[a-z0-9_.-]{1,128}$/i.test(value);
+  if (Object.hasOwn(envelope, "event_type")) {
+    // Current Hosted Checkout uses send.webhook and direct type/resource/data.
+    // The documented shape has no event ID. Its signed body supplies a stable
+    // audit key; only permanent ORDER receipts control monetary idempotency.
+    const resource = object(event["data"]);
+    if (
+      envelope["event_type"] !== "send.webhook" ||
+      Object.hasOwn(event, "attributes") ||
+      !validType(event["type"]) ||
+      !validType(event["resource"]) ||
+      event["resource"] !== resource["type"] ||
+      (Object.hasOwn(event, "id") && !validId(event["id"]))
+    )
+      throw invalid();
+    return {
+      id: `evt_body_${createHash("sha256").update(rawBody).digest("hex")}`,
+      attributes: event,
+    };
+  }
+  // Legacy events carry an event ID and nested attributes. Mixed direct fields
+  // must not select a second, conflicting interpretation of the same body.
+  const attributes = object(event["attributes"]);
+  if (
+    !validId(event["id"]) ||
+    (event["type"] !== undefined && event["type"] !== "event") ||
+    ["resource", "livemode", "data", "event_type"].some((key) => Object.hasOwn(event, key)) ||
+    !validType(attributes["type"]) ||
+    (Object.hasOwn(attributes, "resource") &&
+      attributes["resource"] !== object(attributes["data"])["type"])
+  )
+    throw invalid();
+  return { id: event["id"] as string, attributes };
+}
+
 export async function processPayMongoWebhook(
   rawBody: string,
   signatureHeader: string | null | undefined,
@@ -203,14 +254,13 @@ export async function processPayMongoWebhook(
   } catch {
     return fail(400, "Invalid JSON in webhook payload");
   }
-  const event = object(envelope["data"]);
-  const attributes = object(event["attributes"]);
-  if (
-    typeof event["id"] !== "string" ||
-    !/^[a-z0-9_-]{1,128}$/i.test(event["id"]) ||
-    !Object.keys(attributes).length
-  )
-    return fail(400, "Malformed PayMongo event payload");
+  let event: VerifiedEnvelopeEvent;
+  try {
+    event = normalizeWebhookEvent(envelope, rawBody);
+  } catch {
+    return fail(400, "Malformed or conflicting PayMongo event payload");
+  }
+  const attributes = event.attributes;
   if (attributes["livemode"] === true)
     return fail(400, "Live mode events are not accepted on this test endpoint.");
   if (attributes["livemode"] !== false)
@@ -255,7 +305,7 @@ export async function processPayMongoWebhook(
     const reward = normalizeOrderReward(order);
     order = await repairPaymentOrder(order);
     if (order.status === "fulfilled") {
-      await markEventProcessed(event["id"] as string, order.orderId);
+      await markEventProcessed(event.id, order.orderId);
       return { status: 200, body: { success: true, idempotent: true, orderId: order.orderId } };
     }
     if (reward.rewardCurrency === "CO" && ![1, 2].includes(order.coinReceiptVersion ?? 0))
@@ -264,7 +314,7 @@ export async function processPayMongoWebhook(
     await updateOrderStatus(order.orderId, {
       status: "paid",
       paidAt,
-      webhookEventId: event["id"] as string,
+      webhookEventId: event.id,
       error: null,
     });
     let alreadyGranted = false;
@@ -279,11 +329,11 @@ export async function processPayMongoWebhook(
       status: "fulfilled",
       paidAt,
       fulfilledAt: new Date().toISOString(),
-      webhookEventId: event["id"] as string,
+      webhookEventId: event.id,
       error: null,
       fulfillmentReviewRequired: false,
     });
-    await markEventProcessed(event["id"] as string, order.orderId);
+    await markEventProcessed(event.id, order.orderId);
     return {
       status: 200,
       body: {

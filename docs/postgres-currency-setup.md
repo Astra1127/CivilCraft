@@ -33,10 +33,15 @@ The migration creates the `civilcraft_currency` schema and the `civilcraft_curre
 ```sql
 CREATE ROLE civilcraft_currency_runtime LOGIN PASSWORD '<privately chosen strong password>';
 GRANT civilcraft_currency_app TO civilcraft_currency_runtime;
+ALTER ROLE civilcraft_currency_runtime SET statement_timeout = '15s';
 SELECT database_id, title_id, schema_version FROM civilcraft_currency.installation;
 ```
 
 Run this SQL only in your private administrator tool, not as a website request. The installation query returns the UUID used for `CURRENCY_DATABASE_ID`. Confirm `title_id` is `17FA03`; a different title requires a deliberately configured installation, not relabeling an existing paid ledger.
+
+For Neon, create this restricted login with SQL, **not** the Console's **Add role** button, CLI, or API. Those other creation paths automatically grant `neon_superuser` membership, including administrative privileges; such a role must not become the website runtime credential. SQL-created roles receive limited privileges and need the explicit group grant above. [Neon role privileges](https://neon.com/docs/manage/roles)
+
+Use a direct administrator connection for migration/role setup. For the website's serverless requests, choose the restricted login's pooled connection string if your provider supports it. The `ALTER ROLE` timeout applies on new PostgreSQL connections; reconnect/redeploy after changing it. The driver deliberately does not send `statement_timeout` as a startup parameter or rely on a persistent session `SET`, which can fail with transaction pooling. The read-only verifier checks schema and credential restrictions, not timeout configuration or every provider pool setting; verify the real chosen endpoint before enabling purchases. [Neon pooling limitations](https://neon.com/docs/connect/connection-pooling), [PgBouncer startup parameters](https://www.pgbouncer.org/config#ignore_startup_parameters)
 
 The migration owner is an administrative role. The website must connect as that separate restricted runtime login, with only the schema/function permissions described by the migration. It must not own the schema/tables, inherit the owner role, create objects in the currency schema, or directly insert/update/delete/truncate wallet and receipt tables. Do not use the provider's default owner connection string as `CURRENCY_DATABASE_URL`.
 
@@ -81,7 +86,7 @@ This verifier checks the real connected database, installation UUID, title bindi
 
 Only on success does it print the nonsecret verification values. Copy those exact outputs into your private local and Vercel environment settings. If a connection, metadata, schema, role, or binding check fails, no readiness values are emitted and checkout must remain disabled. Mocked test results are not deployment attestations.
 
-The verification fingerprint also binds the physical connection target (protocol, host, port, and database path), not its username/password. Credential rotation for the same target does not change that identity. Changing the target, installation, title, or schema protocol requires verification again. A cloned database can retain the source installation UUID: that UUID alone is not proof that it is the original current ledger. Do not reuse another target's attestation or assume a provider preview clone is safe for real paid-order fulfillment.
+The verification fingerprint also binds the physical connection target (protocol, host, port, and database path), not its username/password. Credential rotation for the same target does not change that identity. Choose the runtime endpoint before verification: switching between direct and pooled hostnames changes the target binding even if they reach the same database. Changing the target, installation, title, or schema protocol requires verification again. A cloned database can retain the source installation UUID: that UUID alone is not proof that it is the original current ledger. Do not reuse another target's attestation or assume a provider preview clone is safe for real paid-order fulfillment.
 
 New order snapshots retain their original target identity. Even after verifying a different target, old orders must not silently fulfill against it. A deliberately new installation needs its own UUID; initializing one is not permission to overwrite an old installation identity or existing order snapshots.
 
