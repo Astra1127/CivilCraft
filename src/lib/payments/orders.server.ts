@@ -1,14 +1,14 @@
 import crypto from "node:crypto";
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
-import type { PaymentOrder, PaymentOrderStatus } from "./types.ts";
+import type { PaymentOrder } from "./types.ts";
 
 const ORDER_PREFIX = "civilcraft.website.v1.payment-orders.";
 const EVENT_PREFIX = "civilcraft.website.v1.payment-events.";
 
-export function generateOrderId(): string {
+export function generateOrderId(rewardCurrency = "CO"): string {
   const ts = Date.now().toString(36).toUpperCase();
   const rand = crypto.randomBytes(3).toString("hex").toUpperCase();
-  return `CC-COINS-${ts}-${rand}`;
+  return `CC-${rewardCurrency === "DI" ? "DIAMONDS" : "COINS"}-${ts}-${rand}`;
 }
 
 export async function saveOrder(order: PaymentOrder): Promise<void> {
@@ -25,7 +25,7 @@ export async function saveOrder(order: PaymentOrder): Promise<void> {
 }
 
 export async function getOrder(orderId: string): Promise<PaymentOrder | null> {
-  if (!orderId || typeof orderId !== "string") return null;
+  if (!orderId || typeof orderId !== "string" || !/^[a-z0-9_-]{1,128}$/i.test(orderId)) return null;
   const key = ORDER_PREFIX + orderId.trim();
 
   try {
@@ -34,8 +34,9 @@ export async function getOrder(orderId: string): Promise<PaymentOrder | null> {
     const raw = data[key];
     if (typeof raw !== "string" || !raw) return null;
     return JSON.parse(raw) as PaymentOrder;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error instanceof AdminApiError) throw error;
+    throw new AdminApiError(503, "Payment order storage is temporarily unavailable.");
   }
 }
 
@@ -44,12 +45,26 @@ export async function updateOrderStatus(
   updates: Partial<PaymentOrder>,
 ): Promise<PaymentOrder | null> {
   const existing = await getOrder(orderId);
-  if (!existing) return null;
+  if (!existing) throw new AdminApiError(404, "Payment order not found.");
 
   const updated: PaymentOrder = {
     ...existing,
     ...updates,
-    orderId: existing.orderId, // preserve immutable ID
+    orderId: existing.orderId,
+    playFabId: existing.playFabId,
+    productId: existing.productId,
+    expectedAmount: existing.expectedAmount,
+    expectedCoins: existing.expectedCoins,
+    currency: existing.currency,
+    rewardCurrency: existing.rewardCurrency,
+    rewardAmount: existing.rewardAmount,
+    premiumWallet: existing.premiumWallet,
+    coinCurrencyCode: existing.coinCurrencyCode,
+    PayMongoReferenceNumber: existing.PayMongoReferenceNumber,
+    PayMongoCheckoutSessionId:
+      existing.PayMongoCheckoutSessionId || updates.PayMongoCheckoutSessionId || null,
+    createdAt: existing.createdAt,
+    status: existing.status === "fulfilled" ? "fulfilled" : (updates.status ?? existing.status),
   };
 
   await saveOrder(updated);
@@ -64,8 +79,9 @@ export async function isEventProcessed(eventId: string): Promise<boolean> {
     const res = await playFabAdmin("Admin/GetTitleInternalData", { Keys: [key] });
     const data = object(res["Data"]);
     return Boolean(data[key]);
-  } catch {
-    return false;
+  } catch (error) {
+    if (error instanceof AdminApiError) throw error;
+    throw new AdminApiError(503, "Payment event storage is temporarily unavailable.");
   }
 }
 
@@ -103,11 +119,10 @@ export async function listOrders(): Promise<PaymentOrder[]> {
       }
     }
 
-    return orders.sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-    );
-  } catch {
-    return [];
+    return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (error) {
+    if (error instanceof AdminApiError) throw error;
+    throw new AdminApiError(503, "Payment history is temporarily unavailable.");
   }
 }
 

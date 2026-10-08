@@ -1,9 +1,18 @@
-export type PaymentOrderStatus =
-  | "pending"
-  | "paid"
-  | "fulfilled"
-  | "failed"
-  | "cancelled";
+export type PaymentOrderStatus = "pending" | "paid" | "fulfilled" | "failed" | "cancelled";
+
+export type RewardCurrency = "CO" | "DI";
+
+export interface CurrencyReward {
+  rewardCurrency: RewardCurrency;
+  rewardAmount: number;
+}
+
+export interface PremiumWalletSnapshot {
+  entity: { Id: string; Type: "title_player_account" };
+  collectionId: "premium-wallet";
+  diamondItemId: string;
+  receiptItemId: string;
+}
 
 export interface PaymentOrder {
   orderId: string;
@@ -12,6 +21,12 @@ export interface PaymentOrder {
   expectedAmount: number; // in centavos, e.g. 5000 = ₱50.00
   currency: string; // "PHP"
   expectedCoins: number; // e.g. 500
+  /** Immutable reward snapshot. Missing fields identify legacy Coin orders only. */
+  rewardCurrency?: RewardCurrency | undefined;
+  rewardAmount?: number | undefined;
+  premiumWallet?: PremiumWalletSnapshot | undefined;
+  /** Snapshots the configured classic Coin code so later config changes cannot reroute it. */
+  coinCurrencyCode?: string | undefined;
   PayMongoCheckoutSessionId: string | null;
   PayMongoReferenceNumber: string;
   status: PaymentOrderStatus;
@@ -30,6 +45,9 @@ export interface PaymentProduct {
   amount: number; // in centavos, e.g. 5000 = ₱50.00
   currency: string; // "PHP"
   rewardCoins: number;
+  /** Canonical reward; rewardCoins remains for legacy records and is zero for DI. */
+  rewardCurrency?: RewardCurrency | undefined;
+  rewardAmount?: number | undefined;
   category: "currency" | "support" | "cosmetic";
   badge?: string | undefined;
   popular?: boolean | undefined;
@@ -76,4 +94,3 @@ export interface PayMongoWebhookEvent {
     };
   };
 }
-

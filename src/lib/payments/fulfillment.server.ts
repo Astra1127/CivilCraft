@@ -1,16 +1,20 @@
-import { playFabAdmin } from "../playfab/admin-client.server.ts";
-import { getProduct } from "./products.ts";
+import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
+import { grantDiamonds, hasDiamondReceipt } from "../playfab/premium-wallet.server.ts";
+import { normalizeOrderReward } from "./products.ts";
 import {
   getOrder,
   isEventProcessed,
   markEventProcessed,
   updateOrderStatus,
 } from "./orders.server.ts";
-import { verifyPayMongoSignature } from "./paymongo.server.ts";
-import type { PayMongoWebhookEvent } from "./types.ts";
+import { retrievePayMongoCheckout, verifyPayMongoSignature } from "./paymongo.server.ts";
+import type { PaymentOrder } from "./types.ts";
 
 export function getCoinsCurrencyCode(): string {
-  return (process.env["PLAYFAB_COINS_CURRENCY_CODE"] || "CO").trim().toUpperCase();
+  const code = (process.env["PLAYFAB_COINS_CURRENCY_CODE"] || "CO").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code))
+    throw new AdminApiError(503, "Coin currency configuration is invalid.");
+  return code;
 }
 
 export interface WebhookProcessResult {
@@ -22,246 +26,237 @@ export interface WebhookProcessResult {
     message?: string;
     orderId?: string;
     coinsAwarded?: number;
+    diamondsAwarded?: number;
+    rewardCurrency?: "CO" | "DI";
+    rewardAmount?: number;
     error?: string;
   };
+}
+
+function fail(status: number, error: string): WebhookProcessResult {
+  return { status, body: { success: false, error } };
+}
+
+export function diamondGrantInput(order: PaymentOrder) {
+  const reward = normalizeOrderReward(order);
+  const snapshot = order.premiumWallet;
+  if (reward.rewardCurrency !== "DI" || !snapshot)
+    throw new AdminApiError(503, "Diamond wallet snapshot is unavailable.");
+  return {
+    orderId: order.orderId,
+    playFabId: order.playFabId,
+    entity: snapshot.entity,
+    wallet: {
+      collectionId: snapshot.collectionId,
+      diamondItemId: snapshot.diamondItemId,
+      receiptItemId: snapshot.receiptItemId,
+    },
+    rewardAmount: reward.rewardAmount,
+  };
+}
+
+/** Receipt is the grant authority; title-internal order records are a repairable audit projection. */
+export async function repairDiamondOrder(order: PaymentOrder): Promise<PaymentOrder> {
+  if (normalizeOrderReward(order).rewardCurrency !== "DI") return order;
+  if (await hasDiamondReceipt(diamondGrantInput(order))) {
+    if (order.status !== "fulfilled") {
+      const fulfilledAt = order.fulfilledAt || new Date().toISOString();
+      try {
+        await updateOrderStatus(order.orderId, { status: "fulfilled", fulfilledAt, error: null });
+      } catch {
+        /* The receipt still proves fulfillment when audit storage is unavailable. */
+      }
+      return { ...order, status: "fulfilled", fulfilledAt, error: null };
+    }
+    return order;
+  }
+  if (order.status === "fulfilled")
+    throw new AdminApiError(503, "Diamond fulfillment could not be verified.");
+  return order;
+}
+
+function paymentEvidence(
+  session: Record<string, unknown>,
+  order: PaymentOrder,
+): "complete" | "incomplete" {
+  if (session["id"] !== order.PayMongoCheckoutSessionId || session["type"] !== "checkout_session") {
+    throw new AdminApiError(400, "Checkout session does not match this order.");
+  }
+  const attrs = object(session["attributes"]);
+  if (attrs["livemode"] === true) throw new AdminApiError(400, "Live payments are not accepted.");
+  const metadata = object(attrs["metadata"]);
+  for (const [key, expected] of [
+    ["orderId", order.orderId],
+    ["productId", order.productId],
+    ["playFabId", order.playFabId],
+  ]) {
+    const value = metadata[key!];
+    if (value !== undefined && value !== expected)
+      throw new AdminApiError(400, "Payment metadata does not match this order.");
+  }
+  if (
+    attrs["reference_number"] !== undefined &&
+    attrs["reference_number"] !== order.PayMongoReferenceNumber
+  ) {
+    throw new AdminApiError(400, "Payment reference does not match this order.");
+  }
+  const payments = Array.isArray(attrs["payments"]) ? attrs["payments"] : [];
+  const paid = payments
+    .map((p) => object(object(p)["attributes"]))
+    .filter((p) => p["status"] === "paid");
+  if (!paid.length) return "incomplete";
+  if (paid.length !== 1) throw new AdminApiError(400, "Payment evidence is ambiguous.");
+  const payment = paid[0]!;
+  if (payment["livemode"] === true) throw new AdminApiError(400, "Live payments are not accepted.");
+  const amount = payment["amount"];
+  const currency = payment["currency"];
+  if (amount === undefined || currency === undefined) return "incomplete";
+  if (!Number.isSafeInteger(amount) || amount !== order.expectedAmount)
+    throw new AdminApiError(400, "Payment amount mismatch");
+  if (currency !== order.currency || currency !== "PHP")
+    throw new AdminApiError(400, "Payment currency mismatch");
+  if (
+    !metadata["orderId"] ||
+    !metadata["productId"] ||
+    !metadata["playFabId"] ||
+    !attrs["reference_number"]
+  )
+    return "incomplete";
+  return "complete";
 }
 
 export async function processPayMongoWebhook(
   rawBody: string,
   signatureHeader: string | null | undefined,
 ): Promise<WebhookProcessResult> {
-  // 1. Signature verification
-  const verification = verifyPayMongoSignature({
-    signatureHeader,
-    rawBody,
-  });
-
-  if (!verification.valid) {
-    console.warn(`[payments/webhook] Invalid signature: ${verification.reason}`);
-    return {
-      status: 400,
-      body: {
-        success: false,
-        error: `Signature verification failed: ${verification.reason}`,
-      },
-    };
-  }
-
-  // 2. Parse event payload
-  let event: PayMongoWebhookEvent;
+  const signature = verifyPayMongoSignature({ signatureHeader, rawBody });
+  if (!signature.valid) return fail(400, `Signature verification failed: ${signature.reason}`);
+  let envelope: Record<string, unknown>;
   try {
-    event = JSON.parse(rawBody) as PayMongoWebhookEvent;
+    envelope = object(JSON.parse(rawBody));
   } catch {
-    return {
-      status: 400,
-      body: { success: false, error: "Invalid JSON in webhook payload" },
-    };
+    return fail(400, "Invalid JSON in webhook payload");
   }
-
-  const eventData = event?.data;
-  const eventAttributes = eventData?.attributes;
-  if (!eventData || !eventAttributes) {
-    return {
-      status: 400,
-      body: { success: false, error: "Malformed PayMongo event payload" },
-    };
-  }
-
-  // 3. Test / Live safety
-  if (eventAttributes.livemode === true) {
-    console.error("[payments/webhook] Live mode event received on test endpoint. Rejecting.");
-    return {
-      status: 400,
-      body: {
-        success: false,
-        error: "Live mode events are not accepted on test webhook endpoint",
-      },
-    };
-  }
-
-  const eventType = eventAttributes.type;
-  if (eventType === "qr.expired") {
-    return {
-      status: 200,
-      body: {
-        success: true,
-        received: true,
-        message: "QR code expiration acknowledged",
-      },
-    };
-  }
-
+  const event = object(envelope["data"]);
+  const attributes = object(event["attributes"]);
+  if (
+    typeof event["id"] !== "string" ||
+    !/^[a-z0-9_-]{1,128}$/i.test(event["id"]) ||
+    !Object.keys(attributes).length
+  )
+    return fail(400, "Malformed PayMongo event payload");
+  if (attributes["livemode"] === true)
+    return fail(400, "Live mode events are not accepted on this test endpoint.");
+  if (attributes["livemode"] !== false)
+    return fail(400, "Only explicitly test-mode events are accepted.");
+  const eventType = attributes["type"];
   if (eventType !== "checkout_session.payment.paid" && eventType !== "qr.paid") {
-    // Safely ignore other event types
     return {
       status: 200,
       body: {
         success: true,
         received: true,
-        message: `Event type ${eventType} ignored`,
+        message: "Event does not require checkout fulfillment.",
       },
     };
   }
-
-  const eventId = eventData.id;
-
-  // 4. Event Deduplication check
-  const alreadyProcessed = await isEventProcessed(eventId);
-  if (alreadyProcessed) {
-    console.info(`[payments/webhook] Event ${eventId} was already processed. Idempotent return.`);
-    return {
-      status: 200,
-      body: {
-        success: true,
-        idempotent: true,
-        message: "Event already processed",
-      },
-    };
-  }
-
-  // 5. Extract Session & Order
-  const session = eventAttributes.data;
-  const sessionAttributes = session?.attributes;
-  const metadata = sessionAttributes?.metadata ?? {};
-  const orderId =
-    metadata["orderId"] ||
-    metadata["order_id"] ||
-    sessionAttributes?.reference_number;
-
-  if (!orderId) {
-    console.error("[payments/webhook] Missing order ID in session metadata or reference_number");
-    return {
-      status: 400,
-      body: { success: false, error: "Missing order ID in webhook payload" },
-    };
-  }
-
-  const order = await getOrder(orderId);
-  if (!order) {
-    console.error(`[payments/webhook] Order not found for orderId: ${orderId}`);
-    return {
-      status: 404,
-      body: { success: false, error: `Order ${orderId} not found` },
-    };
-  }
-
-  // 6. Check if order is already fulfilled
-  if (order.status === "fulfilled") {
-    console.info(`[payments/webhook] Order ${orderId} is already fulfilled. Idempotent return.`);
-    await markEventProcessed(eventId, orderId);
-    return {
-      status: 200,
-      body: {
-        success: true,
-        idempotent: true,
-        orderId,
-        message: "Order already fulfilled",
-      },
-    };
-  }
-
-  // 7. Payment Amount & Currency Verification
-  // Check session level amount/currency or line_items or payments
-  const paidPayments = sessionAttributes?.payments ?? [];
-  const paymentRecord = paidPayments[0]?.attributes;
-  const paidAmount =
-    paymentRecord?.amount ??
-    sessionAttributes?.amount ??
-    sessionAttributes?.line_items?.[0]?.amount;
-  const paidCurrency = (
-    paymentRecord?.currency ??
-    sessionAttributes?.currency ??
-    sessionAttributes?.line_items?.[0]?.currency ??
-    ""
-  ).toUpperCase();
-
-  if (paidAmount !== undefined && paidAmount !== order.expectedAmount) {
-    console.error(
-      `[payments/webhook] Amount mismatch for order ${orderId}: expected ${order.expectedAmount}, got ${paidAmount}`,
-    );
-    await updateOrderStatus(orderId, {
-      status: "failed",
-      error: `Amount mismatch: expected ${order.expectedAmount}, got ${paidAmount}`,
-    });
-    return {
-      status: 400,
-      body: { success: false, error: "Payment amount mismatch" },
-    };
-  }
-
-  if (paidCurrency && paidCurrency !== order.currency.toUpperCase()) {
-    console.error(
-      `[payments/webhook] Currency mismatch for order ${orderId}: expected ${order.currency}, got ${paidCurrency}`,
-    );
-    await updateOrderStatus(orderId, {
-      status: "failed",
-      error: `Currency mismatch: expected ${order.currency}, got ${paidCurrency}`,
-    });
-    return {
-      status: 400,
-      body: { success: false, error: "Payment currency mismatch" },
-    };
-  }
-
-  // 8. Fulfill Coins in PlayFab
-  const product = getProduct(order.productId);
-  const coinsToAward = product?.rewardCoins ?? order.expectedCoins;
-  const currencyCode = getCoinsCurrencyCode();
-
+  const session = object(attributes["data"]);
+  // Standalone QR resources are not evidence of a hosted checkout purchase.
+  if (eventType === "qr.paid" && session["type"] === "qr_code")
+    return { status: 200, body: { success: true, received: true } };
+  if (session["type"] !== "checkout_session") return fail(400, "Malformed checkout payment event.");
+  const attrs = object(session["attributes"]);
+  const metadata = object(attrs["metadata"]);
+  const rawOrderId = metadata["orderId"] ?? metadata["order_id"] ?? attrs["reference_number"];
+  if (typeof rawOrderId !== "string" || !/^[a-z0-9_-]{1,128}$/i.test(rawOrderId))
+    return fail(400, "Missing or invalid order ID in webhook payload");
+  let order: PaymentOrder | null = null;
+  let verifiedPayment = false;
   try {
-    if (coinsToAward > 0) {
-      await playFabAdmin("Server/AddUserVirtualCurrency", {
-        PlayFabId: order.playFabId,
-        VirtualCurrency: currencyCode,
-        Amount: coinsToAward,
-      });
+    order = await getOrder(rawOrderId);
+    if (!order) return fail(404, "Payment order not found.");
+    if (!order.PayMongoCheckoutSessionId)
+      throw new AdminApiError(503, "Checkout binding is not ready. Retry expected.");
+    let verifiedSession = session;
+    if (paymentEvidence(verifiedSession, order) === "incomplete") {
+      verifiedSession = object(await retrievePayMongoCheckout(order.PayMongoCheckoutSessionId));
+      if (object(verifiedSession["attributes"])["livemode"] !== false)
+        throw new AdminApiError(400, "Only test-mode checkouts are accepted.");
+      if (paymentEvidence(verifiedSession, order) !== "complete")
+        throw new AdminApiError(400, "A completed paid payment could not be verified.");
     }
-
-    const paidAt = new Date().toISOString();
-    await updateOrderStatus(orderId, {
-      status: "fulfilled",
+    verifiedPayment = true;
+    const reward = normalizeOrderReward(order);
+    if (reward.rewardCurrency === "DI") order = await repairDiamondOrder(order);
+    if (
+      order.status === "fulfilled" ||
+      (reward.rewardCurrency === "CO" && (await isEventProcessed(event["id"] as string)))
+    ) {
+      await markEventProcessed(event["id"] as string, order.orderId);
+      return { status: 200, body: { success: true, idempotent: true, orderId: order.orderId } };
+    }
+    const paidAt = order.paidAt || new Date().toISOString();
+    await updateOrderStatus(order.orderId, {
+      status: "paid",
       paidAt,
-      fulfilledAt: paidAt,
-      webhookEventId: eventId,
-      PayMongoCheckoutSessionId: session.id || order.PayMongoCheckoutSessionId,
+      webhookEventId: event["id"] as string,
       error: null,
     });
-
-    await markEventProcessed(eventId, orderId);
-
-    console.info(
-      `[payments/fulfillment] Successfully credited ${coinsToAward} ${currencyCode} to player ${order.playFabId} for order ${orderId}`,
-    );
-
+    let alreadyGranted = false;
+    if (reward.rewardCurrency === "DI") {
+      const result = await grantDiamonds(diamondGrantInput(order));
+      alreadyGranted = result.alreadyGranted;
+    } else {
+      const code = order.coinCurrencyCode || getCoinsCurrencyCode();
+      if (!/^[A-Z]{2}$/.test(code))
+        throw new AdminApiError(503, "Coin currency configuration is invalid.");
+      await playFabAdmin("Server/AddUserVirtualCurrency", {
+        PlayFabId: order.playFabId,
+        VirtualCurrency: code,
+        Amount: reward.rewardAmount,
+      });
+    }
+    await updateOrderStatus(order.orderId, {
+      status: "fulfilled",
+      paidAt,
+      fulfilledAt: new Date().toISOString(),
+      webhookEventId: event["id"] as string,
+      error: null,
+    });
+    await markEventProcessed(event["id"] as string, order.orderId);
     return {
       status: 200,
       body: {
         success: true,
-        orderId,
-        coinsAwarded: coinsToAward,
+        orderId: order.orderId,
+        idempotent: alreadyGranted,
+        rewardCurrency: reward.rewardCurrency,
+        rewardAmount: reward.rewardAmount,
+        ...(reward.rewardCurrency === "DI"
+          ? { diamondsAwarded: alreadyGranted ? 0 : reward.rewardAmount }
+          : { coinsAwarded: reward.rewardAmount }),
       },
     };
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : "PlayFab API error";
-    console.error(
-      `[payments/fulfillment] Failed to credit coins for order ${orderId}: ${errorMsg}`,
+  } catch (error) {
+    const status = error instanceof AdminApiError ? error.status : 503;
+    if (order && (verifiedPayment || status === 400)) {
+      try {
+        await updateOrderStatus(order.orderId, {
+          status: status === 400 ? "failed" : "paid",
+          error:
+            status === 400
+              ? (error as Error).message
+              : "Fulfillment is temporarily unavailable. Retry expected.",
+        });
+      } catch {
+        /* Never mask a failed state write as successful fulfillment. */
+      }
+    }
+    return fail(
+      status >= 500 ? 500 : status,
+      status < 500 && error instanceof Error
+        ? error.message
+        : "Virtual currency fulfillment temporarily unavailable. Retry expected.",
     );
-
-    // Keep order as "paid" with error recorded so fulfillment can be retried safely
-    await updateOrderStatus(orderId, {
-      status: "paid",
-      paidAt: new Date().toISOString(),
-      webhookEventId: eventId,
-      error: errorMsg,
-    });
-
-    // Do NOT mark event as processed, and return 500 so PayMongo retries delivery
-    return {
-      status: 500,
-      body: {
-        success: false,
-        error: "Virtual currency fulfillment temporarily unavailable. Retry expected.",
-      },
-    };
   }
 }

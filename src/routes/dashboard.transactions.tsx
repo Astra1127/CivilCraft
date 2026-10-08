@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Gift, PackageOpen, Receipt, RotateCcw, Star } from "lucide-react";
+import { Coins, Diamond, Gift, PackageOpen, Receipt, RotateCcw, Star } from "lucide-react";
 import { DemoBadge } from "@/components/common/DemoBadge";
 import { SectionHeading } from "@/components/common/PageHeader";
 import { ErrorState, LoadingState } from "@/components/common/States";
@@ -20,6 +20,7 @@ import chibiEngineer from "@/assets/chibi-engineer.png";
 import { useAuth } from "@/lib/auth";
 import { transactionService, type Transaction } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
+import { currencyLabel } from "@/lib/payments/products";
 
 export const Route = createFileRoute("/dashboard/transactions")({
   head: () => ({
@@ -56,7 +57,14 @@ function formatAmount(tx: Transaction) {
 }
 
 function ItemImage({ tx, className }: { tx: Transaction; className?: string }) {
-  const Icon = tx.itemSlot ? SLOT_META[tx.itemSlot].icon : PackageOpen;
+  const Icon =
+    tx.rewardCurrency === "DI"
+      ? Diamond
+      : tx.rewardCurrency === "CO"
+        ? Coins
+        : tx.itemSlot
+          ? SLOT_META[tx.itemSlot].icon
+          : PackageOpen;
   return (
     <div
       className={cn(
@@ -183,6 +191,14 @@ function TransactionsPage() {
                 {[
                   ["Category", selected.itemCategory],
                   ["Amount", formatAmount(selected)],
+                  ...(selected.rewardCurrency && selected.rewardAmount
+                    ? [
+                        [
+                          "Currency package",
+                          `${selected.rewardAmount.toLocaleString()} ${currencyLabel(selected.rewardCurrency)}`,
+                        ],
+                      ]
+                    : []),
                   ["Purchased", new Date(selected.createdAt).toLocaleString()],
                   ["Transaction ID", selected.transactionId],
                   ["Status", selected.status],
