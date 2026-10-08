@@ -66,7 +66,7 @@ test("desktop and mobile public menus have the requested links and no shop", asy
       renderer = create(React.createElement(SiteNavbar));
     });
     const menus = renderer.root.findAllByType("ul");
-    const expected = ["Home", "About", "Gallery", "FAQ", "Download", "Contact"];
+    const expected = ["Home", "About", "Gallery", "Leaderboard", "FAQ", "Download", "Contact"];
     assert.deepEqual(
       menus[0].findAllByType("a").map((a) => a.props.children),
       expected,
@@ -86,18 +86,30 @@ test("desktop and mobile public menus have the requested links and no shop", asy
 });
 
 test("account menu colors the player name and derives initials without its color tag", async () => {
-  const { SiteNavbar } = load("../src/components/site/SiteNavbar.tsx", {
-    adminReady: true, isAuthenticated: true, isAdmin: false,
-    player: { displayName: "<#BF40BF>Colored Engineer" },
-  }, []);
+  const { SiteNavbar } = load(
+    "../src/components/site/SiteNavbar.tsx",
+    {
+      adminReady: true,
+      isAuthenticated: true,
+      isAdmin: false,
+      player: { displayName: "<#BF40BF>Colored Engineer" },
+    },
+    [],
+  );
   let renderer;
   try {
-    await act(async () => { renderer = create(React.createElement(SiteNavbar)); });
-    const label = renderer.root.findAllByType("span").find((node) => node.children.join("") === "Colored Engineer");
+    await act(async () => {
+      renderer = create(React.createElement(SiteNavbar));
+    });
+    const label = renderer.root
+      .findAllByType("span")
+      .find((node) => node.children.join("") === "Colored Engineer");
     assert.equal(label.props.style.color, "#BF40BF");
     assert.ok(renderer.root.findAllByType("div").some((node) => node.children.join("") === "CE"));
     assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /<#BF40BF>/);
-  } finally { await act(async () => renderer?.unmount()); }
+  } finally {
+    await act(async () => renderer?.unmount());
+  }
 });
 
 test("direct shop access waits for player auth and does not accept admin-only auth", async () => {

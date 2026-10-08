@@ -8,6 +8,7 @@ import {
   Medal,
   Receipt,
   Settings,
+  Trophy,
   User,
 } from "lucide-react";
 import { useEffect } from "react";
@@ -33,6 +34,7 @@ export const Route = createFileRoute("/dashboard")({
 const items: DashboardNavItem[] = [
   { to: "/dashboard", label: "Overview", icon: BarChart3, section: "Overview" },
   { to: "/dashboard/almanac", label: "Bridge Almanac", icon: BookOpen, section: "Overview" },
+  { to: "/dashboard/leaderboards", label: "Leaderboards", icon: Trophy, section: "Overview" },
   { to: "/dashboard/achievements", label: "Achievements", icon: Medal, section: "Overview" },
   { to: "/dashboard/transactions", label: "Transactions", icon: Receipt, section: "Overview" },
   { to: "/dashboard/shop", label: "Coin Shop", icon: Coins, section: "Account" },

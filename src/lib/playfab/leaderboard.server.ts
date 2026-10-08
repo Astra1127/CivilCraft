@@ -1,4 +1,5 @@
 import { bridgeStatistic, decodeBridgeScore } from "./leaderboard-config.server.ts";
+import { multiplayerLeaderboardPage } from "./multiplayer-leaderboard.server.ts";
 import { getAdminAuthConfig } from "../admin-auth/config.server.ts";
 import { isAuthorizedStaff, readAdminSession } from "../admin-auth/session.server.ts";
 import {
@@ -148,8 +149,16 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
   try {
     configured = !!adminGameConfig().secret;
     if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
-    // Anonymous access is limited to this explicit, field-whitelisted endpoint.
+    // Anonymous access is limited to the explicit, field-whitelisted endpoints.
     // Existing player/admin endpoints below retain their authentication checks.
+    if (url.pathname === "/api/leaderboard/public/multiplayer") {
+      if (url.searchParams.size)
+        throw new AdminApiError(
+          400,
+          "The multiplayer leaderboard does not accept query parameters.",
+        );
+      return json(await multiplayerLeaderboardPage());
+    }
     if (url.pathname === "/api/leaderboard/public") {
       const integer = (key: string, fallback?: number) => {
         const value = url.searchParams.get(key);
