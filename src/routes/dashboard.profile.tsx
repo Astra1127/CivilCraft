@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Hammer, Star, Target, Zap } from "lucide-react";
 import { DemoBadge, IntegrationNotice } from "@/components/common/DemoBadge";
 import { SectionHeading } from "@/components/common/PageHeader";
+import { PlayerName } from "@/components/common/PlayerName";
 import { StatCard } from "@/components/common/StatCard";
 import { ErrorState, LoadingState } from "@/components/common/States";
 import {
@@ -74,7 +75,9 @@ function ProfilePage() {
         <div className="panel flex flex-col gap-3 p-3 md:gap-4 md:p-6">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">Engineer</p>
-            <h2 className="truncate text-2xl sm:text-3xl">{p.displayName}</h2>
+            <h2 className="truncate text-2xl sm:text-3xl">
+              <PlayerName name={p.displayName} />
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">Level {p.level ?? "\u2014"}</p>
           </div>
 

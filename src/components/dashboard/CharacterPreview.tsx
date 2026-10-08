@@ -12,6 +12,7 @@ import type { LucideIcon } from "lucide-react";
 import chibiEngineer from "@/assets/chibi-engineer.png";
 import type { CosmeticItem, CosmeticSlot, PlayerCharacter } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
+import { parsePlayerName } from "@/lib/player-name";
 import { useState } from "react";
 import { useCharacterPortrait } from "./useCharacterPortrait";
 import { portraitBounds } from "./portrait-bounds";
@@ -89,7 +90,7 @@ export function CharacterPreview({
       }}
       alt={
         portrait
-          ? `${displayName}'s Civil Craft character with their equipped cosmetics`
+          ? `${parsePlayerName(displayName).text}'s Civil Craft character with their equipped cosmetics`
           : "Generic Civil Craft engineer silhouette shown while no character snapshot is available"
       }
       className={cn(

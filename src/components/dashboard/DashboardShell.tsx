@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/site/BrandMark";
+import { PlayerName } from "@/components/common/PlayerName";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { ReportBugDialog } from "@/components/dashboard/ReportBugDialog";
 
@@ -209,7 +210,11 @@ export function DashboardShell({
             )}
 
             <span className="hidden max-w-[12rem] truncate text-sm font-bold text-muted-foreground sm:block">
-              {(variant === "admin" ? adminUser : player)?.displayName}
+              {variant === "admin" ? (
+                adminUser?.displayName
+              ) : (
+                <PlayerName name={player?.displayName} fallback="" />
+              )}
             </span>
           </div>
         </div>

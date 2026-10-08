@@ -6,6 +6,7 @@ import { runInNewContext } from "node:vm";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import ts from "typescript";
+import { playerNameDependencies } from "./helpers/player-name-ui.mjs";
 
 const require = createRequire(import.meta.url);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -22,6 +23,7 @@ function load(path, auth, navigations, queries = [], adminSession = null) {
   runInNewContext(source, {
     exports,
     require: (name) => {
+      if (playerNameDependencies[name]) return playerNameDependencies[name];
       if (name === "react" || name === "react/jsx-runtime") return require(name);
       if (name === "@tanstack/react-router")
         return {
@@ -81,6 +83,21 @@ test("desktop and mobile public menus have the requested links and no shop", asy
   } finally {
     if (renderer) await act(async () => renderer.unmount());
   }
+});
+
+test("account menu colors the player name and derives initials without its color tag", async () => {
+  const { SiteNavbar } = load("../src/components/site/SiteNavbar.tsx", {
+    adminReady: true, isAuthenticated: true, isAdmin: false,
+    player: { displayName: "<#BF40BF>Colored Engineer" },
+  }, []);
+  let renderer;
+  try {
+    await act(async () => { renderer = create(React.createElement(SiteNavbar)); });
+    const label = renderer.root.findAllByType("span").find((node) => node.children.join("") === "Colored Engineer");
+    assert.equal(label.props.style.color, "#BF40BF");
+    assert.ok(renderer.root.findAllByType("div").some((node) => node.children.join("") === "CE"));
+    assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /<#BF40BF>/);
+  } finally { await act(async () => renderer?.unmount()); }
 });
 
 test("direct shop access waits for player auth and does not accept admin-only auth", async () => {

@@ -7,6 +7,7 @@ import ts from "typescript";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import { handleCharacterPortrait } from "../src/lib/playfab/character-portrait.server.ts";
+import { playerNameDependencies } from "./helpers/player-name-ui.mjs";
 const require = createRequire(import.meta.url);
 const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0]);
 process.env.PLAYFAB_SECRET_KEY = "server-secret";
@@ -115,6 +116,7 @@ function preview(url) {
   runInNewContext(source, {
     exports,
     require: (name) => {
+      if (playerNameDependencies[name]) return playerNameDependencies[name];
       if (name === "react" || name === "react/jsx-runtime") return require(name);
       if (name === "./useCharacterPortrait") return { useCharacterPortrait: () => url };
       if (name === "./portrait-bounds")
@@ -133,11 +135,12 @@ test("real portrait displays with and without dashboard snapshot; notice hidden 
     let renderer;
     await act(async () => {
       renderer = create(
-        React.createElement(preview("blob:portrait"), { displayName: "Player", character }),
+        React.createElement(preview("blob:portrait"), { displayName: "<#BF40BF>Player", character }),
       );
     });
     const image = renderer.root.findByType("img");
     assert.equal(image.props.src, "blob:portrait");
+    assert.equal(image.props.alt, "Player's Civil Craft character with their equipped cosmetics");
     assert.ok(image.props.className.includes("object-contain"));
     await act(async () =>
       image.props.onLoad({ currentTarget: { naturalWidth: 512, naturalHeight: 512 } }),

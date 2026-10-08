@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorState, LoadingState } from "@/components/common/States";
+import { PlayerName } from "@/components/common/PlayerName";
 
 export function AccountSettings() {
   const { player } = useAuth();
@@ -72,8 +73,9 @@ export function AccountSettings() {
         <p className="font-semibold">{details.username ?? "No username linked"}</p>
         <p className="text-sm text-muted-foreground">
           Your login username cannot be renamed through PlayFab's player API. It is separate from
-          your character name and display name ({details.displayName ?? "not set"}), which you
-          manage in the game.
+          your character name and display name (
+          <PlayerName name={details.displayName} fallback="not set" />
+          ), which you manage in the game.
         </p>
       </section>
       <section className="space-y-3 border-t border-border pt-5">
