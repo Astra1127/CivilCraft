@@ -1,5 +1,6 @@
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
 import {
+  assertDiamondCheckoutCapacity,
   getDiamondBalance,
   requireDiamondCheckoutReady,
   resolvePremiumEntity,
@@ -141,7 +142,13 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         const wallet = requireDiamondCheckoutReady();
         const entity = await resolvePremiumEntity(playFabId);
         // Also check the actual wallet before accepting a payment.
-        await getDiamondBalance(playFabId);
+        await assertDiamondCheckoutCapacity({
+          orderId,
+          playFabId,
+          entity,
+          wallet,
+          rewardAmount: reward.rewardAmount,
+        });
         premiumWallet = { ...wallet, entity };
       }
       const order: PaymentOrder = {

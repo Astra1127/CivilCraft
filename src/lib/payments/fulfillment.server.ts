@@ -46,11 +46,19 @@ export function diamondGrantInput(order: PaymentOrder) {
     orderId: order.orderId,
     playFabId: order.playFabId,
     entity: snapshot.entity,
-    wallet: {
-      collectionId: snapshot.collectionId,
-      diamondItemId: snapshot.diamondItemId,
-      receiptItemId: snapshot.receiptItemId,
-    },
+    wallet:
+      snapshot.storage === "entity-objects"
+        ? {
+            storage: snapshot.storage,
+            collectionId: snapshot.collectionId,
+            objectName: snapshot.objectName,
+            maxBytes: snapshot.maxBytes,
+          }
+        : {
+            collectionId: snapshot.collectionId,
+            diamondItemId: snapshot.diamondItemId,
+            receiptItemId: snapshot.receiptItemId,
+          },
     rewardAmount: reward.rewardAmount,
   };
 }

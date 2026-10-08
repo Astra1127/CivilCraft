@@ -16,7 +16,7 @@
     "test:content": "node --test tests/public-content.test.ts",
     "test:reset": "node --test tests/reset-password.test.ts tests/reset-password-ui.test.mjs",
     "test:payments": "node --test tests/paymongo.test.ts",
-    "test:currencies": "node --test tests/paymongo.test.ts tests/premium-wallet.test.ts tests/currency-products.test.ts tests/diamonds-setup.test.mjs tests/diamond-shop-ui.test.mjs tests/shop-navigation-ui.test.mjs"
+    "test:currencies": "node --test tests/paymongo.test.ts tests/premium-wallet.test.ts tests/entity-diamond-wallet.test.mjs tests/currency-products.test.ts tests/diamonds-setup.test.mjs tests/diamond-shop-ui.test.mjs tests/shop-navigation-ui.test.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"

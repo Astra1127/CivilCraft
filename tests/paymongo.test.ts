@@ -93,6 +93,18 @@ let internalDataReadFailure = false;
 let verifiedCheckout: unknown = null;
 let premiumItems: MockPremiumItem[] = [];
 let premiumVersion = 0;
+let premiumObjects: Record<
+  string,
+  {
+    ObjectName: string;
+    DataObject: {
+      balance: number;
+      receipts: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+  }
+> = {};
+let objectReadFailure = false;
 let failFulfilledSaveOnce = false;
 const DIAMOND_ITEM = "11111111-1111-4111-8111-111111111111";
 const RECEIPT_ITEM = "22222222-2222-4222-8222-222222222222";
@@ -112,8 +124,11 @@ beforeEach(() => {
   verifiedCheckout = null;
   premiumItems = [];
   premiumVersion = 0;
+  premiumObjects = {};
+  objectReadFailure = false;
   failFulfilledSaveOnce = false;
   process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  process.env["PLAYFAB_DIAMONDS_STORAGE"] = "economy-v2";
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const urlStr = String(input);
@@ -218,6 +233,40 @@ beforeEach(() => {
             EntityToken: "mock-title-token",
             Entity: { Id: "17FA03", Type: "title" },
             TokenExpiration: new Date(Date.now() + 3_600_000).toISOString(),
+          },
+        });
+      }
+      if (urlStr.includes("/Object/")) {
+        assert.equal(new Headers(init?.headers).get("X-EntityToken"), "mock-title-token");
+        assert.equal(body.Entity.Id, "FACE123");
+        if (urlStr.endsWith("/GetObjects")) {
+          if (objectReadFailure) return Response.json({ code: 503 }, { status: 503 });
+          return Response.json({
+            code: 200,
+            data: {
+              Entity: body.Entity,
+              ProfileVersion: premiumVersion,
+              Objects: structuredClone(premiumObjects),
+            },
+          });
+        }
+        assert.equal(urlStr.endsWith("/SetObjects"), true);
+        if (body.ExpectedProfileVersion !== premiumVersion)
+          return Response.json(
+            { code: 400, error: "EntityProfileVersionMismatch" },
+            { status: 400 },
+          );
+        assert.equal(body.Objects.length, 1);
+        const item = body.Objects[0];
+        assert.equal(item.ObjectName, "civilcraft.premium-wallet.v1");
+        assert.equal(item.DataObject.playFabId, TEST_PLAYER_ID);
+        premiumObjects[item.ObjectName] = structuredClone(item);
+        premiumVersion++;
+        return Response.json({
+          code: 200,
+          data: {
+            ProfileVersion: premiumVersion,
+            SetResults: [{ ObjectName: item.ObjectName, SetResult: "Updated" }],
           },
         });
       }
@@ -550,11 +599,12 @@ test("checkout return URL does not trust caller Origin or forwarded host", async
   );
 });
 
-function enableMockDiamonds() {
+function enableMockDiamonds(storage: "economy-v2" | "entity-objects" = "economy-v2") {
   Object.assign(process.env, {
     PLAYFAB_DIAMONDS_ENABLED: "true",
-    PLAYFAB_DIAMONDS_ITEM_ID: DIAMOND_ITEM,
-    PLAYFAB_DIAMONDS_RECEIPT_ITEM_ID: RECEIPT_ITEM,
+    PLAYFAB_DIAMONDS_STORAGE: storage,
+    PLAYFAB_DIAMONDS_ITEM_ID: storage === "economy-v2" ? DIAMOND_ITEM : "",
+    PLAYFAB_DIAMONDS_RECEIPT_ITEM_ID: storage === "economy-v2" ? RECEIPT_ITEM : "",
     PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID: "17FA03",
     PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED: "true",
     PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED: "true",
@@ -562,13 +612,69 @@ function enableMockDiamonds() {
   process.env["PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256"] = premiumWalletVerificationFingerprint();
 }
 
-test("all three Diamond packs complete simulated checkout and credit only Diamonds to the verified player", async () => {
-  enableMockDiamonds();
-  for (const [quantity, price] of [
-    [500, 5000],
-    [1000, 9500],
-    [2500, 22000],
-  ]) {
+for (const storage of ["economy-v2", "entity-objects"] as const) {
+  test(`${storage}: all three Diamond packs complete simulated checkout and credit only Diamonds to the verified player`, async () => {
+    enableMockDiamonds(storage);
+    for (const [quantity, price] of [
+      [500, 5000],
+      [1000, 9500],
+      [2500, 22000],
+    ]) {
+      const response = await handlePaymentsRequest(
+        new Request("https://civil-craft.vercel.app/api/payments/paymongo/create-checkout", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${TEST_PLAYER_TICKET}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            productId: `diamonds_${quantity}`,
+            playFabId: "DEADBEEF",
+            price: 1,
+            rewardAmount: 999999,
+          }),
+        }),
+      );
+      assert.equal(response!.status, 200);
+      const result = await response!.json();
+      const order = (await getOrder(result.orderId))!;
+      assert.equal(order.playFabId, TEST_PLAYER_ID);
+      assert.equal(order.expectedCoins, 0);
+      assert.equal(order.rewardCurrency, "DI");
+      assert.equal(order.rewardAmount, quantity);
+      assert.equal(order.expectedAmount, price);
+      assert.equal(order.premiumWallet!.entity.Id, "FACE123");
+      // An administrator changing the live product cannot change an existing order.
+      const productKey = `civilcraft.website.v1.coin-products.diamonds_${quantity}`;
+      const edited = JSON.parse(internalData[productKey]!);
+      edited.rewardAmount = 1;
+      internalData[productKey] = JSON.stringify(edited);
+      const raw = createSampleEvent({ orderId: result.orderId, amount: price! });
+      const [first, duplicate] = await Promise.all([
+        processPayMongoWebhook(raw, signPayload(raw).header),
+        processPayMongoWebhook(raw, signPayload(raw).header),
+      ]);
+      assert.equal(first.status, 200);
+      assert.equal(duplicate.status, 200);
+      assert.equal((await getOrder(result.orderId))!.status, "fulfilled");
+    }
+    if (storage === "entity-objects") {
+      const wallet = premiumObjects["civilcraft.premium-wallet.v1"]!.DataObject;
+      assert.equal(wallet.balance, 4000);
+      assert.equal(Object.keys(wallet.receipts).length, 3);
+      assert.equal(premiumItems.length, 0);
+    } else {
+      assert.equal(premiumItems.find((i) => i.Id === DIAMOND_ITEM)!.Amount, 4000);
+      assert.equal(
+        premiumItems.filter((i) => i.Id === RECEIPT_ITEM && i.StackId.startsWith("order-")).length,
+        3,
+      );
+    }
+    assert.equal(awardedCoinsLog.length, 0);
+  });
+
+  test(`${storage}: Diamond receipt repairs a failed audit save and a webhook retry never credits again`, async () => {
+    enableMockDiamonds(storage);
     const response = await handlePaymentsRequest(
       new Request("https://civil-craft.vercel.app/api/payments/paymongo/create-checkout", {
         method: "POST",
@@ -576,47 +682,40 @@ test("all three Diamond packs complete simulated checkout and credit only Diamon
           Authorization: `Bearer ${TEST_PLAYER_TICKET}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          productId: `diamonds_${quantity}`,
-          playFabId: "DEADBEEF",
-          price: 1,
-          rewardAmount: 999999,
-        }),
+        body: JSON.stringify({ productId: "diamonds_500" }),
       }),
     );
-    assert.equal(response!.status, 200);
-    const result = await response!.json();
-    const order = (await getOrder(result.orderId))!;
-    assert.equal(order.playFabId, TEST_PLAYER_ID);
-    assert.equal(order.expectedCoins, 0);
-    assert.equal(order.rewardCurrency, "DI");
-    assert.equal(order.rewardAmount, quantity);
-    assert.equal(order.expectedAmount, price);
-    assert.equal(order.premiumWallet!.entity.Id, "FACE123");
-    // An administrator changing the live product cannot change an existing order.
-    const productKey = `civilcraft.website.v1.coin-products.diamonds_${quantity}`;
-    const edited = JSON.parse(internalData[productKey]!);
-    edited.rewardAmount = 1;
-    internalData[productKey] = JSON.stringify(edited);
-    const raw = createSampleEvent({ orderId: result.orderId, amount: price! });
-    const [first, duplicate] = await Promise.all([
-      processPayMongoWebhook(raw, signPayload(raw).header),
-      processPayMongoWebhook(raw, signPayload(raw).header),
-    ]);
-    assert.equal(first.status, 200);
-    assert.equal(duplicate.status, 200);
-    assert.equal((await getOrder(result.orderId))!.status, "fulfilled");
-  }
-  assert.equal(premiumItems.find((i) => i.Id === DIAMOND_ITEM)!.Amount, 4000);
-  assert.equal(
-    premiumItems.filter((i) => i.Id === RECEIPT_ITEM && i.StackId.startsWith("order-")).length,
-    3,
-  );
-  assert.equal(awardedCoinsLog.length, 0);
-});
+    const { orderId } = await response!.json();
+    const raw = createSampleEvent({ orderId });
+    failFulfilledSaveOnce = true;
+    assert.equal((await processPayMongoWebhook(raw, signPayload(raw).header)).status, 500);
+    const status = await handlePaymentsRequest(
+      new Request(`https://civil-craft.vercel.app/api/payments/paymongo/order?id=${orderId}`, {
+        headers: { Authorization: `Bearer ${TEST_PLAYER_TICKET}` },
+      }),
+    );
+    assert.equal((await status!.json()).status, "fulfilled");
+    assert.equal((await processPayMongoWebhook(raw, signPayload(raw).header)).status, 200);
+    assert.equal(
+      storage === "entity-objects"
+        ? premiumObjects["civilcraft.premium-wallet.v1"]!.DataObject.balance
+        : premiumItems.find((i) => i.Id === DIAMOND_ITEM)!.Amount,
+      500,
+    );
+  });
+}
 
-test("Diamond receipt repairs a failed audit save and a webhook retry never credits again", async () => {
-  enableMockDiamonds();
+test("no-card wallet failure shows unavailable, not zero, and prevents PayMongo checkout", async () => {
+  enableMockDiamonds("entity-objects");
+  objectReadFailure = true;
+  const balance = await handlePaymentsRequest(
+    new Request("https://civil-craft.vercel.app/api/player/currencies", {
+      headers: { Authorization: `Bearer ${TEST_PLAYER_TICKET}` },
+    }),
+  );
+  const data = await balance!.json();
+  assert.equal(data.diamonds, null);
+  assert.equal(data.diamondsAvailable, false);
   const response = await handlePaymentsRequest(
     new Request("https://civil-craft.vercel.app/api/payments/paymongo/create-checkout", {
       method: "POST",
@@ -627,18 +726,50 @@ test("Diamond receipt repairs a failed audit save and a webhook retry never cred
       body: JSON.stringify({ productId: "diamonds_500" }),
     }),
   );
-  const { orderId } = await response!.json();
-  const raw = createSampleEvent({ orderId });
-  failFulfilledSaveOnce = true;
-  assert.equal((await processPayMongoWebhook(raw, signPayload(raw).header)).status, 500);
-  const status = await handlePaymentsRequest(
-    new Request(`https://civil-craft.vercel.app/api/payments/paymongo/order?id=${orderId}`, {
-      headers: { Authorization: `Bearer ${TEST_PLAYER_TICKET}` },
+  assert.equal(response!.status, 503);
+  assert.equal(payMongoApiRequests.length, 0);
+  assert.equal(
+    Object.keys(internalData).some((key) => key.includes("payment-orders")),
+    false,
+  );
+});
+
+test("full no-card wallet blocks checkout before taking payment and does not remove old receipts", async () => {
+  enableMockDiamonds("entity-objects");
+  const receipts = Object.fromEntries(
+    Array.from({ length: 60 }, (_, i) => [
+      `order-${crypto.createHash("sha256").update(`old-${i}`).digest("hex")}`,
+      { fingerprint: "a".repeat(64), amount: 1 },
+    ]),
+  );
+  premiumObjects["civilcraft.premium-wallet.v1"] = {
+    ObjectName: "civilcraft.premium-wallet.v1",
+    DataObject: {
+      schemaVersion: 1,
+      currency: "DI",
+      titleId: "17FA03",
+      playFabId: TEST_PLAYER_ID,
+      entityId: "FACE123",
+      balance: 60,
+      receipts,
+    },
+  };
+  const response = await handlePaymentsRequest(
+    new Request("https://civil-craft.vercel.app/api/payments/paymongo/create-checkout", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${TEST_PLAYER_TICKET}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ productId: "diamonds_500" }),
     }),
   );
-  assert.equal((await status!.json()).status, "fulfilled");
-  assert.equal((await processPayMongoWebhook(raw, signPayload(raw).header)).status, 200);
-  assert.equal(premiumItems.find((i) => i.Id === DIAMOND_ITEM)!.Amount, 500);
+  assert.equal(response!.status, 503);
+  assert.equal(payMongoApiRequests.length, 0);
+  assert.equal(
+    Object.keys(premiumObjects["civilcraft.premium-wallet.v1"]!.DataObject.receipts).length,
+    60,
+  );
 });
 
 test("missing webhook secret blocks checkout before any order or provider session is created", async () => {

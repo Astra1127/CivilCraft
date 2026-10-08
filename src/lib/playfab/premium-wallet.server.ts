@@ -5,11 +5,20 @@ export interface PremiumEntity {
   readonly Id: string;
   readonly Type: "title_player_account";
 }
-export interface PremiumWalletConfig {
+export interface InventoryPremiumWalletConfig {
+  readonly storage?: "economy-v2";
   readonly collectionId: "premium-wallet";
   readonly diamondItemId: string;
   readonly receiptItemId: string;
 }
+export interface ObjectPremiumWalletConfig {
+  readonly storage: "entity-objects";
+  readonly collectionId: "premium-wallet";
+  readonly objectName: "civilcraft.premium-wallet.v1";
+  /** Application safety cap, not a claim about the title's service quota. */
+  readonly maxBytes: 8192;
+}
+export type PremiumWalletConfig = InventoryPremiumWalletConfig | ObjectPremiumWalletConfig;
 export interface PremiumDiamondGrantInput {
   readonly orderId: string;
   readonly playFabId: string;
@@ -22,6 +31,7 @@ export interface PremiumDiamondGrantResult {
   balance: number;
   etag?: string;
   transactionIds?: string[];
+  profileVersion?: number;
 }
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -31,7 +41,9 @@ const UNAVAILABLE = "Diamonds service is temporarily unavailable. Please try aga
 type EconomyOperation =
   | "Inventory/GetInventoryItems"
   | "Inventory/AddInventoryItems"
-  | "Inventory/ExecuteInventoryOperations";
+  | "Inventory/ExecuteInventoryOperations"
+  | "Object/GetObjects"
+  | "Object/SetObjects";
 type ErrorKind = "conflict" | "retryable" | "rejected";
 class WalletApiError extends AdminApiError {
   kind: ErrorKind;
@@ -42,7 +54,22 @@ class WalletApiError extends AdminApiError {
 }
 
 function validateWallet(wallet: PremiumWalletConfig): PremiumWalletConfig {
+  if (wallet?.storage === "entity-objects") {
+    if (
+      wallet.collectionId !== "premium-wallet" ||
+      wallet.objectName !== "civilcraft.premium-wallet.v1" ||
+      wallet.maxBytes !== 8192
+    )
+      throw new AdminApiError(503, "Diamonds wallet configuration is unavailable.");
+    return Object.freeze({
+      storage: "entity-objects",
+      collectionId: "premium-wallet",
+      objectName: "civilcraft.premium-wallet.v1",
+      maxBytes: 8192,
+    });
+  }
   if (
+    (wallet?.storage !== undefined && wallet.storage !== "economy-v2") ||
     wallet?.collectionId !== "premium-wallet" ||
     !UUID.test(wallet?.diamondItemId ?? "") ||
     !UUID.test(wallet?.receiptItemId ?? "") ||
@@ -57,6 +84,23 @@ function validateWallet(wallet: PremiumWalletConfig): PremiumWalletConfig {
 }
 
 export function premiumWalletConfig(): PremiumWalletConfig {
+  const storage = (process.env["PLAYFAB_DIAMONDS_STORAGE"] || "entity-objects").trim();
+  if (storage === "entity-objects") {
+    // Never turn a configured historic Economy wallet into an apparently empty wallet.
+    if (
+      process.env["PLAYFAB_DIAMONDS_ITEM_ID"]?.trim() ||
+      process.env["PLAYFAB_DIAMONDS_RECEIPT_ITEM_ID"]?.trim()
+    )
+      throw new AdminApiError(503, "Review the previous Diamonds wallet before switching storage.");
+    return validateWallet({
+      storage,
+      collectionId: "premium-wallet",
+      objectName: "civilcraft.premium-wallet.v1",
+      maxBytes: 8192,
+    });
+  }
+  if (storage !== "economy-v2")
+    throw new AdminApiError(503, "Diamonds wallet configuration is unavailable.");
   return validateWallet({
     collectionId: "premium-wallet",
     diamondItemId: (process.env["PLAYFAB_DIAMONDS_ITEM_ID"] || "").trim(),
@@ -67,13 +111,14 @@ export function premiumWalletConfig(): PremiumWalletConfig {
 /** Binds operator verification to this exact title and catalog configuration. */
 export function premiumWalletVerificationFingerprint(): string {
   const { titleId } = adminGameConfig();
+  const wallet = premiumWalletConfig();
   return crypto
     .createHash("sha256")
     .update(
       JSON.stringify({
-        version: 1,
+        version: wallet.storage === "entity-objects" ? 2 : 1,
         titleId: titleId.toUpperCase(),
-        ...premiumWalletConfig(),
+        ...wallet,
       }),
     )
     .digest("hex");
@@ -187,7 +232,9 @@ async function postPlayFab(
       if (
         response.status === 412 ||
         payload["errorCode"] === 1610 ||
-        payload["error"] === "PreconditionFailed"
+        payload["error"] === "PreconditionFailed" ||
+        payload["error"] === "EntityProfileVersionMismatch" ||
+        payload["error"] === "ConcurrentEditError"
       )
         throw new WalletApiError("conflict");
       if (
@@ -256,8 +303,7 @@ function validateGrant(input: PremiumDiamondGrantInput): void {
     !/^[a-z0-9_-]{1,128}$/i.test(input.orderId) ||
     !Number.isSafeInteger(input.rewardAmount) ||
     input.rewardAmount < 1 ||
-    current.diamondItemId !== snapshot.diamondItemId ||
-    current.receiptItemId !== snapshot.receiptItemId
+    JSON.stringify(current) !== JSON.stringify(snapshot)
   )
     throw new AdminApiError(
       503,
@@ -273,7 +319,7 @@ interface WalletRead {
 }
 async function readWallet(
   entity: PremiumEntity,
-  wallet: PremiumWalletConfig,
+  wallet: InventoryPremiumWalletConfig,
   stackId?: string,
 ): Promise<WalletRead> {
   const result = await economy("Inventory/GetInventoryItems", {
@@ -322,14 +368,22 @@ function receiptExists(state: WalletRead, input: PremiumDiamondGrantInput): bool
 export async function getDiamondBalance(playFabId: string): Promise<number> {
   const wallet = requireDiamondCheckoutReady();
   const entity = await resolvePremiumEntity(playFabId);
+  if (wallet.storage === "entity-objects")
+    return (await readObjectWallet(playFabId, entity, wallet)).wallet.balance;
   return (await readWallet(entity, wallet)).balance;
 }
 
 /** Used only to repair a paid order's status; this function never initializes or grants. */
 export async function hasDiamondReceipt(input: PremiumDiamondGrantInput): Promise<boolean> {
   validateGrant(input);
+  const wallet = validateWallet(input.wallet);
+  if (wallet.storage === "entity-objects")
+    return objectReceiptExists(
+      (await readObjectWallet(input.playFabId, input.entity, wallet)).wallet,
+      input,
+    );
   return receiptExists(
-    await readWallet(input.entity, validateWallet(input.wallet), receiptStackId(input.orderId)),
+    await readWallet(input.entity, wallet, receiptStackId(input.orderId)),
     input,
   );
 }
@@ -340,6 +394,7 @@ export async function grantDiamonds(
 ): Promise<PremiumDiamondGrantResult> {
   validateGrant(input);
   const wallet = validateWallet(input.wallet);
+  if (wallet.storage === "entity-objects") return grantObjectDiamonds(input, wallet);
   const stackId = receiptStackId(input.orderId);
   let initialized = false;
   for (let attempt = 0; attempt < RETRIES; attempt++) {
@@ -419,6 +474,194 @@ export async function grantDiamonds(
       if (!(error instanceof WalletApiError) || error.kind === "rejected") throw error;
       // A timed-out write may have committed. Re-read the permanent receipt before
       // deciding to retry; stale versions will fail the next conditional write.
+      if (attempt === RETRIES - 1) throw new AdminApiError(503, UNAVAILABLE);
+      await new Promise((resolve) => setTimeout(resolve, 75 * (attempt + 1)));
+    }
+  }
+  throw new AdminApiError(503, UNAVAILABLE);
+}
+
+interface ObjectReceipt {
+  fingerprint: string;
+  amount: number;
+}
+interface ObjectWallet {
+  schemaVersion: 1;
+  currency: "DI";
+  titleId: string;
+  playFabId: string;
+  entityId: string;
+  balance: number;
+  receipts: Record<string, ObjectReceipt>;
+}
+
+async function readObjectWallet(
+  playFabId: string,
+  entity: PremiumEntity,
+  config: ObjectPremiumWalletConfig,
+): Promise<{ wallet: ObjectWallet; profileVersion: number }> {
+  const result = await economy("Object/GetObjects", { Entity: entity, EscapeObject: false });
+  const returnedEntity = object(result["Entity"]);
+  const profileVersion = result["ProfileVersion"];
+  if (
+    returnedEntity["Type"] !== entity.Type ||
+    typeof returnedEntity["Id"] !== "string" ||
+    returnedEntity["Id"].toUpperCase() !== entity.Id.toUpperCase() ||
+    typeof profileVersion !== "number" ||
+    !Number.isSafeInteger(profileVersion) ||
+    profileVersion < 0 ||
+    !result["Objects"] ||
+    typeof result["Objects"] !== "object" ||
+    Array.isArray(result["Objects"])
+  )
+    throw new WalletApiError("rejected");
+  const identity = {
+    schemaVersion: 1 as const,
+    currency: "DI" as const,
+    titleId: adminGameConfig().titleId.toUpperCase(),
+    playFabId: playFabId.toUpperCase(),
+    entityId: entity.Id.toUpperCase(),
+  };
+  const objects = object(result["Objects"]);
+  if (!Object.hasOwn(objects, config.objectName)) {
+    // The no-card setup deliberately stays within the documented free-tier three
+    // objects. Do not collect a payment if the first wallet has no free slot.
+    if (Object.keys(objects).length >= 3)
+      throw new AdminApiError(
+        503,
+        "A free PlayFab object slot is required for this Diamonds wallet.",
+      );
+    return { wallet: { ...identity, balance: 0, receipts: {} }, profileVersion };
+  }
+  const stored = object(objects[config.objectName]);
+  const data = object(stored["DataObject"]);
+  if (
+    stored["ObjectName"] !== config.objectName ||
+    Object.entries(identity).some(([key, value]) => data[key] !== value) ||
+    typeof data["balance"] !== "number" ||
+    !Number.isSafeInteger(data["balance"]) ||
+    data["balance"] < 0 ||
+    !data["receipts"] ||
+    typeof data["receipts"] !== "object" ||
+    Array.isArray(data["receipts"])
+  )
+    throw new WalletApiError("rejected");
+  const receipts: Record<string, ObjectReceipt> = {};
+  let total = 0;
+  for (const [key, raw] of Object.entries(object(data["receipts"]))) {
+    const receipt = object(raw);
+    if (
+      !/^order-[a-f0-9]{64}$/.test(key) ||
+      typeof receipt["fingerprint"] !== "string" ||
+      !/^[a-f0-9]{64}$/.test(receipt["fingerprint"]) ||
+      typeof receipt["amount"] !== "number" ||
+      !Number.isSafeInteger(receipt["amount"]) ||
+      receipt["amount"] < 1
+    )
+      throw new WalletApiError("rejected");
+    total += receipt["amount"];
+    if (!Number.isSafeInteger(total)) throw new WalletApiError("rejected");
+    receipts[key] = { fingerprint: receipt["fingerprint"], amount: receipt["amount"] };
+  }
+  // This phase has no spending: balance and all permanent purchase receipts must agree.
+  if (total !== data["balance"]) throw new WalletApiError("rejected");
+  return { wallet: { ...identity, balance: total, receipts }, profileVersion };
+}
+
+function objectReceiptExists(wallet: ObjectWallet, input: PremiumDiamondGrantInput): boolean {
+  const receipt = wallet.receipts[receiptStackId(input.orderId)];
+  if (!receipt) return false;
+  if (receipt.fingerprint !== grantFingerprint(input) || receipt.amount !== input.rewardAmount)
+    throw new AdminApiError(503, "The Diamonds purchase receipt requires review.");
+  return true;
+}
+
+function nextObjectWallet(
+  state: ObjectWallet,
+  input: PremiumDiamondGrantInput,
+  config: ObjectPremiumWalletConfig,
+): ObjectWallet {
+  const balance = state.balance + input.rewardAmount;
+  if (!Number.isSafeInteger(balance)) throw new WalletApiError("rejected");
+  const next: ObjectWallet = {
+    ...state,
+    balance,
+    receipts: {
+      ...state.receipts,
+      [receiptStackId(input.orderId)]: {
+        fingerprint: grantFingerprint(input),
+        amount: input.rewardAmount,
+      },
+    },
+  };
+  // Never prune receipts to fit: stop taking payments and retain replay protection.
+  if (Buffer.byteLength(JSON.stringify(next), "utf8") > config.maxBytes)
+    throw new AdminApiError(
+      503,
+      "This Diamonds wallet has reached its storage limit. Please contact support.",
+    );
+  return next;
+}
+
+/** Read-only preflight before creating the PayMongo checkout; never initializes or grants. */
+export async function assertDiamondCheckoutCapacity(
+  input: PremiumDiamondGrantInput,
+): Promise<void> {
+  validateGrant(input);
+  const config = validateWallet(input.wallet);
+  if (config.storage === "entity-objects") {
+    const state = await readObjectWallet(input.playFabId, input.entity, config);
+    if (!objectReceiptExists(state.wallet, input)) nextObjectWallet(state.wallet, input, config);
+  } else {
+    await readWallet(input.entity, config);
+  }
+}
+
+/** One version-checked JSON write stores BOTH balance and permanent receipt. */
+async function grantObjectDiamonds(
+  input: PremiumDiamondGrantInput,
+  config: ObjectPremiumWalletConfig,
+): Promise<PremiumDiamondGrantResult> {
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    try {
+      const state = await readObjectWallet(input.playFabId, input.entity, config);
+      if (objectReceiptExists(state.wallet, input))
+        return {
+          alreadyGranted: true,
+          balance: state.wallet.balance,
+          profileVersion: state.profileVersion,
+        };
+      const next = nextObjectWallet(state.wallet, input, config);
+      const result = await economy("Object/SetObjects", {
+        Entity: input.entity,
+        ExpectedProfileVersion: state.profileVersion,
+        Objects: [{ ObjectName: config.objectName, DataObject: next }],
+      });
+      if (
+        typeof result["ProfileVersion"] !== "number" ||
+        !Number.isSafeInteger(result["ProfileVersion"]) ||
+        result["ProfileVersion"] <= state.profileVersion ||
+        !Array.isArray(result["SetResults"]) ||
+        !result["SetResults"].some((raw) => {
+          const entry = object(raw);
+          return (
+            entry["ObjectName"] === config.objectName &&
+            (entry["SetResult"] === "Created" || entry["SetResult"] === "Updated")
+          );
+        })
+      )
+        throw new WalletApiError("retryable");
+      const confirmed = await readObjectWallet(input.playFabId, input.entity, config);
+      if (!objectReceiptExists(confirmed.wallet, input)) throw new WalletApiError("retryable");
+      return {
+        alreadyGranted: false,
+        balance: confirmed.wallet.balance,
+        profileVersion: confirmed.profileVersion,
+      };
+    } catch (error) {
+      if (!(error instanceof WalletApiError) || error.kind === "rejected") throw error;
+      // Unknown outcomes are never retried blindly. The next read checks the receipt;
+      // even a stale read cannot overwrite a newer profile because every write has CAS.
       if (attempt === RETRIES - 1) throw new AdminApiError(503, UNAVAILABLE);
       await new Promise((resolve) => setTimeout(resolve, 75 * (attempt + 1)));
     }

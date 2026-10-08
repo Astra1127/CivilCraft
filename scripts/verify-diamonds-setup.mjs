@@ -24,8 +24,19 @@ export const FORBIDDEN_PLAYER_WRITES = Object.freeze([
 
 /** Require unconditional, global client denials; ambiguous policy shapes do not qualify. */
 export function policyBlocksPlayerInventoryWrites(statements) {
+  return policyBlocksOperations(
+    statements,
+    FORBIDDEN_PLAYER_WRITES.map((name) => `Inventory/${name}`),
+  );
+}
+
+export function policyBlocksPlayerObjectWrites(statements) {
+  return policyBlocksOperations(statements, ["Object/SetObjects"]);
+}
+
+function policyBlocksOperations(statements, operations) {
   if (!Array.isArray(statements)) return false;
-  return FORBIDDEN_PLAYER_WRITES.every((operation) =>
+  return operations.every((operation) =>
     statements.some((statement) => {
       if (
         statement?.Effect !== "Deny" ||
@@ -38,7 +49,7 @@ export function policyBlocksPlayerInventoryWrites(statements) {
       const pattern = statement.Resource.split("*")
         .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
         .join(".*");
-      return new RegExp(`^${pattern}$`, "i").test(`pfrn:api--/Inventory/${operation}`);
+      return new RegExp(`^${pattern}$`, "i").test(`pfrn:api--/${operation}`);
     }),
   );
 }
@@ -122,28 +133,35 @@ export async function verifyDiamondSetup({
     { PolicyName: "ApiPolicy" },
     { "X-SecretKey": secret },
   );
-  if (!policyBlocksPlayerInventoryWrites(policy.Statements))
-    throw new Error(
-      "Player inventory write/delete/transfer policy is not unconditionally denied. No test grant was attempted.",
-    );
-  const diamond = object(
-    (await api("Catalog/GetItem", { Id: wallet.diamondItemId }, titleAuth)).Item,
-  );
-  const receipt = object(
-    (await api("Catalog/GetItem", { Id: wallet.receiptItemId }, titleAuth)).Item,
-  );
-  if (diamond.Id !== wallet.diamondItemId || diamond.Type !== "currency")
-    throw new Error("Published Diamonds item must have type currency.");
+  const objectStorage = wallet.storage === "entity-objects";
   if (
-    receipt.Id !== wallet.receiptItemId ||
-    receipt.Type !== "catalogItem" ||
-    receipt.IsHidden !== true ||
-    receipt.EndDate ||
-    object(receipt.PriceOptions).Prices?.length
+    !(objectStorage
+      ? policyBlocksPlayerObjectWrites(policy.Statements)
+      : policyBlocksPlayerInventoryWrites(policy.Statements))
   )
     throw new Error(
-      "Published receipt item must be hidden, noncurrency, unpriced, and nonexpiring.",
+      "Player wallet mutation policy is not unconditionally denied. No test grant was attempted.",
     );
+  if (!objectStorage) {
+    const diamond = object(
+      (await api("Catalog/GetItem", { Id: wallet.diamondItemId }, titleAuth)).Item,
+    );
+    const receipt = object(
+      (await api("Catalog/GetItem", { Id: wallet.receiptItemId }, titleAuth)).Item,
+    );
+    if (diamond.Id !== wallet.diamondItemId || diamond.Type !== "currency")
+      throw new Error("Published Diamonds item must have type currency.");
+    if (
+      receipt.Id !== wallet.receiptItemId ||
+      receipt.Type !== "catalogItem" ||
+      receipt.IsHidden !== true ||
+      receipt.EndDate ||
+      object(receipt.PriceOptions).Prices?.length
+    )
+      throw new Error(
+        "Published receipt item must be hidden, noncurrency, unpriced, and nonexpiring.",
+      );
+  }
   const player = await api(
     "Authentication/GetEntityToken",
     {},
@@ -157,14 +175,48 @@ export async function verifyDiamondSetup({
     throw new Error("Player token does not resolve to the selected test player's entity.");
   // This is a disposable noncurrency marker, never a real wallet/receipt deletion.
   // If client permissions are broken it may create one marker before stopping.
+  let profileVersion;
+  if (objectStorage) {
+    const empty = await api(
+      "Object/GetObjects",
+      { Entity: entity, EscapeObject: false },
+      titleAuth,
+    );
+    if (
+      object(empty.Entity).Type !== entity.Type ||
+      object(empty.Entity).Id?.toUpperCase() !== entity.Id.toUpperCase() ||
+      !Number.isSafeInteger(empty.ProfileVersion) ||
+      empty.ProfileVersion < 0 ||
+      !empty.Objects ||
+      typeof empty.Objects !== "object" ||
+      Array.isArray(empty.Objects) ||
+      Object.hasOwn(empty.Objects, wallet.objectName) ||
+      Object.keys(empty.Objects).length >= 3
+    )
+      throw new Error(
+        "Use a fresh disposable player with no Diamonds wallet and a valid profile version. Existing data is never removed.",
+      );
+    profileVersion = empty.ProfileVersion;
+  }
   const probe = await request(
-    "Inventory/AddInventoryItems",
-    {
-      Entity: entity,
-      CollectionId: "premium-wallet-verification",
-      Item: { Id: wallet.receiptItemId, StackId: "player-permission-probe" },
-      Amount: 1,
-    },
+    objectStorage ? "Object/SetObjects" : "Inventory/AddInventoryItems",
+    objectStorage
+      ? {
+          Entity: entity,
+          ExpectedProfileVersion: profileVersion,
+          Objects: [
+            {
+              ObjectName: "civilcraft.diamonds.permission-probe.v1",
+              DataObject: { verification: true },
+            },
+          ],
+        }
+      : {
+          Entity: entity,
+          CollectionId: "premium-wallet-verification",
+          Item: { Id: wallet.receiptItemId, StackId: "player-permission-probe" },
+          Amount: 1,
+        },
     { "X-EntityToken": player.EntityToken },
   );
   if (
@@ -179,15 +231,38 @@ export async function verifyDiamondSetup({
     throw new Error(
       "Player write was not explicitly denied. Stop and review client API policy; a noncurrency probe marker may exist.",
     );
-  const empty = await api(
-    "Inventory/GetInventoryItems",
-    { Entity: entity, CollectionId: wallet.collectionId, Count: 50 },
-    titleAuth,
-  );
-  if (!Array.isArray(empty.Items) || empty.Items.length !== 0 || empty.ContinuationToken)
-    throw new Error(
-      "Use a fresh disposable player with an empty premium-wallet. Existing wallet data is never removed by this script.",
+  if (objectStorage) {
+    // A future version cannot match. Check the real service enforces conditional writes
+    // BEFORE granting; a successful probe is a hard failure, never an attestation.
+    const cas = await request(
+      "Object/SetObjects",
+      {
+        Entity: entity,
+        ExpectedProfileVersion: profileVersion + 1,
+        Objects: [
+          { ObjectName: "civilcraft.diamonds.cas-probe.v1", DataObject: { verification: true } },
+        ],
+      },
+      titleAuth,
     );
+    if (
+      cas.ok ||
+      !["EntityProfileVersionMismatch", "ConcurrentEditError"].includes(String(cas.payload.error))
+    )
+      throw new Error(
+        "Conditional object writes were not verified. Keep checkout disabled; a nonmonetary probe object may exist.",
+      );
+  } else {
+    const empty = await api(
+      "Inventory/GetInventoryItems",
+      { Entity: entity, CollectionId: wallet.collectionId, Count: 50 },
+      titleAuth,
+    );
+    if (!Array.isArray(empty.Items) || empty.Items.length !== 0 || empty.ContinuationToken)
+      throw new Error(
+        "Use a fresh disposable player with an empty premium-wallet. Existing wallet data is never removed by this script.",
+      );
+  }
 
   const attestations = {
     PLAYFAB_DIAMONDS_ENABLED: "true",
@@ -225,6 +300,7 @@ export async function verifyDiamondSetup({
       );
     return {
       titleId: titleId.toUpperCase(),
+      storage: objectStorage ? "entity-objects" : "economy-v2",
       testPlayerId: testPlayerId.toUpperCase(),
       orderId,
       balance,

@@ -1,43 +1,84 @@
-# Diamonds — website-first test setup
+# Diamonds — PayMongo without a PlayFab card
 
-Diamonds is a separate premium wallet. Existing Coin packs, legacy PlayFab `CO`, and game-earned Gold are not converted. The first website release offers 500 Diamonds / ₱50, 1,000 / ₱95, and 2,500 / ₱220 alongside existing Coins. PayMongo remains in simulation/test mode. Unity browser linking and spending are not implemented in this phase.
+Diamonds uses regular **PlayFab Entity Objects**, not the Economy v2 catalog. No catalog item, legacy DI currency, or PlayFab billing-card setup is needed for this backend. PayMongo still handles simulated checkout; PlayFab only stores the receiving player's wallet. The title's actual free-tier access and permissions must pass the verification below before checkout is enabled.
 
-## Wallet and grant safety
+Existing Coins (`CO`), Coin packages, and game-earned Gold are untouched. The three test packs remain 500 Diamonds / ₱50, 1,000 / ₱95, and 2,500 / ₱220. Website design, Coins/Diamonds tabs, `/shop?currency=diamonds` login routing, and independent validated browser sessions are unchanged. This phase does not implement Unity linking, spending/conversion, live payments, or automatic return to the game.
 
-Use two **published Economy v2** catalog items in the same Civil Craft PlayFab title:
+## What changed
 
-- Diamonds: type `currency`, no expiry; record its actual item UUID as `PLAYFAB_DIAMONDS_ITEM_ID`.
-- Purchase receipt: type `catalogItem`, hidden, no prices, no expiry; record its distinct UUID as `PLAYFAB_DIAMONDS_RECEIPT_ITEM_ID`. Do not include this item in purchasable bundles or marketplace mappings.
+Each server-resolved `title_player_account` has a dedicated object named `civilcraft.premium-wallet.v1`. It stores `DI`, the balance, account identity, and a permanent receipt ledger. It is separate from local/cloud game save files.
 
-Each player's `premium-wallet` collection stores Diamonds in the explicit `default` stack and permanent receipts in `order-<sha256(orderId)>` stacks. A receipt includes a fingerprint of the exact player, entity, order, currency configuration, and reward. An empty wallet without an ETag is initialized using only a create-only **nonmonetary** `wallet-initialized-v1` marker. No monetary operation runs without a valid ETag.
+The server reads `Object/GetObjects`, then saves the balance **and** receipt together through one `Object/SetObjects` request with `ExpectedProfileVersion`. A version mismatch, concurrent edit, or uncertain timeout triggers a receipt reread before retry. There is no unconditional monetary write, separate receipt step, or fixed idempotency ID. First-wallet creation is the same single conditional write, including profile version zero; it does not require an Economy bootstrap marker. [Conditional writes](https://learn.microsoft.com/en-us/rest/api/playfab/data/object/set-objects?view=playfab-rest).
 
-`ExecuteInventoryOperations` atomically adds the receipt and Diamonds. On conflict or uncertain timeout the server rereads the receipt before retrying. A receipt can also repair payment status after credit succeeded but order-status persistence failed. No fixed `IdempotencyId` is combined with the ETag loop: the receipt provides permanent replay protection beyond the provider's 14-day idempotency window. [Atomic operations](https://learn.microsoft.com/en-us/rest/api/playfab/economy/inventory/execute-inventory-operations?view=playfab-rest), [ETags and retry semantics](https://learn.microsoft.com/en-us/xbox/playfab/economy-monetization/economy-v2/tutorials/etags-and-concurrency-control).
+A hashed order key and immutable grant fingerprint prevent repeated credit, including replay beyond 14 days. Receipt checks repair failed order-status persistence without granting again. Invalid identity, corrupted balance/receipts, missing profile versions, and backend failures fail closed. Unavailable balances are shown as unavailable, never fabricated zeros.
 
-Never expire, spend, transfer, delete, or clean up purchase receipts or this collection. Hidden is presentation, not access control. The wallet is server-authoritative, not part of the game save blob. Do not grant Diamonds using legacy `AddUserVirtualCurrency` or store a client-editable second balance.
+The receiving account, reward, price, and wallet provider remain server-authenticated, immutable order snapshots. Checkout accepts only `productId`. Signed test-mode payment evidence must match the stored checkout, paid payment, amount, PHP currency, and metadata; incomplete evidence is retrieved server-side. Visiting a success URL cannot credit currency.
 
-## Player write restrictions
+## Step 1 — server environment
 
-Before enabling checkout, inspect the title's current API policy and append client denials; **do not replace its existing statements** or disable unrelated Client/legacy APIs. For this website-only phase, deny these Economy v2 inventory APIs to player callers:
+Keep checkout disabled while configuring and verifying:
 
-`AddInventoryItems`, `SubtractInventoryItems`, `UpdateInventoryItems`, `DeleteInventoryItems`, `DeleteInventoryCollection`, `TransferInventoryItems`, `ExecuteInventoryOperations`, `ExecuteTransferOperations`, `PurchaseInventoryItems`.
+```dotenv
+PLAYFAB_DIAMONDS_STORAGE=entity-objects
+PLAYFAB_DIAMONDS_ENABLED=false
+PLAYFAB_DIAMONDS_ITEM_ID=
+PLAYFAB_DIAMONDS_RECEIPT_ITEM_ID=
+PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED=false
+PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED=false
+PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID=
+PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256=
+```
 
-Each denial must be unconditional with `Action: "*"`, `Effect: "Deny"`, `Principal: "*"`, and resource `pfrn:api--/Inventory/<APIName>`. A client denial of `pfrn:api--/Inventory/*` is also recognized by verification, but prevents direct player reads too; website reads use the server title token. No player-side Economy v2 mutations are needed by the existing game in this phase. Verify that title-authenticated operations still work. [API policies](https://learn.microsoft.com/en-us/gaming/playfab/live-service-management/gamemanager/api-access-page-doc), [Economy settings](https://learn.microsoft.com/en-us/gaming/playfab/economy-monetization/economy-v2/settings).
+Keep the existing `VITE_PLAYFAB_TITLE_ID`, server-only `PLAYFAB_SECRET_KEY`, `PAYMONGO_SECRET_KEY=sk_test_...`, `PAYMONGO_WEBHOOK_SECRET`, and explicit `PUBLIC_APP_URL` configuration. Production return URLs must use HTTPS. No secret or verification ticket belongs in `VITE_*`, browser code, git, or a screenshot.
 
-The implementation does not automatically alter catalog or policy. Policy changes affect the selected PlayFab title immediately and must be reviewed before applying them. Preserve Coins/Gold behavior and all current game authentication.
+If Economy item IDs were previously configured, review the old wallet/orders first. The new provider deliberately rejects those IDs instead of showing a misleading empty balance. See the legacy section below before clearing them.
 
-## Verify the actual title before enabling
+## Step 2 — deny player object mutations
 
-The code is disabled by default. Set server-side catalog IDs and retain `PLAYFAB_DIAMONDS_ENABLED=false`. A title secret is server-only; PayMongo must use `sk_test_...`. Never place either secret in `VITE_*` variables or commit a real `.env` file.
+In the Civil Craft PlayFab title:
 
-Use a fresh, **disposable PlayFab test player** with an empty `premium-wallet`. Set `PLAYFAB_DIAMONDS_VERIFICATION_PLAYER_TICKET` to that player's current session ticket in your local secret environment. The ticket must authenticate to the explicitly selected player.
+1. Open **Title settings → API Access Policy**.
+2. Find the **Object** category (or search `Object/SetObjects`).
+3. Deny/uncheck **SetObjects** and save only that change.
+4. Preserve all existing rules; do not reset defaults or replace the entire policy.
+5. Leave `Object/GetObjects` and the game's **File** APIs permitted. Cloud saves/portraits currently use Files, not Object/SetObjects.
+
+The required unconditional player denial is:
+
+```json
+{
+  "Resource": "pfrn:api--/Object/SetObjects",
+  "Action": "*",
+  "Effect": "Deny",
+  "Principal": "*"
+}
+```
+
+This blocks both client object writes and object deletion. The website uses server-held title credentials. Verification checks that title writes still work and the player's own token is actually denied. If you use a JSON editor, **append** this statement to the existing list rather than pasting it as the complete policy. [API Access Policy instructions](https://learn.microsoft.com/en-us/xbox/playfab/live-service-management/gamemanager/api-access-page-doc).
+
+No PlayFab catalog, billing, policy, or real-account changes have been applied automatically by this revision.
+
+## Step 3 — verify the real test title
+
+Use a fresh disposable test player, not your own progression account. It must have no premium-wallet object and at least one free Entity Object slot. Set `PLAYFAB_DIAMONDS_VERIFICATION_PLAYER_TICKET` in your private local environment to that player's current session ticket. The script validates it against the explicitly supplied PlayFab ID.
+
+From the website directory, using Node 22.18 or newer:
 
 ```powershell
 node --env-file=.env scripts/verify-diamonds-setup.mjs --test-player <TEST_PLAYFAB_ID> --confirm-test-writes
 ```
 
-This explicit test performs read-only account/catalog/policy inspections, verifies that a player-token Add is denied, then runs concurrent/repeated **one-Diamond** grants to the selected disposable player's `premium-wallet`. It leaves exactly one test Diamond and a permanent receipt. It does not remove or reset data, change catalog or policy, or write environment files. Its rejected permission probe targets only `premium-wallet-verification`; if client permissions are broken it could leave one noncurrency marker there before stopping. No real payment or PayMongo checkout occurs.
+The explicit consent flag is required. The script:
 
-Only after **all checks pass**, review and copy its nonsecret output into the deployment environment:
+- Inspects the current policy and account mapping.
+- Tests a player-token nonmonetary write, requiring an explicit authorization denial.
+- Tests an intentionally mismatched profile version, requiring a concurrency rejection.
+- Runs concurrent/repeated one-Diamond grants and confirms exactly one Diamond and one permanent receipt.
+- Restores its process environment afterward; it never edits environment files or deployed settings.
+
+It leaves one test Diamond on the disposable account, with its permanent receipt. It makes no PayMongo purchase, deletes no data, and changes no policy. If permissions/CAS are unexpectedly broken, a nonmonetary permission/CAS probe object may be left on the disposable account before the script stops. Never use a valuable player for this check.
+
+Only after **all real-title checks pass**, review and set the script's nonsecret deployment outputs:
 
 ```dotenv
 PLAYFAB_DIAMONDS_ENABLED=true
@@ -47,18 +88,30 @@ PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID=<verified title>
 PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256=<verified configuration fingerprint>
 ```
 
-These values are an operator attestation of the actual checks, not credentials or a replacement for checking policy. The fingerprint binds the approved title, collection, and item IDs; changing them requires new verification. Remove the verification ticket afterward. Never enable this from mocked tests alone. No real-title verification has been performed by the code-generation workflow.
+Keep `PLAYFAB_DIAMONDS_STORAGE=entity-objects` and both item-ID values empty. The legacy bootstrap flag now attests verified first-object creation, not a catalog bootstrap. The fingerprint binds the exact title and wallet provider/configuration; changing providers requires new verification. Remove the verification ticket afterward. **Mocked tests are not a substitute for this real-title check.**
 
-## Acceptance and operation
+## Step 4 — test website purchases
 
-In the website's authenticated Product Administration, use **Add Missing Defaults** to add the three Diamond packages. This explicit action also adds any missing legacy Coin templates, but never replaces existing, disabled, modified, or malformed product records. Public shop reads never seed products or substitute active defaults during an outage. Review the stored packages before enabling checkout.
+In authenticated Product Administration, use **Add Missing Defaults** only if the Diamond packs are missing. This preserves existing/disabled/edited products; public shop reads never create or reactivate packages.
 
-Configure server-only `PAYMONGO_SECRET_KEY=sk_test_...`, `PAYMONGO_WEBHOOK_SECRET`, and an explicit `PUBLIC_APP_URL` (or `PUBLIC_SITE_URL` / `SITE_URL`). Production return URLs must use HTTPS. Configure the test-mode webhook at `/api/webhooks/paymongo`; success/cancel page visits cannot grant currency. Browser sessions are validated independently of Unity login. Do not enable live payments.
+Use PayMongo test keys and configure the test webhook at `/api/webhooks/paymongo`. Test logged-out, logged-in, expired-session, and wrong-account routing. Show/confirm the receiving account before purchase. Simulate each Diamond pack, confirm verified fulfillment, and inspect the player's object under **Players → selected test player → Objects**. Confirm Coins and game Gold do not change.
 
-Run mocked tests with `npm run test:currencies`. They cover first-wallet initialization, concurrent duplicate/distinct orders, stale reads, uncertain timeout after commit, receipt/config tampering, private errors, authentication, expired-session routing, catalog administration, Coin regressions, and disabled/unverified setup. They make no external calls.
+Test cancellation, delayed confirmation, duplicate notifications, account switching, and failed status saves. Keep live payments disabled. Unity linking/display is a later phase.
 
-Then simulate a test PayMongo purchase from the website and verify that only the authenticated player's Diamonds balance changes; Coins remain unchanged. Check cancellation, delayed webhook confirmation, account switching, and replay. A browser redirect alone must never grant currency.
+## Capacity and operational boundaries
 
-Each receipt consumes an inventory stack; PlayFab's collection limit is 10,000 stacks. Do not delete old receipts to free space. At capacity, fulfillment must remain pending/retryable for support rather than granting without a receipt. A future archival/migration design must preserve deduplication before handling this limit.
+Microsoft documents a free-tier allowance of up to **three Entity Objects per entity**. This wallet uses one; checkout is blocked before a first purchase if all three slots are already occupied. Existing unrelated objects and Files are never overwritten or removed. [Entity Objects](https://learn.microsoft.com/en-us/xbox/playfab/live-service-management/game-configuration/entities/entity-objects).
 
-If configuration is rotated, captured historical wallet snapshots fail closed rather than silently crediting new item IDs. Restore the previously verified configuration or implement a reviewed migration to reconcile those orders. Disabling checkout should be the first step before any catalog, policy, or wallet configuration change.
+The implementation also uses a conservative **8 KiB application cap** for this wallet's JSON. This is not a claim about PlayFab's actual byte quota or an unlimited production wallet. Permanent receipt storage grows with each purchase; roughly a few dozen lifetime receipts fit, depending on identity/amount lengths. New checkouts are rejected at the cap. Concurrent checkouts near capacity can still leave a paid order awaiting support; fulfillment must retain its receipts and remain pending/retryable, never grant without a receipt.
+
+For higher purchase volume, use a reviewed transactional database or wallet migration before increasing capacity. Never expire, spend, prune, or delete receipts to reclaim space; replay protection must survive any migration. Monitor the title's actual service limits. Additional service usage can have platform quotas/costs even though this implementation does not use the card-gated Economy catalog.
+
+## Legacy Economy v2 wallets
+
+The original Economy v2 implementation remains available with `PLAYFAB_DIAMONDS_STORAGE=economy-v2` and its published Diamond/hidden-receipt item IDs. Existing order snapshots without a provider continue to mean Economy v2. Their old verification fingerprint format is preserved.
+
+Do not silently switch a deployed wallet containing money or pending orders to the new object provider. Disable checkout, reconcile all old payments, preserve receipts/balances, and use an explicitly reviewed migration. This revision does not migrate existing Diamond funds or reroute historical orders. Retaining the old provider requires its original catalog setup and unconditional denials of mutating Inventory APIs; the verifier continues supporting those checks.
+
+## Automated checks
+
+`npm run test:currencies` uses mocked services only. It covers both providers, all three Diamond packs, legacy Coin checkout, disabled/unverified setup, server reward/owner enforcement, payment evidence checks, first-object creation, duplicate/concurrent grants, stale reads, timeout after commit, replay beyond 14 days, capacity, receipt corruption, permission denial, CAS enforcement, status repair, and existing shop routing/layout regressions.

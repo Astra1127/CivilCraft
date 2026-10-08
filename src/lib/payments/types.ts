@@ -7,12 +7,20 @@ export interface CurrencyReward {
   rewardAmount: number;
 }
 
-export interface PremiumWalletSnapshot {
-  entity: { Id: string; Type: "title_player_account" };
-  collectionId: "premium-wallet";
-  diamondItemId: string;
-  receiptItemId: string;
-}
+export type PremiumWalletSnapshot = { entity: { Id: string; Type: "title_player_account" } } & (
+  | {
+      storage: "entity-objects";
+      collectionId: "premium-wallet";
+      objectName: "civilcraft.premium-wallet.v1";
+      maxBytes: 8192;
+    }
+  | {
+      storage?: "economy-v2";
+      collectionId: "premium-wallet";
+      diamondItemId: string;
+      receiptItemId: string;
+    }
+);
 
 export interface PaymentOrder {
   orderId: string;
