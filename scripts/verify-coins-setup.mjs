@@ -15,14 +15,12 @@ import {
   grantCoinsOnce,
 } from "../src/lib/payments/coin-receipts.server.ts";
 import { policyBlocksPlayerObjectWrites } from "./verify-diamonds-setup.mjs";
+import {
+  describeVerificationResponse,
+  isPlayerWriteDenial,
+} from "./playfab-verification-response.mjs";
 
 const COIN_OBJECT = "civilcraft.coin-purchases.v1";
-const permittedDenials = new Set([
-  "NotAuthorized",
-  "APINotEnabledForGameClient",
-  "ApiNotEnabledForGameClient",
-  "APIRequestNotAllowed",
-]);
 
 /** Opt-in test-account check; never enables deployed checkout or alters player policy. */
 export async function verifyCoinSetup({ testPlayerId, playerTicket, confirmTestWrites = false }) {
@@ -72,7 +70,7 @@ export async function verifyCoinSetup({ testPlayerId, playerTicket, confirmTestW
         signal: AbortSignal.timeout(12_000),
       });
       const payload = object(await response.json());
-      return { ok: response.ok && payload.code === 200, payload };
+      return { ok: response.ok && payload.code === 200, status: response.status, payload };
     } catch {
       throw new Error(
         `Verification connection unavailable (${path}). Keep Coin checkout disabled.`,
@@ -83,7 +81,7 @@ export async function verifyCoinSetup({ testPlayerId, playerTicket, confirmTestW
     const response = await request(path, body, authentication);
     if (!response.ok)
       throw new Error(
-        `Verification could not complete ${path}. No private upstream response was printed.`,
+        `Verification could not complete ${path} (${describeVerificationResponse(response)}). No private upstream response was printed.`,
       );
     return object(response.payload.data);
   };
@@ -175,9 +173,9 @@ export async function verifyCoinSetup({ testPlayerId, playerTicket, confirmTestW
     },
     { "X-EntityToken": player.EntityToken },
   );
-  if (probe.ok || !permittedDenials.has(String(probe.payload.error)))
+  if (!isPlayerWriteDenial(probe))
     throw new Error(
-      "Player object write was not explicitly denied. No Coin grant was attempted; a nonmonetary probe marker may exist.",
+      `Player object write was not explicitly denied (${describeVerificationResponse(probe)}). No Coin grant was attempted; a nonmonetary probe marker may exist.`,
     );
   // The shared transport sanitizes errors. Inspect this one raw, nonmonetary
   // mismatching-version probe so only an explicit concurrency denial qualifies.
@@ -205,7 +203,7 @@ export async function verifyCoinSetup({ testPlayerId, playerTicket, confirmTestW
     !["EntityProfileVersionMismatch", "ConcurrentEditError"].includes(String(cas.payload.error))
   )
     throw new Error(
-      "Conditional Coin receipt writes were not explicitly rejected. Keep Coin checkout disabled.",
+      `Conditional Coin receipt writes were not explicitly rejected (${describeVerificationResponse(cas)}). Keep Coin checkout disabled.`,
     );
   const balances = async () => {
     const inventory = await playFabAdmin("Server/GetUserInventory", { PlayFabId: testPlayerId });

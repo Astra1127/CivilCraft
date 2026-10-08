@@ -22,7 +22,11 @@ import {
 } from "./fulfillment.server.ts";
 import { authenticatePaymentPlayer } from "./player-auth.server.ts";
 import type { PaymentOrder } from "./types.ts";
-import { assertCoinCheckoutReady } from "./coin-receipts.server.ts";
+import {
+  assertClassicCurrencyConfigured,
+  assertCoinCheckoutReady,
+  coinReceiptSnapshot,
+} from "./coin-receipts.server.ts";
 
 function jsonResponse(data: unknown, status = 200) {
   return Response.json(data, {
@@ -98,6 +102,11 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
     const { playFabId } = await authenticatePaymentPlayer(request);
     if (path === "/api/player/currencies") {
       const readCoins = async () => {
+        if (process.env["COIN_RECEIPTS_STORAGE"]?.trim() === "postgres") {
+          if (getCoinsCurrencyCode() !== "CO")
+            throw new AdminApiError(503, "Coin balance is unavailable.");
+          await assertClassicCurrencyConfigured();
+        }
         const inventory = await playFabAdmin("Server/GetUserInventory", { PlayFabId: playFabId });
         const raw = inventory["VirtualCurrency"];
         if (!raw || typeof raw !== "object" || Array.isArray(raw))
@@ -139,7 +148,10 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       const reward = normalizeProductReward(product);
       const returnOrigin = configuredReturnOrigin();
       const orderId = generateOrderId(reward.rewardCurrency);
+      if (await getOrder(orderId))
+        throw new AdminApiError(503, "Checkout order ID is already in use. Please try again.");
       let premiumWallet: PaymentOrder["premiumWallet"];
+      let coinReceipt: PaymentOrder["coinReceipt"];
       if (reward.rewardCurrency === "DI") {
         const wallet = requireDiamondCheckoutReady();
         const entity = await resolvePremiumEntity(playFabId);
@@ -153,11 +165,13 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         });
         premiumWallet = { ...wallet, entity };
       } else {
+        coinReceipt = coinReceiptSnapshot();
         await assertCoinCheckoutReady({
           orderId,
           playFabId,
           currencyCode: getCoinsCurrencyCode(),
           rewardAmount: reward.rewardAmount,
+          ...(coinReceipt ? { receipt: coinReceipt } : {}),
         });
       }
       const order: PaymentOrder = {
@@ -169,7 +183,11 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         ...reward,
         expectedCoins: reward.rewardCurrency === "CO" ? reward.rewardAmount : 0,
         ...(reward.rewardCurrency === "CO"
-          ? { coinCurrencyCode: getCoinsCurrencyCode(), coinReceiptVersion: 1 }
+          ? {
+              coinCurrencyCode: getCoinsCurrencyCode(),
+              coinReceiptVersion: coinReceipt ? 2 : 1,
+              ...(coinReceipt ? { coinReceipt } : {}),
+            }
           : { premiumWallet }),
         PayMongoCheckoutSessionId: null,
         PayMongoReferenceNumber: orderId,

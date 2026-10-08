@@ -1,5 +1,17 @@
 import crypto from "node:crypto";
 import { AdminApiError, adminGameConfig, object, playFabAdmin } from "./admin-client.server.ts";
+import {
+  currencyDatabaseConfig,
+  currencyDatabaseVerificationFingerprint,
+  databaseDiamondBalance,
+  databaseReceiptStatus,
+  grantDatabaseDiamonds,
+  requireCurrencyDatabaseReady,
+} from "../payments/currency-database.server.ts";
+import type {
+  DatabaseGrantInput,
+  DatabaseWalletConfig,
+} from "../payments/currency-database.server.ts";
 
 export interface PremiumEntity {
   readonly Id: string;
@@ -18,7 +30,8 @@ export interface ObjectPremiumWalletConfig {
   /** Application safety cap, not a claim about the title's service quota. */
   readonly maxBytes: 8192;
 }
-export type PremiumWalletConfig = InventoryPremiumWalletConfig | ObjectPremiumWalletConfig;
+export type PremiumWalletConfig =
+  InventoryPremiumWalletConfig | ObjectPremiumWalletConfig | DatabaseWalletConfig;
 export interface PremiumDiamondGrantInput {
   readonly orderId: string;
   readonly playFabId: string;
@@ -54,6 +67,22 @@ class WalletApiError extends AdminApiError {
 }
 
 function validateWallet(wallet: PremiumWalletConfig): PremiumWalletConfig {
+  if (wallet?.storage === "postgres") {
+    if (
+      wallet.collectionId !== "premium-wallet" ||
+      wallet.schemaVersion !== 1 ||
+      !UUID.test(wallet.databaseId) ||
+      !/^[a-f0-9]{64}$/.test(wallet.targetId)
+    )
+      throw new AdminApiError(503, "Diamonds wallet configuration is unavailable.");
+    return Object.freeze({
+      storage: "postgres",
+      collectionId: "premium-wallet",
+      databaseId: wallet.databaseId.toLowerCase(),
+      targetId: wallet.targetId,
+      schemaVersion: 1,
+    });
+  }
   if (wallet?.storage === "entity-objects") {
     if (
       wallet.collectionId !== "premium-wallet" ||
@@ -85,6 +114,7 @@ function validateWallet(wallet: PremiumWalletConfig): PremiumWalletConfig {
 
 export function premiumWalletConfig(): PremiumWalletConfig {
   const storage = (process.env["PLAYFAB_DIAMONDS_STORAGE"] || "entity-objects").trim();
+  if (storage === "postgres") return validateWallet(currencyDatabaseConfig());
   if (storage === "entity-objects") {
     // Never turn a configured historic Economy wallet into an apparently empty wallet.
     if (
@@ -112,6 +142,7 @@ export function premiumWalletConfig(): PremiumWalletConfig {
 export function premiumWalletVerificationFingerprint(): string {
   const { titleId } = adminGameConfig();
   const wallet = premiumWalletConfig();
+  if (wallet.storage === "postgres") return currencyDatabaseVerificationFingerprint();
   return crypto
     .createHash("sha256")
     .update(
@@ -134,6 +165,7 @@ export function requireDiamondCheckoutReady(): PremiumWalletConfig {
   if (!enabled("PLAYFAB_DIAMONDS_ENABLED") || !secret)
     throw new AdminApiError(503, "Diamonds checkout is not available yet.");
   const wallet = premiumWalletConfig();
+  if (wallet.storage === "postgres") return requireCurrencyDatabaseReady();
   if (
     !enabled("PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED") ||
     !enabled("PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED") ||
@@ -309,7 +341,7 @@ function grantFingerprint(input: PremiumDiamondGrantInput): string {
     .digest("hex");
 }
 function validateGrant(input: PremiumDiamondGrantInput): void {
-  const current = requireDiamondCheckoutReady();
+  const current = validateWallet(requireDiamondCheckoutReady());
   const snapshot = validateWallet(input.wallet);
   if (
     !/^[a-f0-9]{1,32}$/i.test(input.playFabId) ||
@@ -384,6 +416,7 @@ function receiptExists(state: WalletRead, input: PremiumDiamondGrantInput): bool
 export async function getDiamondBalance(playFabId: string): Promise<number> {
   const wallet = requireDiamondCheckoutReady();
   const entity = await resolvePremiumEntity(playFabId);
+  if (wallet.storage === "postgres") return databaseDiamondBalance(playFabId, entity);
   if (wallet.storage === "entity-objects")
     return (await readObjectWallet(playFabId, entity, wallet)).wallet.balance;
   return (await readWallet(entity, wallet)).balance;
@@ -393,6 +426,8 @@ export async function getDiamondBalance(playFabId: string): Promise<number> {
 export async function hasDiamondReceipt(input: PremiumDiamondGrantInput): Promise<boolean> {
   validateGrant(input);
   const wallet = validateWallet(input.wallet);
+  if (wallet.storage === "postgres")
+    return (await databaseReceiptStatus(databaseGrantInput(input, wallet))) === "granted";
   if (wallet.storage === "entity-objects")
     return objectReceiptExists(
       (await readObjectWallet(input.playFabId, input.entity, wallet)).wallet,
@@ -410,6 +445,8 @@ export async function grantDiamonds(
 ): Promise<PremiumDiamondGrantResult> {
   validateGrant(input);
   const wallet = validateWallet(input.wallet);
+  if (wallet.storage === "postgres")
+    return grantDatabaseDiamonds(databaseGrantInput(input, wallet));
   if (wallet.storage === "entity-objects") return grantObjectDiamonds(input, wallet);
   const stackId = receiptStackId(input.orderId);
   let initialized = false;
@@ -652,6 +689,15 @@ export async function assertDiamondCheckoutCapacity(
 ): Promise<void> {
   validateGrant(input);
   const config = validateWallet(input.wallet);
+  if (config.storage === "postgres") {
+    // A verified, healthy database and a valid account identity are required before payment.
+    const balance = await databaseDiamondBalance(input.playFabId, input.entity);
+    if (!Number.isSafeInteger(balance + input.rewardAmount))
+      throw new AdminApiError(503, UNAVAILABLE);
+    if ((await databaseReceiptStatus(databaseGrantInput(input, config))) !== "absent")
+      throw new AdminApiError(503, "This Diamond order ID already has a receipt.");
+    return;
+  }
   if (config.storage === "entity-objects") {
     const state = await readObjectWallet(input.playFabId, input.entity, config);
     if (!objectReceiptExists(state.wallet, input))
@@ -659,6 +705,22 @@ export async function assertDiamondCheckoutCapacity(
   } else {
     await readWallet(input.entity, config);
   }
+}
+
+function databaseGrantInput(
+  input: PremiumDiamondGrantInput,
+  wallet: DatabaseWalletConfig,
+): DatabaseGrantInput {
+  return {
+    orderId: input.orderId,
+    playFabId: input.playFabId,
+    entity: input.entity,
+    currency: "DI",
+    amount: input.rewardAmount,
+    databaseId: wallet.databaseId,
+    targetId: wallet.targetId,
+    schemaVersion: wallet.schemaVersion,
+  };
 }
 
 /** One version-checked JSON write stores BOTH balance and permanent receipt. */

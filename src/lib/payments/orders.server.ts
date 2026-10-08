@@ -7,7 +7,7 @@ const EVENT_PREFIX = "civilcraft.website.v1.payment-events.";
 
 export function generateOrderId(rewardCurrency = "CO"): string {
   const ts = Date.now().toString(36).toUpperCase();
-  const rand = crypto.randomBytes(3).toString("hex").toUpperCase();
+  const rand = crypto.randomBytes(16).toString("hex").toUpperCase();
   return `CC-${rewardCurrency === "DI" ? "DIAMONDS" : "COINS"}-${ts}-${rand}`;
 }
 
@@ -61,6 +61,7 @@ export async function updateOrderStatus(
     premiumWallet: existing.premiumWallet,
     coinCurrencyCode: existing.coinCurrencyCode,
     coinReceiptVersion: existing.coinReceiptVersion,
+    coinReceipt: existing.coinReceipt,
     PayMongoReferenceNumber: existing.PayMongoReferenceNumber,
     PayMongoCheckoutSessionId:
       existing.PayMongoCheckoutSessionId || updates.PayMongoCheckoutSessionId || null,

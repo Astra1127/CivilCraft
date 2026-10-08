@@ -47,18 +47,26 @@ export function diamondGrantInput(order: PaymentOrder) {
     playFabId: order.playFabId,
     entity: snapshot.entity,
     wallet:
-      snapshot.storage === "entity-objects"
+      snapshot.storage === "postgres"
         ? {
             storage: snapshot.storage,
             collectionId: snapshot.collectionId,
-            objectName: snapshot.objectName,
-            maxBytes: snapshot.maxBytes,
+            databaseId: snapshot.databaseId,
+            targetId: snapshot.targetId,
+            schemaVersion: snapshot.schemaVersion,
           }
-        : {
-            collectionId: snapshot.collectionId,
-            diamondItemId: snapshot.diamondItemId,
-            receiptItemId: snapshot.receiptItemId,
-          },
+        : snapshot.storage === "entity-objects"
+          ? {
+              storage: snapshot.storage,
+              collectionId: snapshot.collectionId,
+              objectName: snapshot.objectName,
+              maxBytes: snapshot.maxBytes,
+            }
+          : {
+              collectionId: snapshot.collectionId,
+              diamondItemId: snapshot.diamondItemId,
+              receiptItemId: snapshot.receiptItemId,
+            },
     rewardAmount: reward.rewardAmount,
   };
 }
@@ -85,19 +93,25 @@ export async function repairDiamondOrder(order: PaymentOrder): Promise<PaymentOr
 
 export function coinGrantInput(order: PaymentOrder) {
   const reward = normalizeOrderReward(order);
-  if (reward.rewardCurrency !== "CO" || order.coinReceiptVersion !== 1)
+  if (
+    reward.rewardCurrency !== "CO" ||
+    ![1, 2].includes(order.coinReceiptVersion ?? 0) ||
+    (order.coinReceiptVersion === 1 && order.coinReceipt !== undefined) ||
+    (order.coinReceiptVersion === 2 && order.coinReceipt?.storage !== "postgres")
+  )
     throw new CoinGrantReviewRequired();
   return {
     orderId: order.orderId,
     playFabId: order.playFabId,
     currencyCode: order.coinCurrencyCode || getCoinsCurrencyCode(),
     rewardAmount: reward.rewardAmount,
+    ...(order.coinReceiptVersion === 2 ? { receipt: order.coinReceipt! } : {}),
   };
 }
 
 export async function repairPaymentOrder(order: PaymentOrder): Promise<PaymentOrder> {
   if (normalizeOrderReward(order).rewardCurrency === "DI") return repairDiamondOrder(order);
-  if (order.coinReceiptVersion !== 1) {
+  if (![1, 2].includes(order.coinReceiptVersion ?? 0)) {
     // Historic fulfilled orders/history remain unchanged. Unfulfilled legacy orders
     // may already have been credited by the old code and cannot be granted safely.
     return order.status === "fulfilled" || order.status === "pending"
@@ -244,7 +258,7 @@ export async function processPayMongoWebhook(
       await markEventProcessed(event["id"] as string, order.orderId);
       return { status: 200, body: { success: true, idempotent: true, orderId: order.orderId } };
     }
-    if (reward.rewardCurrency === "CO" && order.coinReceiptVersion !== 1)
+    if (reward.rewardCurrency === "CO" && ![1, 2].includes(order.coinReceiptVersion ?? 0))
       throw new CoinGrantReviewRequired();
     const paidAt = order.paidAt || new Date().toISOString();
     await updateOrderStatus(order.orderId, {

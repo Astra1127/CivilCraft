@@ -61,6 +61,9 @@ let grants;
 let coinWrites;
 let policy;
 let playerWriteAllowed;
+let playerWriteReply;
+let authenticationReply;
+let casReply;
 let wrongPlayer;
 let expired;
 let wrongEntity;
@@ -84,6 +87,9 @@ beforeEach(() => {
   coinWrites = 0;
   policy = policyStatements();
   playerWriteAllowed = false;
+  playerWriteReply = null;
+  authenticationReply = null;
+  casReply = null;
   wrongPlayer = false;
   expired = false;
   wrongEntity = false;
@@ -101,10 +107,13 @@ beforeEach(() => {
     calls.push({ path, body, headers });
     if (networkFailure) throw new Error("private-payment-secret");
     if (path === "/Server/AuthenticateSessionTicket")
-      return response({
-        IsSessionTicketExpired: expired,
-        UserInfo: { PlayFabId: wrongPlayer ? "BAD" : PLAYER },
-      });
+      return (
+        authenticationReply ??
+        response({
+          IsSessionTicketExpired: expired,
+          UserInfo: { PlayFabId: wrongPlayer ? "BAD" : PLAYER },
+        })
+      );
     if (path === "/Admin/GetUserAccountInfo")
       return response({
         UserInfo: { PlayFabId: PLAYER, TitleInfo: { TitlePlayerAccount: ENTITY } },
@@ -139,9 +148,9 @@ beforeEach(() => {
         "all object mutations must carry CAS",
       );
       if (headers.get("X-EntityToken") === "player-token" && !playerWriteAllowed)
-        return failure("APINotEnabledForGameClient", 403);
+        return playerWriteReply ?? failure("APINotEnabledForGameClient", 403);
       if (!ignoreCas && body.ExpectedProfileVersion !== profileVersion)
-        return failure("EntityProfileVersionMismatch");
+        return casReply ?? failure("EntityProfileVersionMismatch");
       if (
         failFinalReceipt &&
         grants &&
@@ -240,6 +249,130 @@ test("missing policy or an actually permitted player write blocks the monetary g
   policy = policyStatements();
   playerWriteAllowed = true;
   await assert.rejects(verifyCoinSetup(args()), /not explicitly denied/);
+  assert.equal(grants, 0);
+  assert.equal(coinWrites, 0);
+});
+
+for (const [error, errorCode] of [
+  ["NotAuthorizedByTitle", 1191],
+  ["APINotEnabledForGameClientAccess", 1082],
+]) {
+  test(`Coin setup recognizes official ${error} player denial before its isolated grant`, async () => {
+    playerWriteReply = Response.json(
+      { code: 403, error, errorCode, errorMessage: "private-title-policy-message" },
+      { status: 403 },
+    );
+    const diamond = structuredClone(objects[DIAMOND_OBJECT]);
+    const result = await verifyCoinSetup(args());
+    assert.equal(result.balance, 41);
+    assert.equal(result.attestations.PLAYFAB_COINS_RECEIPTS_VERIFIED, "true");
+    assert.equal(grants, 1);
+    assert.deepEqual(objects[DIAMOND_OBJECT], diamond);
+    assert.equal(process.env["PLAYFAB_COINS_RECEIPTS_VERIFIED"], "false");
+  });
+}
+
+for (const [name, status, payload] of [
+  ["successful HTTP response", 200, { code: 200, error: "NotAuthorizedByTitle" }],
+  ["denial name in a successful HTTP envelope", 200, { code: 403, error: "NotAuthorizedByTitle" }],
+  ["denial name with authentication status", 401, { code: 401, error: "NotAuthorizedByTitle" }],
+  ["denial name with transient status", 503, { code: 503, error: "NotAuthorizedByTitle" }],
+  ["success body with a forbidden HTTP status", 403, { code: 200, error: "NotAuthorizedByTitle" }],
+  ["mismatched envelope status", 403, { code: 400, error: "NotAuthorizedByTitle" }],
+  ["string envelope status", 403, { code: "403", error: "NotAuthorizedByTitle" }],
+  ["missing envelope status", 403, { error: "NotAuthorizedByTitle" }],
+  [
+    "wrong official error number",
+    403,
+    { code: 403, error: "NotAuthorizedByTitle", errorCode: 1082 },
+  ],
+  [
+    "string official error number",
+    403,
+    { code: 403, error: "NotAuthorizedByTitle", errorCode: "1191" },
+  ],
+  ["negative error number", 403, { code: 403, error: "NotAuthorizedByTitle", errorCode: -1191 }],
+  ["rate limit", 429, { code: 429, error: "APIClientRequestRateLimitExceeded", errorCode: 1199 }],
+  ["transient service failure", 503, { code: 503, error: "ServiceUnavailable", errorCode: 1123 }],
+  ["invalid request", 400, { code: 400, error: "InvalidParams", errorCode: 1000 }],
+  ["unknown denied-looking response", 403, { code: 403, error: "private-unknown-upstream-error" }],
+  ["missing denial name", 403, { code: 403, errorCode: 1191 }],
+]) {
+  test(`Coin setup rejects ${name} without a grant or attestation`, async () => {
+    playerWriteReply = Response.json(
+      {
+        ...payload,
+        errorMessage: "private-title-policy-message",
+        errorDetails: { credential: "private-title-secret" },
+      },
+      { status },
+    );
+    const snapshot = structuredClone(objects);
+    await assert.rejects(verifyCoinSetup(args()), (error) => {
+      assert.match(error.message, /not explicitly denied/);
+      assert.doesNotMatch(error.message, /private-|credential/);
+      return true;
+    });
+    assert.equal(grants, 0);
+    assert.equal(coinWrites, 0);
+    assert.deepEqual(objects, snapshot);
+    assert.equal(process.env["PLAYFAB_COINS_RECEIPTS_VERIFIED"], "false");
+    assert.equal(process.env["PLAYFAB_COINS_VERIFIED_CONFIG_SHA256"], "");
+  });
+}
+
+test("malformed player-probe JSON stops Coin verification without exposing its body", async () => {
+  playerWriteReply = new Response("private-malformed-policy-response", { status: 403 });
+  await assert.rejects(verifyCoinSetup(args()), (error) => {
+    assert.match(error.message, /connection unavailable/);
+    assert.doesNotMatch(error.message, /private-malformed-policy-response/);
+    return true;
+  });
+  assert.equal(grants, 0);
+  assert.equal(coinWrites, 0);
+  assert.equal(process.env["PLAYFAB_COINS_RECEIPTS_VERIFIED"], "false");
+});
+
+test("Coin CAS diagnostics expose safe status and code but not private upstream fields", async () => {
+  casReply = Response.json(
+    {
+      code: 503,
+      error: "ServiceUnavailable",
+      errorCode: 1123,
+      errorMessage: "private-cas-upstream-message",
+      errorDetails: { secret: "private-title-secret" },
+    },
+    { status: 503 },
+  );
+  await assert.rejects(verifyCoinSetup(args()), (error) => {
+    assert.match(error.message, /not explicitly rejected/);
+    assert.match(error.message, /503/);
+    assert.match(error.message, /ServiceUnavailable/);
+    assert.doesNotMatch(error.message, /private-|secret/);
+    return true;
+  });
+  assert.equal(grants, 0);
+  assert.equal(coinWrites, 0);
+});
+
+test("Coin API diagnostics expose safe status and code but not private upstream fields", async () => {
+  authenticationReply = Response.json(
+    {
+      code: 503,
+      error: "ServiceUnavailable",
+      errorCode: 1123,
+      errorMessage: "private-authentication-upstream-message",
+      errorDetails: { ticket: "private-player-ticket" },
+    },
+    { status: 503 },
+  );
+  await assert.rejects(verifyCoinSetup(args()), (error) => {
+    assert.match(error.message, /could not complete.*AuthenticateSessionTicket/);
+    assert.match(error.message, /503/);
+    assert.match(error.message, /ServiceUnavailable/);
+    assert.doesNotMatch(error.message, /private-|ticket/);
+    return true;
+  });
   assert.equal(grants, 0);
   assert.equal(coinWrites, 0);
 });

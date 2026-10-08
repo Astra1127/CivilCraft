@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { adminGameConfig, object } from "../src/lib/playfab/admin-client.server.ts";
 import {
+  describeVerificationResponse,
+  isPlayerWriteDenial,
+} from "./playfab-verification-response.mjs";
+import {
   getDiamondBalance,
   grantDiamonds,
   hasDiamondReceipt,
@@ -92,7 +96,7 @@ export async function verifyDiamondSetup({
         signal: AbortSignal.timeout(12_000),
       });
       const payload = object(await response.json());
-      return { ok: response.ok && payload.code === 200, payload };
+      return { ok: response.ok && payload.code === 200, status: response.status, payload };
     } catch {
       throw new Error(
         `Verification service connection unavailable (${path}). Keep checkout disabled.`,
@@ -103,7 +107,7 @@ export async function verifyDiamondSetup({
     const response = await request(path, body, authentication);
     if (!response.ok)
       throw new Error(
-        `Verification could not complete ${path}. No credentials or upstream payload were printed.`,
+        `Verification could not complete ${path} (${describeVerificationResponse(response)}). No credentials or upstream payload were printed.`,
       );
     return object(response.payload.data);
   };
@@ -219,17 +223,9 @@ export async function verifyDiamondSetup({
         },
     { "X-EntityToken": player.EntityToken },
   );
-  if (
-    probe.ok ||
-    ![
-      "NotAuthorized",
-      "APINotEnabledForGameClient",
-      "ApiNotEnabledForGameClient",
-      "APIRequestNotAllowed",
-    ].includes(String(probe.payload.error))
-  )
+  if (!isPlayerWriteDenial(probe))
     throw new Error(
-      "Player write was not explicitly denied. Stop and review client API policy; a noncurrency probe marker may exist.",
+      `Player write was not explicitly denied (${describeVerificationResponse(probe)}). Stop and review client API policy; a noncurrency probe marker may exist.`,
     );
   if (objectStorage) {
     // A future version cannot match. Check the real service enforces conditional writes
@@ -250,7 +246,7 @@ export async function verifyDiamondSetup({
       !["EntityProfileVersionMismatch", "ConcurrentEditError"].includes(String(cas.payload.error))
     )
       throw new Error(
-        "Conditional object writes were not verified. Keep checkout disabled; a nonmonetary probe object may exist.",
+        `Conditional object writes were not verified (${describeVerificationResponse(cas)}). Keep checkout disabled; a nonmonetary probe object may exist.`,
       );
   } else {
     const empty = await api(

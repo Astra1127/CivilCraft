@@ -13,6 +13,14 @@ import {
   resolvePremiumEntity,
   type PremiumEntity,
 } from "../playfab/premium-wallet.server.ts";
+import {
+  assertCurrencyDatabaseHealthy,
+  assertDatabaseCoinCapacity,
+  claimDatabaseCoins,
+  completeDatabaseCoins,
+  databaseReceiptStatus,
+  requireCurrencyDatabaseReady,
+} from "./currency-database.server.ts";
 
 const OBJECT_NAME = "civilcraft.coin-purchases.v1";
 const CAPACITY = 8192;
@@ -31,6 +39,23 @@ export interface CoinGrantInput {
   readonly playFabId: string;
   readonly currencyCode: string;
   readonly rewardAmount: number;
+  readonly receipt?: {
+    readonly storage: "postgres";
+    readonly databaseId: string;
+    readonly targetId: string;
+    readonly schemaVersion: 1;
+  };
+}
+
+interface DatabaseCoinInput {
+  readonly orderId: string;
+  readonly playFabId: string;
+  readonly entity: PremiumEntity;
+  readonly currency: "CO";
+  readonly amount: number;
+  readonly databaseId: string;
+  readonly targetId: string;
+  readonly schemaVersion: 1;
 }
 
 interface Receipt {
@@ -57,6 +82,21 @@ const enabled = (key: string) => process.env[key]?.trim().toLowerCase() === "tru
 const digest = (value: unknown) =>
   crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+function coinReceiptStorage(): "entity-objects" | "postgres" {
+  const storage = (process.env["COIN_RECEIPTS_STORAGE"] || "entity-objects").trim();
+  if (storage !== "entity-objects" && storage !== "postgres")
+    throw new AdminApiError(503, "Coin receipt configuration requires review.");
+  return storage;
+}
+
+/** Only NEW checkout orders may select their provider from the current configuration. */
+export function coinReceiptSnapshot(): CoinGrantInput["receipt"] {
+  requireCoinCheckoutReady();
+  if (coinReceiptStorage() !== "postgres") return undefined;
+  const { databaseId, targetId, schemaVersion } = requireCurrencyDatabaseReady();
+  return Object.freeze({ storage: "postgres" as const, databaseId, targetId, schemaVersion });
+}
+
 export function coinReceiptVerificationFingerprint(): string {
   return digest({
     version: 1,
@@ -68,9 +108,15 @@ export function coinReceiptVerificationFingerprint(): string {
   });
 }
 
-/** Coins stay in classic CO; only permanent server-only claims use Entity Objects. */
+/** Coins stay in classic CO; only permanent server-only claims change storage. */
 export function requireCoinCheckoutReady(): void {
   const { titleId, secret } = adminGameConfig();
+  if (coinReceiptStorage() === "postgres") {
+    if (!secret || !enabled("COIN_CHECKOUT_ENABLED"))
+      throw new AdminApiError(503, "Coin checkout requires verified purchase-receipt setup.");
+    requireCurrencyDatabaseReady();
+    return;
+  }
   if (
     !secret ||
     premiumWalletConfig().storage !== "entity-objects" ||
@@ -101,6 +147,39 @@ function validate(input: CoinGrantInput): void {
     input.rewardAmount > MAX_COINS
   )
     throw new AdminApiError(503, "Coin order configuration requires review.");
+  const storage = coinReceiptStorage();
+  if (input.receipt !== undefined) {
+    const config = requireCurrencyDatabaseReady();
+    if (
+      storage !== "postgres" ||
+      !input.receipt ||
+      Object.keys(input.receipt).length !== 4 ||
+      input.receipt.storage !== "postgres" ||
+      input.receipt.databaseId !== config.databaseId ||
+      input.receipt.targetId !== config.targetId ||
+      input.receipt.schemaVersion !== config.schemaVersion ||
+      input.currencyCode !== "CO"
+    )
+      throw new CoinGrantReviewRequired();
+  } else if (storage === "postgres") {
+    // A version-1 Entity receipt is never reinterpreted as a new database claim.
+    throw new CoinGrantReviewRequired();
+  }
+}
+
+function databaseInput(input: CoinGrantInput, entity: PremiumEntity): DatabaseCoinInput {
+  if (!input.receipt || input.receipt.storage !== "postgres" || input.currencyCode !== "CO")
+    throw new CoinGrantReviewRequired();
+  return {
+    orderId: input.orderId,
+    playFabId: input.playFabId,
+    entity,
+    currency: "CO",
+    amount: input.rewardAmount,
+    databaseId: input.receipt.databaseId,
+    targetId: input.receipt.targetId,
+    schemaVersion: input.receipt.schemaVersion,
+  };
 }
 function receiptKey(input: CoinGrantInput): string {
   return `order-${crypto.createHash("sha256").update(input.orderId).digest("hex")}`;
@@ -246,6 +325,17 @@ function nextLedger(
   return next;
 }
 async function checkBalance(state: LedgerRead, input: CoinGrantInput): Promise<void> {
+  const reserved = Object.values(state.ledger.receipts)
+    .filter((r) => r.code === input.currencyCode && r.state === "pending")
+    .reduce((sum, r) => sum + r.amount, 0);
+  await checkClassicCapacity(input, reserved);
+}
+
+async function checkClassicCapacity(
+  input: CoinGrantInput,
+  reserved: number,
+  additionalAmount = input.rewardAmount,
+): Promise<void> {
   const result = await playFabAdmin("Server/GetUserInventory", { PlayFabId: input.playFabId });
   const currencies = result["VirtualCurrency"];
   if (!currencies || typeof currencies !== "object" || Array.isArray(currencies))
@@ -258,10 +348,11 @@ async function checkBalance(state: LedgerRead, input: CoinGrantInput): Promise<v
     balance > MAX_COINS
   )
     throw new AdminApiError(503, "Coin balance is unavailable.");
-  const reserved = Object.values(state.ledger.receipts)
-    .filter((r) => r.code === input.currencyCode && r.state === "pending")
-    .reduce((sum, r) => sum + r.amount, 0);
-  if (!Number.isSafeInteger(reserved) || balance + reserved + input.rewardAmount > MAX_COINS)
+  if (
+    !Number.isSafeInteger(reserved) ||
+    reserved < 0 ||
+    balance + reserved + additionalAmount > MAX_COINS
+  )
     throw new AdminApiError(
       503,
       "Coin balance has insufficient purchase capacity. Please contact support.",
@@ -278,9 +369,37 @@ async function write(state: LedgerRead, entity: PremiumEntity, ledger: Ledger): 
 const pause = (attempt: number) =>
   new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
 
+/** Read-only CO title-definition check, independent of payment/provider readiness. */
+export async function assertClassicCurrencyConfigured(): Promise<void> {
+  const result = await playFabAdmin("Admin/ListVirtualCurrencyTypes", {});
+  const currencies = result["VirtualCurrencies"];
+  if (
+    !Array.isArray(currencies) ||
+    currencies.some(
+      (entry) =>
+        !entry ||
+        typeof entry !== "object" ||
+        Array.isArray(entry) ||
+        typeof object(entry)["CurrencyCode"] !== "string" ||
+        (object(entry)["CurrencyCode"] as string).length !== 2,
+    ) ||
+    currencies.filter((entry) => object(entry)["CurrencyCode"] === "CO").length !== 1
+  )
+    throw new AdminApiError(503, "Coins are not configured for this PlayFab title.");
+}
+
 export async function assertCoinCheckoutReady(input: CoinGrantInput): Promise<void> {
   validate(input);
   const entity = await resolvePremiumEntity(input.playFabId);
+  if (input.receipt) {
+    const grant = databaseInput(input, entity);
+    await assertCurrencyDatabaseHealthy();
+    await assertClassicCurrencyConfigured();
+    if ((await databaseReceiptStatus(grant)) !== "absent") throw new CoinGrantReviewRequired();
+    const { pendingAmount } = await assertDatabaseCoinCapacity(grant);
+    await checkClassicCapacity(input, pendingAmount);
+    return;
+  }
   const state = await read(input, entity);
   if (receipt(state, input, entity)) throw new CoinGrantReviewRequired();
   nextLedger(state, input, entity, crypto.randomUUID());
@@ -292,13 +411,102 @@ export async function getCoinReceiptStatus(
 ): Promise<"absent" | "pending" | "granted"> {
   validate(input);
   const entity = await resolvePremiumEntity(input.playFabId);
+  if (input.receipt) return databaseReceiptStatus(databaseInput(input, entity));
   return receipt(await read(input, entity), input, entity)?.state ?? "absent";
+}
+
+async function creditClassicCoins(input: CoinGrantInput): Promise<void> {
+  const result = await playFabAdmin("Server/AddUserVirtualCurrency", {
+    PlayFabId: input.playFabId,
+    VirtualCurrency: input.currencyCode,
+    Amount: input.rewardAmount,
+    CustomTags: { orderId: input.orderId },
+  });
+  if (
+    typeof result["PlayFabId"] !== "string" ||
+    result["PlayFabId"].toUpperCase() !== input.playFabId.toUpperCase() ||
+    result["VirtualCurrency"] !== input.currencyCode ||
+    result["BalanceChange"] !== input.rewardAmount ||
+    typeof result["Balance"] !== "number" ||
+    !Number.isSafeInteger(result["Balance"]) ||
+    result["Balance"] < input.rewardAmount ||
+    result["Balance"] > MAX_COINS
+  )
+    throw new CoinGrantReviewRequired();
+}
+
+async function awaitDatabaseGrant(grant: DatabaseCoinInput): Promise<boolean> {
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    try {
+      if ((await databaseReceiptStatus(grant)) === "granted") return true;
+    } catch {
+      // A failed read cannot prove an uncertain claim is safe to repeat.
+    }
+    await pause(attempt);
+  }
+  return false;
+}
+
+async function grantDatabaseCoins(
+  input: CoinGrantInput,
+  entity: PremiumEntity,
+): Promise<{ alreadyGranted: boolean }> {
+  const grant = databaseInput(input, entity);
+  const existing = await databaseReceiptStatus(grant);
+  if (existing === "granted") return { alreadyGranted: true };
+  if (existing === "pending") {
+    if (await awaitDatabaseGrant(grant)) return { alreadyGranted: true };
+    throw new CoinGrantReviewRequired();
+  }
+  if (existing !== "absent") throw new CoinGrantReviewRequired();
+  await assertClassicCurrencyConfigured();
+  const { pendingAmount } = await assertDatabaseCoinCapacity(grant);
+  await checkClassicCapacity(input, pendingAmount);
+  const attemptId = crypto.randomUUID();
+  let ownsClaim = false;
+  try {
+    // Only a confirmed NEW insertion permits the one non-idempotent increment.
+    ownsClaim = (await claimDatabaseCoins(grant, attemptId)) === true;
+  } catch {
+    if (await awaitDatabaseGrant(grant)) return { alreadyGranted: true };
+    throw new CoinGrantReviewRequired();
+  }
+  if (!ownsClaim) {
+    if (await awaitDatabaseGrant(grant)) return { alreadyGranted: true };
+    throw new CoinGrantReviewRequired();
+  }
+  try {
+    // Reservations may have changed during concurrent purchases. This sum already
+    // includes our permanent pending claim; do not add our reward a second time.
+    const reserved = await assertDatabaseCoinCapacity(grant);
+    await checkClassicCapacity(input, reserved.pendingAmount, 0);
+    await creditClassicCoins(input);
+  } catch {
+    // Neither insufficient headroom nor an uncertain provider result frees the claim.
+    throw new CoinGrantReviewRequired();
+  }
+  for (let attempt = 0; attempt < RETRIES; attempt++) {
+    try {
+      await completeDatabaseCoins(grant, attemptId);
+    } catch {
+      // Completion can commit before its response is lost. Read its permanent proof.
+    }
+    try {
+      if ((await databaseReceiptStatus(grant)) === "granted") return { alreadyGranted: false };
+    } catch {
+      // Preserve the pending claim and retry metadata only, never the Coin increment.
+    }
+    await pause(attempt);
+  }
+  if (await awaitDatabaseGrant(grant)) return { alreadyGranted: false };
+  throw new CoinGrantReviewRequired();
 }
 
 /** Classic AddUserVirtualCurrency is NOT idempotent. An uncertain grant is never repeated. */
 export async function grantCoinsOnce(input: CoinGrantInput): Promise<{ alreadyGranted: boolean }> {
   validate(input);
   const entity = await resolvePremiumEntity(input.playFabId);
+  if (input.receipt) return grantDatabaseCoins(input, entity);
   const attemptId = crypto.randomUUID();
   let ownsClaim = false;
   for (let attempt = 0; attempt < RETRIES; attempt++) {
@@ -322,23 +530,7 @@ export async function grantCoinsOnce(input: CoinGrantInput): Promise<{ alreadyGr
   }
   if (!ownsClaim) throw new CoinGrantReviewRequired();
   try {
-    const result = await playFabAdmin("Server/AddUserVirtualCurrency", {
-      PlayFabId: input.playFabId,
-      VirtualCurrency: input.currencyCode,
-      Amount: input.rewardAmount,
-      CustomTags: { orderId: input.orderId },
-    });
-    if (
-      typeof result["PlayFabId"] !== "string" ||
-      result["PlayFabId"].toUpperCase() !== input.playFabId.toUpperCase() ||
-      result["VirtualCurrency"] !== input.currencyCode ||
-      result["BalanceChange"] !== input.rewardAmount ||
-      typeof result["Balance"] !== "number" ||
-      !Number.isSafeInteger(result["Balance"]) ||
-      result["Balance"] < input.rewardAmount ||
-      result["Balance"] > MAX_COINS
-    )
-      throw new CoinGrantReviewRequired();
+    await creditClassicCoins(input);
   } catch {
     // The provider may have credited Coins before a timeout/error. Keep the permanent claim.
     throw new CoinGrantReviewRequired();

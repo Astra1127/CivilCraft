@@ -15,6 +15,13 @@ export type PremiumWalletSnapshot = { entity: { Id: string; Type: "title_player_
       maxBytes: 8192;
     }
   | {
+      storage: "postgres";
+      collectionId: "premium-wallet";
+      databaseId: string;
+      targetId: string;
+      schemaVersion: 1;
+    }
+  | {
       storage?: "economy-v2";
       collectionId: "premium-wallet";
       diamondItemId: string;
@@ -36,7 +43,9 @@ export interface PaymentOrder {
   /** Snapshots the configured classic Coin code so later config changes cannot reroute it. */
   coinCurrencyCode?: string | undefined;
   /** Missing on historic orders: their unconfirmed grants must be reviewed, never replayed. */
-  coinReceiptVersion?: 1 | undefined;
+  coinReceiptVersion?: 1 | 2 | undefined;
+  coinReceipt?:
+    { storage: "postgres"; databaseId: string; targetId: string; schemaVersion: 1 } | undefined;
   fulfillmentReviewRequired?: boolean | undefined;
   PayMongoCheckoutSessionId: string | null;
   PayMongoReferenceNumber: string;
