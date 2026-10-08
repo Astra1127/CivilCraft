@@ -28,6 +28,7 @@ const environment = {
   PLAYFAB_DIAMONDS_ENABLED: "true",
   PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED: "true",
   PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED: "true",
+  PLAYFAB_DIAMONDS_CAPACITY_VERIFIED: "true",
   PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID: "17FA03",
   PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256: "",
 };
@@ -98,18 +99,19 @@ beforeEach(() => {
     if (path === "/Object/GetObjects") {
       assert.equal(headers.get("X-EntityToken"), "title-token");
       if (options.readFailure) throw new Error("private-service-key");
-      const data = options.stale ?? {
-        Entity: ENTITY,
-        ProfileVersion: version,
-        Objects: structuredClone(objects),
-      };
+      const data = options.stale ??
+        options.staleProbe ?? {
+          Entity: ENTITY,
+          ProfileVersion: version,
+          Objects: structuredClone(objects),
+        };
       delete options.stale;
+      delete options.staleProbe;
       return ok(options.transformRead ? options.transformRead(data) : data);
     }
     if (path === "/Object/SetObjects") {
       assert.equal(body.Objects.length, 1);
       assert.equal(body.IdempotencyId, undefined);
-      assert.equal(body.Objects[0].DeleteObject, undefined);
       if (headers.get("X-EntityToken") === "player-token")
         return options.allowPlayer
           ? ok({})
@@ -128,7 +130,40 @@ beforeEach(() => {
       if (options.rejectWrite)
         return Response.json({ code: 403, error: "NotAuthorized" }, { status: 403 });
       const item = body.Objects[0];
+      const previousState = {
+        Entity: ENTITY,
+        ProfileVersion: version,
+        Objects: structuredClone(objects),
+      };
+      if (item.DeleteObject === true) {
+        assert.match(item.ObjectName, /^cc\.capacity\.[a-f0-9]{16}$/);
+        assert.equal(item.DataObject, undefined);
+        assert.equal(item.ObjectName === NAME, false);
+        if (options.cleanupFailure)
+          return Response.json({ code: 503, error: "ServiceUnavailable" }, { status: 503 });
+        delete objects[item.ObjectName];
+        version++;
+        if (options.staleCleanupRead) options.staleProbe = previousState;
+        return ok({
+          ProfileVersion: version,
+          SetResults: [{ ObjectName: item.ObjectName, SetResult: "Deleted" }],
+        });
+      }
+      if (item.ObjectName.startsWith("cc.capacity.")) {
+        assert.equal(Buffer.byteLength(JSON.stringify(item.DataObject), "utf8"), 8192);
+        if (
+          options.quotaBytes &&
+          Buffer.byteLength(JSON.stringify(item.DataObject), "utf8") > options.quotaBytes
+        )
+          return Response.json(
+            { code: 400, error: "EntityObjectExceededSizeLimit" },
+            { status: 400 },
+          );
+        if (options.staleCapacityRead) options.staleProbe = previousState;
+      }
       objects[item.ObjectName] = structuredClone(item);
+      if (item.ObjectName.startsWith("cc.capacity.") && options.truncateCapacity)
+        objects[item.ObjectName].DataObject.padding = item.DataObject.padding.slice(1);
       version++;
       if (item.ObjectName === NAME) commits++;
       if (options.timeoutAfterCommit) {
@@ -325,11 +360,29 @@ test("Object write policy requires an unconditional player denial, not an invent
 });
 test("actual-title verifier tests player denial, CAS enforcement, first write and duplicate before attesting", async () => {
   process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  objects = {};
   const result = await verify();
   assert.equal(result.storage, "entity-objects");
   assert.equal(result.balance, 1);
   assert.equal(commits, 1);
   assert.equal(Object.keys(wallet().receipts).length, 1);
+  assert.equal(result.verifiedCapacityBytes, 8192);
+  assert.equal(result.attestations.PLAYFAB_DIAMONDS_CAPACITY_VERIFIED, "true");
+  assert.deepEqual(Object.keys(objects), [NAME]);
+  const sizeWrite = calls.find(
+    (call) =>
+      call.path === "/Object/SetObjects" &&
+      call.body.Objects[0].ObjectName.startsWith("cc.capacity.") &&
+      !call.body.Objects[0].DeleteObject,
+  );
+  const firstMoney = calls.findIndex(
+    (call) => call.path === "/Object/SetObjects" && call.body.Objects[0].ObjectName === NAME,
+  );
+  assert.equal(
+    Buffer.byteLength(JSON.stringify(sizeWrite.body.Objects[0].DataObject), "utf8"),
+    8192,
+  );
+  assert.ok(calls.indexOf(sizeWrite) < firstMoney);
   assert.equal(
     calls.some((call) => /Catalog|Inventory/.test(call.path)),
     false,
@@ -338,6 +391,7 @@ test("actual-title verifier tests player denial, CAS enforcement, first write an
 });
 test("verifier refuses an allowed player write, missing denial or invalid player identity", async () => {
   process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  objects = {};
   options.allowPlayer = true;
   await assert.rejects(verify(), /not explicitly denied/);
   options.allowPlayer = false;
@@ -350,12 +404,14 @@ test("verifier refuses an allowed player write, missing denial or invalid player
 });
 test("permission probe must fail with an authorization error, not bad input or quota", async () => {
   process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  objects = {};
   options.playerError = "EntityProfileVersionMismatch";
   await assert.rejects(verify(), /not explicitly denied/);
   assert.equal(commits, 0);
 });
 test("service ignoring expected version cannot emit an attestation or monetary grant", async () => {
   process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  objects = {};
   options.ignoreCAS = true;
   await assert.rejects(verify(), /Conditional object writes/);
   assert.equal(commits, 0);
@@ -367,4 +423,108 @@ test("verifier never replaces existing premium wallet data", async () => {
   await assert.rejects(verify(), /Existing data is never removed/);
   assert.deepEqual(wallet(), saved);
   assert.equal(commits, 1);
+});
+
+test("old one-receipt attestations and missing full-capacity flag cannot enable new checkout", () => {
+  process.env["PLAYFAB_DIAMONDS_CAPACITY_VERIFIED"] = "false";
+  assert.throws(requireDiamondCheckoutReady, /verified/);
+  process.env["PLAYFAB_DIAMONDS_CAPACITY_VERIFIED"] = "true";
+  process.env["PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256"] = crypto
+    .createHash("sha256")
+    .update(JSON.stringify({ version: 2, titleId: "17FA03", ...premiumWalletConfig() }))
+    .digest("hex");
+  assert.throws(requireDiamondCheckoutReady, /verified/);
+  assert.equal(calls.length, 0);
+});
+
+test("checkout and grant count unrelated object bytes in the VERIFIED shared allowance", async () => {
+  objects.unrelated.DataObject = { text: "x".repeat(8000) };
+  await assert.rejects(assertDiamondCheckoutCapacity(grant()), /storage limit/);
+  await assert.rejects(grantDiamonds(grant()), /storage limit/);
+  assert.equal(commits, 0);
+  assert.equal(objects.unrelated.DataObject.text.length, 8000);
+});
+
+test("shared budget measures UTF-8 bytes, not characters", async () => {
+  objects.unrelated.DataObject = { text: "🌊".repeat(2000) };
+  await assert.rejects(assertDiamondCheckoutCapacity(grant()), /storage limit/);
+  assert.equal(commits, 0);
+});
+
+test("unrelated object growth blocks new payments but never deletes or invalidates existing receipts", async () => {
+  await grantDiamonds(grant());
+  const saved = structuredClone(wallet());
+  objects.unrelated.DataObject = { text: "x".repeat(8000) };
+  await assert.rejects(assertDiamondCheckoutCapacity(grant("later")), /storage limit/);
+  assert.equal((await grantDiamonds(grant())).alreadyGranted, true);
+  assert.deepEqual(wallet(), saved);
+  assert.equal(commits, 1);
+});
+
+test("small title quota cannot pass using a tiny receipt; no money or attestation is emitted", async () => {
+  objects = {};
+  process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  process.env["PLAYFAB_DIAMONDS_CAPACITY_VERIFIED"] = "false";
+  options.quotaBytes = 1024;
+  await assert.rejects(verify(), /could not complete Object\/SetObjects/);
+  assert.equal(commits, 0);
+  assert.deepEqual(objects, {});
+  assert.equal(process.env["PLAYFAB_DIAMONDS_CAPACITY_VERIFIED"], "false");
+});
+
+test("full-size proof waits for eventual read visibility and verified cleanup", async () => {
+  objects = {};
+  process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  options.staleCapacityRead = true;
+  options.staleCleanupRead = true;
+  const result = await verify();
+  assert.equal(result.verifiedCapacityBytes, 8192);
+  assert.equal(commits, 1);
+  assert.deepEqual(Object.keys(objects), [NAME]);
+});
+
+test("truncated full-size readback cannot attest and altered marker is never deleted", async () => {
+  objects = {};
+  process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  options.truncateCapacity = true;
+  await assert.rejects(verify(), /Capacity probe changed unexpectedly/);
+  assert.equal(commits, 0);
+  assert.equal(Object.keys(objects).length, 1);
+  assert.equal(
+    calls.some((call) => call.body.Objects?.some((entry) => entry.DeleteObject)),
+    false,
+  );
+});
+
+test("uncertain full-size write cannot attest even when exact probe cleanup succeeds", async () => {
+  objects = {};
+  process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  options.timeoutAfterCommit = true;
+  await assert.rejects(verify(), /connection unavailable/);
+  assert.equal(commits, 0);
+  assert.deepEqual(objects, {});
+});
+
+test("cleanup failure cannot emit readiness or reach a monetary test", async () => {
+  objects = {};
+  process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  options.cleanupFailure = true;
+  await assert.rejects(verify(), /cleanup was not confirmed/);
+  assert.equal(commits, 0);
+  const names = Object.keys(objects);
+  assert.equal(names.length, 1);
+  assert.match(names[0], /^cc\.capacity\./);
+  assert.equal(wallet(), undefined);
+});
+
+test("shared-capacity verification requires an EMPTY disposable profile and preserves unrelated data", async () => {
+  process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
+  const saved = structuredClone(objects);
+  await assert.rejects(verify(), /EMPTY Entity Objects/);
+  assert.deepEqual(objects, saved);
+  assert.equal(commits, 0);
+  assert.equal(
+    calls.some((call) => call.path === "/Object/SetObjects"),
+    false,
+  );
 });

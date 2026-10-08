@@ -191,10 +191,10 @@ export async function verifyDiamondSetup({
       typeof empty.Objects !== "object" ||
       Array.isArray(empty.Objects) ||
       Object.hasOwn(empty.Objects, wallet.objectName) ||
-      Object.keys(empty.Objects).length >= 3
+      Object.keys(empty.Objects).length !== 0
     )
       throw new Error(
-        "Use a fresh disposable player with no Diamonds wallet and a valid profile version. Existing data is never removed.",
+        "Use a fresh disposable player with EMPTY Entity Objects and a valid profile version. Existing data is never removed.",
       );
     profileVersion = empty.ProfileVersion;
   }
@@ -264,10 +264,161 @@ export async function verifyDiamondSetup({
       );
   }
 
+  if (objectStorage) {
+    // Prove the full configured allowance, not merely that a small receipt fits.
+    // This account must be disposable and empty: existing objects share service
+    // limits, and the runtime subtracts every other object's footprint.
+    const markerName = `cc.capacity.${crypto.randomBytes(8).toString("hex")}`;
+    const marker = {
+      verification: "diamonds-capacity-v1",
+      nonce: crypto.randomUUID(),
+      padding: "",
+    };
+    marker.padding = "x".repeat(
+      wallet.maxBytes - Buffer.byteLength(JSON.stringify(marker), "utf8"),
+    );
+    const ownsMarker = (entry) => {
+      const value = object(entry?.DataObject);
+      return (
+        entry?.ObjectName === markerName &&
+        Object.keys(value).length === 3 &&
+        value.verification === marker.verification &&
+        value.nonce === marker.nonce &&
+        value.padding === marker.padding &&
+        Buffer.byteLength(JSON.stringify(value), "utf8") === wallet.maxBytes
+      );
+    };
+    const read = async () => {
+      const state = await api(
+        "Object/GetObjects",
+        { Entity: entity, EscapeObject: false },
+        titleAuth,
+      );
+      if (
+        object(state.Entity).Type !== entity.Type ||
+        object(state.Entity).Id?.toUpperCase() !== entity.Id.toUpperCase() ||
+        !Number.isSafeInteger(state.ProfileVersion) ||
+        state.ProfileVersion < 0 ||
+        !state.Objects ||
+        typeof state.Objects !== "object" ||
+        Array.isArray(state.Objects)
+      )
+        throw new Error("Capacity readback is invalid. Keep checkout disabled.");
+      return state;
+    };
+    const waitFor = async (predicate) => {
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const state = await read();
+        if (predicate(state)) return state;
+        if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      throw new Error("Capacity readback was not confirmed. Keep checkout disabled.");
+    };
+    let writtenVersion = 0;
+    let capacityConfirmed = false;
+    let cleanupConfirmed = false;
+    try {
+      // Reread after the permission/CAS probes, so concurrent file/profile edits
+      // cannot make the size probe an unconditional overwrite.
+      const state = await read();
+      if (Object.keys(state.Objects).length !== 0)
+        throw new Error(
+          "Capacity verification requires EMPTY Entity Objects. Existing data is never removed.",
+        );
+      const stored = await api(
+        "Object/SetObjects",
+        {
+          Entity: entity,
+          ExpectedProfileVersion: state.ProfileVersion,
+          Objects: [{ ObjectName: markerName, DataObject: marker }],
+        },
+        titleAuth,
+      );
+      if (
+        !Number.isSafeInteger(stored.ProfileVersion) ||
+        stored.ProfileVersion <= state.ProfileVersion ||
+        !Array.isArray(stored.SetResults) ||
+        !stored.SetResults.some(
+          (result) =>
+            result.ObjectName === markerName && ["Created", "Updated"].includes(result.SetResult),
+        )
+      )
+        throw new Error("Full-size capacity write was not confirmed. Keep checkout disabled.");
+      writtenVersion = stored.ProfileVersion;
+      await waitFor(
+        (result) =>
+          result.ProfileVersion >= writtenVersion && ownsMarker(result.Objects[markerName]),
+      );
+      capacityConfirmed = true;
+    } finally {
+      // Only remove THIS run's exact nonmonetary marker. Never remove a wallet,
+      // a receipt, an old marker, or an object whose value changed concurrently.
+      for (let attempt = 0; attempt < 4 && !cleanupConfirmed; attempt++) {
+        const state = await read();
+        if (!Object.hasOwn(state.Objects, markerName)) {
+          if (writtenVersion && state.ProfileVersion < writtenVersion) {
+            await new Promise((resolve) => setTimeout(resolve, 250));
+            continue;
+          }
+          // Without a confirmed write, an absent stale read proves no cleanup.
+          if (!writtenVersion && !capacityConfirmed) break;
+          cleanupConfirmed = true;
+          break;
+        }
+        if (!ownsMarker(state.Objects[markerName]))
+          throw new Error(
+            "Capacity probe changed unexpectedly; no object was deleted. Keep checkout disabled.",
+          );
+        const removed = await request(
+          "Object/SetObjects",
+          {
+            Entity: entity,
+            ExpectedProfileVersion: state.ProfileVersion,
+            Objects: [{ ObjectName: markerName, DeleteObject: true }],
+          },
+          titleAuth,
+        );
+        if (
+          !removed.ok &&
+          ["EntityProfileVersionMismatch", "ConcurrentEditError"].includes(
+            String(removed.payload.error),
+          )
+        )
+          continue;
+        const data = object(removed.payload.data);
+        if (
+          !removed.ok ||
+          !Number.isSafeInteger(data.ProfileVersion) ||
+          data.ProfileVersion <= state.ProfileVersion ||
+          !Array.isArray(data.SetResults) ||
+          !data.SetResults.some(
+            (result) => result.ObjectName === markerName && result.SetResult === "Deleted",
+          )
+        )
+          throw new Error(
+            "Capacity probe cleanup was not confirmed. Keep checkout disabled; inspect the disposable account.",
+          );
+        await waitFor(
+          (result) =>
+            result.ProfileVersion >= data.ProfileVersion &&
+            !Object.hasOwn(result.Objects, markerName),
+        );
+        cleanupConfirmed = true;
+      }
+      if (capacityConfirmed && !cleanupConfirmed)
+        throw new Error(
+          "Capacity probe cleanup was not confirmed. Keep checkout disabled; inspect the disposable account.",
+        );
+    }
+    if (!capacityConfirmed || !cleanupConfirmed)
+      throw new Error("Full-size wallet capacity was not verified. Keep checkout disabled.");
+  }
+
   const attestations = {
     PLAYFAB_DIAMONDS_ENABLED: "true",
     PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED: "true",
     PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED: "true",
+    ...(objectStorage ? { PLAYFAB_DIAMONDS_CAPACITY_VERIFIED: "true" } : {}),
     PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID: titleId.toUpperCase(),
     PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256: premiumWalletVerificationFingerprint(),
   };
@@ -301,6 +452,7 @@ export async function verifyDiamondSetup({
     return {
       titleId: titleId.toUpperCase(),
       storage: objectStorage ? "entity-objects" : "economy-v2",
+      ...(objectStorage ? { verifiedCapacityBytes: wallet.maxBytes } : {}),
       testPlayerId: testPlayerId.toUpperCase(),
       orderId,
       balance,
@@ -317,7 +469,7 @@ export async function verifyDiamondSetup({
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv.includes("--help")) {
     console.log(
-      "Usage: node --env-file=.env scripts/verify-diamonds-setup.mjs --test-player <PlayFabId> --confirm-test-writes\nRequires a fresh disposable player and PLAYFAB_DIAMONDS_VERIFICATION_PLAYER_TICKET. Leaves exactly one test Diamond and its permanent receipt; does not edit catalog, policies, or env files.",
+      "Usage: node --env-file=.env scripts/verify-diamonds-setup.mjs --test-player <PlayFabId> --confirm-test-writes\nRequires a fresh disposable player with EMPTY Entity Objects and PLAYFAB_DIAMONDS_VERIFICATION_PLAYER_TICKET. Tests and deletes only its own nonmonetary full-size capacity marker, then leaves exactly one test Diamond and its permanent receipt; does not edit catalog, policies, or env files.",
     );
   } else {
     const index = process.argv.indexOf("--test-player");

@@ -12,10 +12,11 @@ import {
   getOrder,
   isEventProcessed,
   listOrders,
-  saveOrder,
+  saveOrder as persistTestOrder,
 } from "../src/lib/payments/orders.server.ts";
 import { processPayMongoWebhook } from "../src/lib/payments/fulfillment.server.ts";
 import { premiumWalletVerificationFingerprint } from "../src/lib/playfab/premium-wallet.server.ts";
+import { coinReceiptVerificationFingerprint } from "../src/lib/payments/coin-receipts.server.ts";
 import type { PaymentOrder, PaymentProduct } from "../src/lib/payments/types.ts";
 import type { Transaction } from "../src/lib/playfab/types.ts";
 import { handlePlayFabAdminRequest } from "../src/lib/playfab/admin-api.server.ts";
@@ -48,6 +49,17 @@ const env = {
 
 const previousEnv = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[k]]));
 const originalFetch = globalThis.fetch;
+
+// New checkout fixtures use the durable Coin protocol; completed historic records
+// deliberately keep their legacy shape. Dedicated tests cover unresolved legacy orders.
+async function saveOrder(order: PaymentOrder) {
+  return persistTestOrder({
+    ...order,
+    ...(order.rewardCurrency !== "DI" && order.status !== "fulfilled"
+      ? { coinReceiptVersion: 1 as const }
+      : {}),
+  });
+}
 
 test("checkout returns stay inside the authenticated dashboard and preserve the order ID", async () => {
   await createPayMongoCheckout({
@@ -98,7 +110,7 @@ let premiumObjects: Record<
   {
     ObjectName: string;
     DataObject: {
-      balance: number;
+      balance?: number;
       receipts: Record<string, unknown>;
       [key: string]: unknown;
     };
@@ -106,6 +118,10 @@ let premiumObjects: Record<
 > = {};
 let objectReadFailure = false;
 let failFulfilledSaveOnce = false;
+let coinTimeoutAfterCreditOnce = false;
+let failCoinConfirmation = false;
+let coinAddCalls = 0;
+let inventoryReadFailure = false;
 const DIAMOND_ITEM = "11111111-1111-4111-8111-111111111111";
 const RECEIPT_ITEM = "22222222-2222-4222-8222-222222222222";
 
@@ -127,8 +143,24 @@ beforeEach(() => {
   premiumObjects = {};
   objectReadFailure = false;
   failFulfilledSaveOnce = false;
+  coinTimeoutAfterCreditOnce = false;
+  failCoinConfirmation = false;
+  coinAddCalls = 0;
+  inventoryReadFailure = false;
   process.env["PLAYFAB_DIAMONDS_ENABLED"] = "false";
-  process.env["PLAYFAB_DIAMONDS_STORAGE"] = "economy-v2";
+  process.env["PLAYFAB_DIAMONDS_STORAGE"] = "entity-objects";
+  Object.assign(process.env, {
+    PLAYFAB_DIAMONDS_ITEM_ID: "",
+    PLAYFAB_DIAMONDS_RECEIPT_ITEM_ID: "",
+    PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID: "17FA03",
+    PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED: "true",
+    PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED: "true",
+    PLAYFAB_DIAMONDS_CAPACITY_VERIFIED: "true",
+    PLAYFAB_COINS_RECEIPTS_VERIFIED: "true",
+    PLAYFAB_COINS_VERIFIED_TITLE_ID: "17FA03",
+  });
+  process.env["PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256"] = premiumWalletVerificationFingerprint();
+  process.env["PLAYFAB_COINS_VERIFIED_CONFIG_SHA256"] = coinReceiptVerificationFingerprint();
 
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const urlStr = String(input);
@@ -258,8 +290,20 @@ beforeEach(() => {
           );
         assert.equal(body.Objects.length, 1);
         const item = body.Objects[0];
-        assert.equal(item.ObjectName, "civilcraft.premium-wallet.v1");
+        assert.ok(
+          ["civilcraft.premium-wallet.v1", "civilcraft.coin-purchases.v1"].includes(
+            item.ObjectName,
+          ),
+        );
         assert.equal(item.DataObject.playFabId, TEST_PLAYER_ID);
+        if (
+          failCoinConfirmation &&
+          item.ObjectName === "civilcraft.coin-purchases.v1" &&
+          Object.values(item.DataObject.receipts as Record<string, { state: string }>).some(
+            (r) => r.state === "granted",
+          )
+        )
+          return Response.json({ code: 503 }, { status: 503 });
         premiumObjects[item.ObjectName] = structuredClone(item);
         premiumVersion++;
         return Response.json({
@@ -322,7 +366,22 @@ beforeEach(() => {
         });
       }
 
+      if (urlStr.endsWith("/Server/GetUserInventory")) {
+        if (inventoryReadFailure) return Response.json({ code: 503 }, { status: 503 });
+        return Response.json({
+          code: 200,
+          data: {
+            VirtualCurrency: {
+              CO: awardedCoinsLog
+                .filter((a) => a.currency === "CO")
+                .reduce((sum, a) => sum + a.amount, 0),
+              GC: 0,
+            },
+          },
+        });
+      }
       if (urlStr.endsWith("/Server/AddUserVirtualCurrency")) {
+        coinAddCalls++;
         if (playFabFailureMode) {
           return Response.json(
             { code: 500, status: "InternalServerError", errorMessage: "Simulated PlayFab outage" },
@@ -334,13 +393,19 @@ beforeEach(() => {
           currency: body.VirtualCurrency,
           amount: body.Amount,
         });
+        if (coinTimeoutAfterCreditOnce) {
+          coinTimeoutAfterCreditOnce = false;
+          throw new Error("Mock network timeout after credit");
+        }
         return Response.json({
           code: 200,
           data: {
             PlayFabId: body.PlayFabId,
             VirtualCurrency: body.VirtualCurrency,
             BalanceChange: body.Amount,
-            Balance: 1500,
+            Balance: awardedCoinsLog
+              .filter((a) => a.currency === body.VirtualCurrency)
+              .reduce((sum, a) => sum + a.amount, 0),
           },
         });
       }
@@ -467,6 +532,100 @@ test("order polling requires authentication and rejects another player's order",
   );
 });
 
+test("Coin credit survives failed fulfilled-status persistence without a second grant", async () => {
+  const order = await securityOrder();
+  failFulfilledSaveOnce = true;
+  const raw = createSampleEvent({ orderId: order.orderId });
+  assert.equal((await processPayMongoWebhook(raw, signPayload(raw).header)).status, 500);
+  assert.equal(coinAddCalls, 1);
+  assert.equal((await getOrder(order.orderId))!.status, "paid");
+  const poll = await handlePaymentsRequest(
+    new Request(`https://civil-craft.vercel.app/api/payments/paymongo/order?id=${order.orderId}`, {
+      headers: { Authorization: `Bearer ${TEST_PLAYER_TICKET}` },
+    }),
+  );
+  assert.equal((await poll!.json()).status, "fulfilled");
+  assert.equal((await processPayMongoWebhook(raw, signPayload(raw).header)).status, 200);
+  assert.equal(coinAddCalls, 1);
+  assert.equal(
+    awardedCoinsLog.reduce((sum, a) => sum + a.amount, 0),
+    500,
+  );
+});
+
+test("concurrent Coin webhook deliveries cannot share or steal the pre-grant claim", async () => {
+  const order = await securityOrder();
+  const raw = createSampleEvent({ orderId: order.orderId });
+  const results = await Promise.all(
+    Array.from({ length: 4 }, () => processPayMongoWebhook(raw, signPayload(raw).header)),
+  );
+  assert.ok(results.every((r) => r.status === 200));
+  assert.equal(coinAddCalls, 1);
+  assert.equal(
+    awardedCoinsLog.reduce((sum, a) => sum + a.amount, 0),
+    500,
+  );
+});
+
+for (const fault of ["timeout-after-credit", "receipt-confirmation-failure"] as const) {
+  test(`Coin ${fault} holds the purchase for review and never credits it again`, async () => {
+    const order = await securityOrder();
+    coinTimeoutAfterCreditOnce = fault === "timeout-after-credit";
+    failCoinConfirmation = fault === "receipt-confirmation-failure";
+    const raw = createSampleEvent({ orderId: order.orderId });
+    assert.equal((await processPayMongoWebhook(raw, signPayload(raw).header)).status, 500);
+    assert.equal(coinAddCalls, 1);
+    assert.equal((await getOrder(order.orderId))!.fulfillmentReviewRequired, true);
+    failCoinConfirmation = false;
+    assert.equal((await processPayMongoWebhook(raw, signPayload(raw).header)).status, 500);
+    assert.equal(coinAddCalls, 1);
+    const poll = await handlePaymentsRequest(
+      new Request(
+        `https://civil-craft.vercel.app/api/payments/paymongo/order?id=${order.orderId}`,
+        { headers: { Authorization: `Bearer ${TEST_PLAYER_TICKET}` } },
+      ),
+    );
+    const status = await poll!.json();
+    assert.equal(status.status, "paid");
+    assert.equal(status.fulfillmentReviewRequired, true);
+    assert.equal(
+      awardedCoinsLog.reduce((sum, a) => sum + a.amount, 0),
+      500,
+    );
+  });
+}
+
+test("unresolved historic Coin orders cannot be automatically replayed without a receipt", async () => {
+  const order = await securityOrder();
+  await persistTestOrder(order); // Remove the modern fixture stamp, representing old deployment data.
+  const raw = createSampleEvent({ orderId: order.orderId });
+  const result = await processPayMongoWebhook(raw, signPayload(raw).header);
+  assert.equal(result.status, 500);
+  assert.match(result.body.error!, /needs review/i);
+  assert.equal(coinAddCalls, 0);
+  assert.equal((await getOrder(order.orderId))!.fulfillmentReviewRequired, true);
+});
+
+test("unverified Coin receipt setup and exhausted object capacity reject checkout before PayMongo", async () => {
+  const request = () =>
+    new Request("https://civil-craft.vercel.app/api/payments/paymongo/create-checkout", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${TEST_PLAYER_TICKET}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ productId: "coins_500" }),
+    });
+  process.env["PLAYFAB_COINS_RECEIPTS_VERIFIED"] = "false";
+  assert.equal((await handlePaymentsRequest(request()))!.status, 503);
+  process.env["PLAYFAB_COINS_RECEIPTS_VERIFIED"] = "true";
+  for (const name of ["other-a", "other-b", "other-c"])
+    premiumObjects[name] = { ObjectName: name, DataObject: { receipts: {} } };
+  assert.equal((await handlePaymentsRequest(request()))!.status, 503);
+  assert.equal(payMongoApiRequests.length, 0);
+  assert.equal(coinAddCalls, 0);
+});
+
 test("fulfillment uses the immutable reward and Coin code rather than today's catalog/env", async () => {
   const order = await securityOrder({
     expectedCoins: 777,
@@ -556,6 +715,7 @@ test("catalog/storage outages never return active defaults or authorize grants",
 });
 
 test("unconfigured Diamonds cannot start a payment, and unavailable balances are not zero", async () => {
+  inventoryReadFailure = true;
   const headers = {
     Authorization: `Bearer ${TEST_PLAYER_TICKET}`,
     "Content-Type": "application/json",
@@ -608,6 +768,7 @@ function enableMockDiamonds(storage: "economy-v2" | "entity-objects" = "economy-
     PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID: "17FA03",
     PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED: "true",
     PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED: "true",
+    PLAYFAB_DIAMONDS_CAPACITY_VERIFIED: "true",
   });
   process.env["PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256"] = premiumWalletVerificationFingerprint();
 }
@@ -1214,7 +1375,11 @@ test("14. PlayFab outage marks order as paid with error and returns 500 for webh
   assert.ok(order.error);
   assert.equal(order.fulfilledAt, null);
 
-  // Crucial: Event must NOT be marked processed so the retry can attempt fulfillment again
+  // A monetary API failure is ambiguous. Retries must never repeat that grant.
+  assert.equal(order.fulfillmentReviewRequired, true);
+  playFabFailureMode = false;
+  assert.equal((await processPayMongoWebhook(rawBody, header)).status, 500);
+  assert.equal(coinAddCalls, 1);
   const processed = await isEventProcessed(eventId);
   assert.equal(processed, false);
 });

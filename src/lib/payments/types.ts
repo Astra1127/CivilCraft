@@ -35,6 +35,9 @@ export interface PaymentOrder {
   premiumWallet?: PremiumWalletSnapshot | undefined;
   /** Snapshots the configured classic Coin code so later config changes cannot reroute it. */
   coinCurrencyCode?: string | undefined;
+  /** Missing on historic orders: their unconfirmed grants must be reviewed, never replayed. */
+  coinReceiptVersion?: 1 | undefined;
+  fulfillmentReviewRequired?: boolean | undefined;
   PayMongoCheckoutSessionId: string | null;
   PayMongoReferenceNumber: string;
   status: PaymentOrderStatus;

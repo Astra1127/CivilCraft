@@ -60,6 +60,7 @@ export async function updateOrderStatus(
     rewardAmount: existing.rewardAmount,
     premiumWallet: existing.premiumWallet,
     coinCurrencyCode: existing.coinCurrencyCode,
+    coinReceiptVersion: existing.coinReceiptVersion,
     PayMongoReferenceNumber: existing.PayMongoReferenceNumber,
     PayMongoCheckoutSessionId:
       existing.PayMongoCheckoutSessionId || updates.PayMongoCheckoutSessionId || null,

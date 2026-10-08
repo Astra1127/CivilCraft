@@ -108,7 +108,7 @@ export function premiumWalletConfig(): PremiumWalletConfig {
   });
 }
 
-/** Binds operator verification to this exact title and catalog configuration. */
+/** Old single-receipt checks cannot attest the new shared-capacity readiness contract. */
 export function premiumWalletVerificationFingerprint(): string {
   const { titleId } = adminGameConfig();
   const wallet = premiumWalletConfig();
@@ -116,9 +116,12 @@ export function premiumWalletVerificationFingerprint(): string {
     .createHash("sha256")
     .update(
       JSON.stringify({
-        version: wallet.storage === "entity-objects" ? 2 : 1,
+        version: wallet.storage === "entity-objects" ? 3 : 1,
         titleId: titleId.toUpperCase(),
         ...wallet,
+        ...(wallet.storage === "entity-objects"
+          ? { sharedCapacityBytes: wallet.maxBytes, capacityCheck: "full-size-roundtrip-v1" }
+          : {}),
       }),
     )
     .digest("hex");
@@ -134,6 +137,7 @@ export function requireDiamondCheckoutReady(): PremiumWalletConfig {
   if (
     !enabled("PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED") ||
     !enabled("PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED") ||
+    (wallet.storage === "entity-objects" && !enabled("PLAYFAB_DIAMONDS_CAPACITY_VERIFIED")) ||
     process.env["PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID"]?.trim().toUpperCase() !==
       titleId.toUpperCase() ||
     process.env["PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256"]?.trim().toLowerCase() !==
@@ -272,6 +276,18 @@ async function economy(
     // A rejected/expired token cannot have committed an inventory operation.
     return postPlayFab(path, body, { "X-EntityToken": await titleToken(true), ...headers });
   }
+}
+
+/** Shared privileged transport for server-only, conditional entity data workflows. */
+export async function entityObjectsRequest(
+  path: "Object/GetObjects" | "Object/SetObjects",
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return economy(path, body);
+}
+
+export function isWalletRetryable(error: unknown): boolean {
+  return error instanceof WalletApiError && error.kind !== "rejected";
 }
 
 function receiptStackId(orderId: string): string {
@@ -499,7 +515,7 @@ async function readObjectWallet(
   playFabId: string,
   entity: PremiumEntity,
   config: ObjectPremiumWalletConfig,
-): Promise<{ wallet: ObjectWallet; profileVersion: number }> {
+): Promise<{ wallet: ObjectWallet; profileVersion: number; otherObjectBytes: number }> {
   const result = await economy("Object/GetObjects", { Entity: entity, EscapeObject: false });
   const returnedEntity = object(result["Entity"]);
   const profileVersion = result["ProfileVersion"];
@@ -523,6 +539,25 @@ async function readObjectWallet(
     entityId: entity.Id.toUpperCase(),
   };
   const objects = object(result["Objects"]);
+  let otherObjectBytes = 0;
+  for (const [name, raw] of Object.entries(objects)) {
+    if (name === config.objectName) continue;
+    const entry = object(raw);
+    if (
+      entry["ObjectName"] !== name ||
+      !entry["DataObject"] ||
+      typeof entry["DataObject"] !== "object" ||
+      Array.isArray(entry["DataObject"])
+    )
+      throw new WalletApiError("rejected");
+    // Entity Objects may share a per-entity quota. Count names/envelopes too,
+    // so unrelated objects cannot silently consume the verified wallet allowance.
+    otherObjectBytes += Buffer.byteLength(
+      JSON.stringify({ ObjectName: name, DataObject: entry["DataObject"] }),
+      "utf8",
+    );
+    if (!Number.isSafeInteger(otherObjectBytes)) throw new WalletApiError("rejected");
+  }
   if (!Object.hasOwn(objects, config.objectName)) {
     // The no-card setup deliberately stays within the documented free-tier three
     // objects. Do not collect a payment if the first wallet has no free slot.
@@ -531,7 +566,7 @@ async function readObjectWallet(
         503,
         "A free PlayFab object slot is required for this Diamonds wallet.",
       );
-    return { wallet: { ...identity, balance: 0, receipts: {} }, profileVersion };
+    return { wallet: { ...identity, balance: 0, receipts: {} }, profileVersion, otherObjectBytes };
   }
   const stored = object(objects[config.objectName]);
   const data = object(stored["DataObject"]);
@@ -565,7 +600,7 @@ async function readObjectWallet(
   }
   // This phase has no spending: balance and all permanent purchase receipts must agree.
   if (total !== data["balance"]) throw new WalletApiError("rejected");
-  return { wallet: { ...identity, balance: total, receipts }, profileVersion };
+  return { wallet: { ...identity, balance: total, receipts }, profileVersion, otherObjectBytes };
 }
 
 function objectReceiptExists(wallet: ObjectWallet, input: PremiumDiamondGrantInput): boolean {
@@ -580,6 +615,7 @@ function nextObjectWallet(
   state: ObjectWallet,
   input: PremiumDiamondGrantInput,
   config: ObjectPremiumWalletConfig,
+  otherObjectBytes: number,
 ): ObjectWallet {
   const balance = state.balance + input.rewardAmount;
   if (!Number.isSafeInteger(balance)) throw new WalletApiError("rejected");
@@ -595,7 +631,14 @@ function nextObjectWallet(
     },
   };
   // Never prune receipts to fit: stop taking payments and retain replay protection.
-  if (Buffer.byteLength(JSON.stringify(next), "utf8") > config.maxBytes)
+  if (
+    otherObjectBytes +
+      Buffer.byteLength(
+        JSON.stringify({ ObjectName: config.objectName, DataObject: next }),
+        "utf8",
+      ) >
+    config.maxBytes
+  )
     throw new AdminApiError(
       503,
       "This Diamonds wallet has reached its storage limit. Please contact support.",
@@ -611,7 +654,8 @@ export async function assertDiamondCheckoutCapacity(
   const config = validateWallet(input.wallet);
   if (config.storage === "entity-objects") {
     const state = await readObjectWallet(input.playFabId, input.entity, config);
-    if (!objectReceiptExists(state.wallet, input)) nextObjectWallet(state.wallet, input, config);
+    if (!objectReceiptExists(state.wallet, input))
+      nextObjectWallet(state.wallet, input, config, state.otherObjectBytes);
   } else {
     await readWallet(input.entity, config);
   }
@@ -631,7 +675,7 @@ async function grantObjectDiamonds(
           balance: state.wallet.balance,
           profileVersion: state.profileVersion,
         };
-      const next = nextObjectWallet(state.wallet, input, config);
+      const next = nextObjectWallet(state.wallet, input, config, state.otherObjectBytes);
       const result = await economy("Object/SetObjects", {
         Entity: input.entity,
         ExpectedProfileVersion: state.profileVersion,

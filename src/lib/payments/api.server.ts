@@ -18,10 +18,11 @@ import { createPayMongoCheckout, requirePayMongoCheckoutReady } from "./paymongo
 import {
   getCoinsCurrencyCode,
   processPayMongoWebhook,
-  repairDiamondOrder,
+  repairPaymentOrder,
 } from "./fulfillment.server.ts";
 import { authenticatePaymentPlayer } from "./player-auth.server.ts";
 import type { PaymentOrder } from "./types.ts";
+import { assertCoinCheckoutReady } from "./coin-receipts.server.ts";
 
 function jsonResponse(data: unknown, status = 200) {
   return Response.json(data, {
@@ -59,6 +60,7 @@ function safeOrder(order: PaymentOrder) {
     createdAt: order.createdAt,
     paidAt: order.paidAt,
     fulfilledAt: order.fulfilledAt,
+    fulfillmentReviewRequired: order.fulfillmentReviewRequired === true,
   };
 }
 
@@ -150,6 +152,13 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
           rewardAmount: reward.rewardAmount,
         });
         premiumWallet = { ...wallet, entity };
+      } else {
+        await assertCoinCheckoutReady({
+          orderId,
+          playFabId,
+          currencyCode: getCoinsCurrencyCode(),
+          rewardAmount: reward.rewardAmount,
+        });
       }
       const order: PaymentOrder = {
         orderId,
@@ -160,7 +169,7 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         ...reward,
         expectedCoins: reward.rewardCurrency === "CO" ? reward.rewardAmount : 0,
         ...(reward.rewardCurrency === "CO"
-          ? { coinCurrencyCode: getCoinsCurrencyCode() }
+          ? { coinCurrencyCode: getCoinsCurrencyCode(), coinReceiptVersion: 1 }
           : { premiumWallet }),
         PayMongoCheckoutSessionId: null,
         PayMongoReferenceNumber: orderId,
@@ -192,7 +201,7 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       const order = await getOrder(orderId);
       if (!order || order.playFabId.toUpperCase() !== playFabId.toUpperCase())
         return jsonResponse({ error: "Order not found" }, 404);
-      return jsonResponse(safeOrder(await repairDiamondOrder(order)));
+      return jsonResponse(safeOrder(await repairPaymentOrder(order)));
     }
     const orders = await listOrdersForPlayer(playFabId);
     return jsonResponse({ orders: orders.map(safeOrder) });

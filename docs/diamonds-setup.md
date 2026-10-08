@@ -4,6 +4,8 @@ Diamonds uses regular **PlayFab Entity Objects**, not the Economy v2 catalog. No
 
 Existing Coins (`CO`), Coin packages, and game-earned Gold are untouched. The three test packs remain 500 Diamonds / ₱50, 1,000 / ₱95, and 2,500 / ₱220. Website design, Coins/Diamonds tabs, `/shop?currency=diamonds` login routing, and independent validated browser sessions are unchanged. This phase does not implement Unity linking, spending/conversion, live payments, or automatic return to the game.
 
+Coin checkout now also requires its own permanent-receipt verification. After this guide passes, keep the same disposable one-Diamond account and follow [Coin purchase safety](coins-fulfillment-safety.md). Existing Coin balances are not migrated. Stop simulated checkout during rollout: flags only protect the patched revision, not an older deployed server that does not read them.
+
 ## What changed
 
 Each server-resolved `title_player_account` has a dedicated object named `civilcraft.premium-wallet.v1`. It stores `DI`, the balance, account identity, and a permanent receipt ledger. It is separate from local/cloud game save files.
@@ -25,6 +27,7 @@ PLAYFAB_DIAMONDS_ITEM_ID=
 PLAYFAB_DIAMONDS_RECEIPT_ITEM_ID=
 PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED=false
 PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED=false
+PLAYFAB_DIAMONDS_CAPACITY_VERIFIED=false
 PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID=
 PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256=
 ```
@@ -60,7 +63,7 @@ No PlayFab catalog, billing, policy, or real-account changes have been applied a
 
 ## Step 3 — verify the real test title
 
-Use a fresh disposable test player, not your own progression account. It must have no premium-wallet object and at least one free Entity Object slot. Set `PLAYFAB_DIAMONDS_VERIFICATION_PLAYER_TICKET` in your private local environment to that player's current session ticket. The script validates it against the explicitly supplied PlayFab ID.
+Use a fresh disposable test player, not your own progression account. Its **Entity Objects must be empty**; this lets verification prove the full shared allowance without overwriting or removing existing data. Files/cloud saves are a different feature and remain untouched. Set `PLAYFAB_DIAMONDS_VERIFICATION_PLAYER_TICKET` in your private local environment to that player's current session ticket. The script validates it against the explicitly supplied PlayFab ID.
 
 From the website directory, using Node 22.18 or newer:
 
@@ -73,10 +76,11 @@ The explicit consent flag is required. The script:
 - Inspects the current policy and account mapping.
 - Tests a player-token nonmonetary write, requiring an explicit authorization denial.
 - Tests an intentionally mismatched profile version, requiring a concurrency rejection.
+- Writes a uniquely named **nonmonetary JSON object of exactly 8,192 UTF-8 bytes**, confirms its full contents through bounded readback, then conditionally deletes only that exact owned marker and verifies cleanup. Stale reads are retried; lower service quotas or unconfirmed writes/readback/cleanup fail verification before any Diamond grant.
 - Runs concurrent/repeated one-Diamond grants and confirms exactly one Diamond and one permanent receipt.
 - Restores its process environment afterward; it never edits environment files or deployed settings.
 
-It leaves one test Diamond on the disposable account, with its permanent receipt. It makes no PayMongo purchase, deletes no data, and changes no policy. If permissions/CAS are unexpectedly broken, a nonmonetary permission/CAS probe object may be left on the disposable account before the script stops. Never use a valuable player for this check.
+It leaves one test Diamond on the disposable account, with its permanent receipt. It makes no PayMongo purchase and changes no policy. The **only deletion** is the exact nonmonetary capacity marker created by this run; wallets, receipts, unrelated objects and Files are never deleted. A failed/uncertain verification can leave a nonmonetary permission/CAS/capacity probe on the disposable account. Stop, inspect that test account and keep checkout disabled; do not rerun against your real player or remove permanent receipts.
 
 Only after **all real-title checks pass**, review and set the script's nonsecret deployment outputs:
 
@@ -84,11 +88,12 @@ Only after **all real-title checks pass**, review and set the script's nonsecret
 PLAYFAB_DIAMONDS_ENABLED=true
 PLAYFAB_DIAMONDS_BOOTSTRAP_VERIFIED=true
 PLAYFAB_DIAMONDS_PLAYER_WRITES_DENIED=true
+PLAYFAB_DIAMONDS_CAPACITY_VERIFIED=true
 PLAYFAB_DIAMONDS_VERIFIED_TITLE_ID=<verified title>
 PLAYFAB_DIAMONDS_VERIFIED_CONFIG_SHA256=<verified configuration fingerprint>
 ```
 
-Keep `PLAYFAB_DIAMONDS_STORAGE=entity-objects` and both item-ID values empty. The legacy bootstrap flag now attests verified first-object creation, not a catalog bootstrap. The fingerprint binds the exact title and wallet provider/configuration; changing providers requires new verification. Remove the verification ticket afterward. **Mocked tests are not a substitute for this real-title check.**
+Keep `PLAYFAB_DIAMONDS_STORAGE=entity-objects` and both item-ID values empty. The legacy bootstrap flag now attests verified first-object creation, not a catalog bootstrap. The fingerprint binds the exact title, provider, configured 8,192-byte allowance and full-size verification contract. **Old single-receipt verification outputs are invalidated:** rerun the complete check and replace the fingerprint; do not manually invent a capacity attestation. Changing providers/capacity requires new verification. Remove the verification ticket afterward. **Mocked tests are not a substitute for this real-title check.**
 
 ## Step 4 — test website purchases
 
@@ -102,7 +107,9 @@ Test cancellation, delayed confirmation, duplicate notifications, account switch
 
 Microsoft documents a free-tier allowance of up to **three Entity Objects per entity**. This wallet uses one; checkout is blocked before a first purchase if all three slots are already occupied. Existing unrelated objects and Files are never overwritten or removed. [Entity Objects](https://learn.microsoft.com/en-us/xbox/playfab/live-service-management/game-configuration/entities/entity-objects).
 
-The implementation also uses a conservative **8 KiB application cap** for this wallet's JSON. This is not a claim about PlayFab's actual byte quota or an unlimited production wallet. Permanent receipt storage grows with each purchase; roughly a few dozen lifetime receipts fit, depending on identity/amount lengths. New checkouts are rejected at the cap. Concurrent checkouts near capacity can still leave a paid order awaiting support; fulfillment must retain its receipts and remain pending/retryable, never grant without a receipt.
+The implementation uses a conservative **8 KiB shared application budget**. It counts the UTF-8 JSON footprints of every Entity Object's name/data envelope, not just Diamonds; other objects reduce the remaining wallet capacity. The real-title check must prove an entire 8,192-byte nonmonetary data object can be saved and read, and must verify its cleanup, before checkout is enabled. This is not a claim about PlayFab's published byte quota or an unlimited production wallet. If the title rejects that full-size proof, checkout stays disabled; do not bypass the guard or increase the cap.
+
+Permanent receipt storage grows with each purchase; roughly a few dozen lifetime receipts fit, depending on identity/amount lengths and other objects. New checkouts and new grants are rejected before exceeding the shared budget. Historical balances/receipts remain readable and replay-safe even if another object later consumes the remaining space. Concurrent checkouts or unrelated object growth near capacity can still leave a paid order awaiting support; fulfillment must retain its receipts and remain pending/retryable, never grant without a receipt. This backend is suitable only for limited simulated testing, not an unbounded paid wallet.
 
 For higher purchase volume, use a reviewed transactional database or wallet migration before increasing capacity. Never expire, spend, prune, or delete receipts to reclaim space; replay protection must survive any migration. Monitor the title's actual service limits. Additional service usage can have platform quotas/costs even though this implementation does not use the card-gated Economy catalog.
 
@@ -114,4 +121,4 @@ Do not silently switch a deployed wallet containing money or pending orders to t
 
 ## Automated checks
 
-`npm run test:currencies` uses mocked services only. It covers both providers, all three Diamond packs, legacy Coin checkout, disabled/unverified setup, server reward/owner enforcement, payment evidence checks, first-object creation, duplicate/concurrent grants, stale reads, timeout after commit, replay beyond 14 days, capacity, receipt corruption, permission denial, CAS enforcement, status repair, and existing shop routing/layout regressions.
+`npm run test:currencies` uses mocked services only. It covers both providers, all three Diamond packs, legacy Coin checkout, disabled/unverified setup, server reward/owner enforcement, payment evidence checks, first-object creation, duplicate/concurrent grants, stale reads, timeout after commit, replay beyond 14 days, full-size quota rejection, aggregate unrelated-object capacity, eventual readback/owned-probe cleanup, rejection of old attestations, receipt corruption, permission denial, CAS enforcement, status repair, and existing shop routing/layout regressions.

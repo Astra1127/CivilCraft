@@ -28,6 +28,7 @@ interface OrderStatusResponse {
   createdAt: string;
   paidAt: string | null;
   fulfilledAt: string | null;
+  fulfillmentReviewRequired?: boolean;
   error?: string;
 }
 
@@ -94,11 +95,13 @@ function PaymentSuccessPage() {
         if (data.orderId !== orderId)
           throw new Error("The payment response did not match this order.");
         normalizeOrderReward(data);
-        terminal = ["fulfilled", "failed", "cancelled"].includes(data.status);
+        terminal =
+          data.fulfillmentReviewRequired === true ||
+          ["fulfilled", "failed", "cancelled"].includes(data.status);
         if (active) {
           setOrder(data);
           setPollError(null);
-          if (data.status === "fulfilled") {
+          if (data.status === "fulfilled" && data.fulfillmentReviewRequired !== true) {
             void queryClient.invalidateQueries({
               queryKey: ["player-currencies", player?.playFabId],
             });
@@ -138,9 +141,10 @@ function PaymentSuccessPage() {
     };
   }, [orderId, queryClient, player?.playFabId]);
 
-  const isFulfilled = order?.status === "fulfilled";
-  const isFailed = order?.status === "failed" || order?.status === "cancelled";
-  const isPending = !isFulfilled && !isFailed;
+  const needsReview = order?.fulfillmentReviewRequired === true;
+  const isFulfilled = order?.status === "fulfilled" && !needsReview;
+  const isFailed = (order?.status === "failed" || order?.status === "cancelled") && !needsReview;
+  const isPending = !isFulfilled && !isFailed && !needsReview;
   const reward = order ? normalizeOrderReward(order) : null;
   const rewardLabel = reward ? currencyLabel(reward.rewardCurrency) : "currency";
   const RewardIcon = reward?.rewardCurrency === "DI" ? Diamond : Coins;
@@ -152,7 +156,11 @@ function PaymentSuccessPage() {
           <div className="panel border-2 border-border bg-card p-6 sm:p-10 rounded-2xl shadow-lift text-center">
             {/* Header Icon */}
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full">
-              {isFulfilled ? (
+              {needsReview ? (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gold/15 text-gold border-2 border-gold/40">
+                  <AlertCircle className="h-10 w-10" />
+                </div>
+              ) : isFulfilled ? (
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gold/15 text-gold border-2 border-gold/40">
                   <CheckCircle2 className="h-10 w-10" />
                 </div>
@@ -168,7 +176,20 @@ function PaymentSuccessPage() {
             </div>
 
             {/* Heading and details */}
-            {isFulfilled ? (
+            {needsReview ? (
+              <>
+                <span className="inline-block text-[11px] font-extrabold uppercase tracking-widest text-gold mb-1">
+                  MANUAL REVIEW
+                </span>
+                <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-foreground">
+                  Purchase needs review
+                </h1>
+                <p role="status" className="mt-2 text-sm text-muted-foreground">
+                  We cannot yet confirm the currency credit for this purchase. Do not pay again.
+                  Contact support with the order reference below so we can check it safely.
+                </p>
+              </>
+            ) : isFulfilled ? (
               <>
                 <span className="inline-block text-[11px] font-extrabold uppercase tracking-widest text-gold mb-1">
                   PURCHASE COMPLETE
@@ -231,11 +252,13 @@ function PaymentSuccessPage() {
                 <div className="flex justify-between items-center text-xs text-muted-foreground">
                   <span>Status</span>
                   <span className="font-bold capitalize text-gold">
-                    {isFulfilled
-                      ? "Fulfilled / Credited"
-                      : isFailed
-                        ? "Failed"
-                        : "Verifying Webhook..."}
+                    {needsReview
+                      ? "Needs review"
+                      : isFulfilled
+                        ? "Fulfilled / Credited"
+                        : isFailed
+                          ? "Failed"
+                          : "Verifying Webhook..."}
                   </span>
                 </div>
                 {order?.paidAt ? (
@@ -272,12 +295,18 @@ function PaymentSuccessPage() {
             {/* Action buttons */}
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <Button asChild variant="gold" size="lg" className="font-bold shadow-md">
-                <Link
-                  to="/dashboard/shop"
-                  search={{ currency: reward?.rewardCurrency === "DI" ? "diamonds" : "coins" }}
-                >
-                  <RewardIcon className="mr-2 h-4 w-4" /> Back to Shop
-                </Link>
+                {needsReview ? (
+                  <Link to="/contact">
+                    <AlertCircle className="mr-2 h-4 w-4" /> Contact Support
+                  </Link>
+                ) : (
+                  <Link
+                    to="/dashboard/shop"
+                    search={{ currency: reward?.rewardCurrency === "DI" ? "diamonds" : "coins" }}
+                  >
+                    <RewardIcon className="mr-2 h-4 w-4" /> Back to Shop
+                  </Link>
+                )}
               </Button>
               <Button
                 asChild

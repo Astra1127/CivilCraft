@@ -1,14 +1,14 @@
-import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
+import { AdminApiError, object } from "../playfab/admin-client.server.ts";
 import { grantDiamonds, hasDiamondReceipt } from "../playfab/premium-wallet.server.ts";
 import { normalizeOrderReward } from "./products.ts";
-import {
-  getOrder,
-  isEventProcessed,
-  markEventProcessed,
-  updateOrderStatus,
-} from "./orders.server.ts";
+import { getOrder, markEventProcessed, updateOrderStatus } from "./orders.server.ts";
 import { retrievePayMongoCheckout, verifyPayMongoSignature } from "./paymongo.server.ts";
 import type { PaymentOrder } from "./types.ts";
+import {
+  CoinGrantReviewRequired,
+  getCoinReceiptStatus,
+  grantCoinsOnce,
+} from "./coin-receipts.server.ts";
 
 export function getCoinsCurrencyCode(): string {
   const code = (process.env["PLAYFAB_COINS_CURRENCY_CODE"] || "CO").trim().toUpperCase();
@@ -81,6 +81,50 @@ export async function repairDiamondOrder(order: PaymentOrder): Promise<PaymentOr
   if (order.status === "fulfilled")
     throw new AdminApiError(503, "Diamond fulfillment could not be verified.");
   return order;
+}
+
+export function coinGrantInput(order: PaymentOrder) {
+  const reward = normalizeOrderReward(order);
+  if (reward.rewardCurrency !== "CO" || order.coinReceiptVersion !== 1)
+    throw new CoinGrantReviewRequired();
+  return {
+    orderId: order.orderId,
+    playFabId: order.playFabId,
+    currencyCode: order.coinCurrencyCode || getCoinsCurrencyCode(),
+    rewardAmount: reward.rewardAmount,
+  };
+}
+
+export async function repairPaymentOrder(order: PaymentOrder): Promise<PaymentOrder> {
+  if (normalizeOrderReward(order).rewardCurrency === "DI") return repairDiamondOrder(order);
+  if (order.coinReceiptVersion !== 1) {
+    // Historic fulfilled orders/history remain unchanged. Unfulfilled legacy orders
+    // may already have been credited by the old code and cannot be granted safely.
+    return order.status === "fulfilled" || order.status === "pending"
+      ? order
+      : { ...order, fulfillmentReviewRequired: true };
+  }
+  const status = await getCoinReceiptStatus(coinGrantInput(order));
+  if (status === "granted") {
+    const fulfilledAt = order.fulfilledAt || new Date().toISOString();
+    const updates = {
+      status: "fulfilled" as const,
+      fulfilledAt,
+      error: null,
+      fulfillmentReviewRequired: false,
+    };
+    if (order.status !== "fulfilled" || order.fulfillmentReviewRequired) {
+      try {
+        await updateOrderStatus(order.orderId, updates);
+      } catch {
+        /* Receipt is authoritative. */
+      }
+    }
+    return { ...order, ...updates };
+  }
+  if (order.status === "fulfilled")
+    throw new AdminApiError(503, "Coin fulfillment could not be verified.");
+  return { ...order, fulfillmentReviewRequired: status === "pending" };
 }
 
 function paymentEvidence(
@@ -195,14 +239,13 @@ export async function processPayMongoWebhook(
     }
     verifiedPayment = true;
     const reward = normalizeOrderReward(order);
-    if (reward.rewardCurrency === "DI") order = await repairDiamondOrder(order);
-    if (
-      order.status === "fulfilled" ||
-      (reward.rewardCurrency === "CO" && (await isEventProcessed(event["id"] as string)))
-    ) {
+    order = await repairPaymentOrder(order);
+    if (order.status === "fulfilled") {
       await markEventProcessed(event["id"] as string, order.orderId);
       return { status: 200, body: { success: true, idempotent: true, orderId: order.orderId } };
     }
+    if (reward.rewardCurrency === "CO" && order.coinReceiptVersion !== 1)
+      throw new CoinGrantReviewRequired();
     const paidAt = order.paidAt || new Date().toISOString();
     await updateOrderStatus(order.orderId, {
       status: "paid",
@@ -215,14 +258,8 @@ export async function processPayMongoWebhook(
       const result = await grantDiamonds(diamondGrantInput(order));
       alreadyGranted = result.alreadyGranted;
     } else {
-      const code = order.coinCurrencyCode || getCoinsCurrencyCode();
-      if (!/^[A-Z]{2}$/.test(code))
-        throw new AdminApiError(503, "Coin currency configuration is invalid.");
-      await playFabAdmin("Server/AddUserVirtualCurrency", {
-        PlayFabId: order.playFabId,
-        VirtualCurrency: code,
-        Amount: reward.rewardAmount,
-      });
+      const result = await grantCoinsOnce(coinGrantInput(order));
+      alreadyGranted = result.alreadyGranted;
     }
     await updateOrderStatus(order.orderId, {
       status: "fulfilled",
@@ -230,6 +267,7 @@ export async function processPayMongoWebhook(
       fulfilledAt: new Date().toISOString(),
       webhookEventId: event["id"] as string,
       error: null,
+      fulfillmentReviewRequired: false,
     });
     await markEventProcessed(event["id"] as string, order.orderId);
     return {
@@ -242,19 +280,22 @@ export async function processPayMongoWebhook(
         rewardAmount: reward.rewardAmount,
         ...(reward.rewardCurrency === "DI"
           ? { diamondsAwarded: alreadyGranted ? 0 : reward.rewardAmount }
-          : { coinsAwarded: reward.rewardAmount }),
+          : { coinsAwarded: alreadyGranted ? 0 : reward.rewardAmount }),
       },
     };
   } catch (error) {
     const status = error instanceof AdminApiError ? error.status : 503;
+    const reviewRequired = error instanceof CoinGrantReviewRequired;
     if (order && (verifiedPayment || status === 400)) {
       try {
         await updateOrderStatus(order.orderId, {
           status: status === 400 ? "failed" : "paid",
-          error:
-            status === 400
+          error: reviewRequired
+            ? error.message
+            : status === 400
               ? (error as Error).message
               : "Fulfillment is temporarily unavailable. Retry expected.",
+          ...(reviewRequired ? { fulfillmentReviewRequired: true } : {}),
         });
       } catch {
         /* Never mask a failed state write as successful fulfillment. */
@@ -262,9 +303,11 @@ export async function processPayMongoWebhook(
     }
     return fail(
       status >= 500 ? 500 : status,
-      status < 500 && error instanceof Error
+      reviewRequired
         ? error.message
-        : "Virtual currency fulfillment temporarily unavailable. Retry expected.",
+        : status < 500 && error instanceof Error
+          ? error.message
+          : "Virtual currency fulfillment temporarily unavailable. Retry expected.",
     );
   }
 }

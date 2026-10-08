@@ -314,6 +314,70 @@ test("pending confirmations are bounded and unmount cancels queued status checks
   assert.equal(cancelled.requests[0].init.signal.aborted, true);
 });
 
+test("manual-review confirmation stops polling, never claims credit and offers support rather than another purchase", async () => {
+  for (const status of ["paid", "fulfilled"]) {
+    const module = load("../src/routes/dashboard.payment.success.tsx", {
+      fetch: async () =>
+        Response.json({
+          orderId: "ORDER-A",
+          status,
+          expectedCoins: 500,
+          fulfillmentReviewRequired: true,
+        }),
+    });
+    const renderer = await mount(module);
+    try {
+      const text = JSON.stringify(renderer.toJSON());
+      assert.match(text, /Purchase needs review/);
+      assert.match(text, /Do not pay again/);
+      assert.match(text, /order reference/);
+      assert.match(text, /Contact Support/);
+      assert.doesNotMatch(
+        text,
+        /PURCHASE COMPLETE|Currency Credited|have been added|Checking live|Confirmation is still pending/,
+      );
+      assert.equal(module.requests.length, 1);
+      assert.equal(module.timers.size, 0);
+      assert.equal(module.invalidations.length, 0);
+      assert.ok(renderer.root.findAllByType("a").some((link) => link.props.href === "/contact"));
+      assert.equal(
+        renderer.root.findAllByType("a").some((link) => link.props.href === "/dashboard/shop"),
+        false,
+      );
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  }
+});
+
+test("a pending order transitioning to manual review ends scheduled polling", async () => {
+  let checks = 0;
+  const module = load("../src/routes/dashboard.payment.success.tsx", {
+    fetch: async () =>
+      Response.json({
+        orderId: "ORDER-A",
+        status: "paid",
+        expectedCoins: 500,
+        fulfillmentReviewRequired: ++checks > 1,
+      }),
+  });
+  const renderer = await mount(module);
+  try {
+    assert.equal(module.timers.size, 1);
+    const [id, callback] = module.timers.entries().next().value;
+    module.timers.delete(id);
+    await act(async () => {
+      await callback();
+    });
+    assert.equal(module.timers.size, 0);
+    assert.equal(module.requests.length, 2);
+    assert.match(JSON.stringify(renderer.toJSON()), /Purchase needs review/);
+    assert.equal(module.invalidations.length, 0);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
 test("wrong-owner order access and missing references never display a credited currency", async () => {
   for (const options of [
     { fetch: async () => new Response("forbidden", { status: 403 }) },
