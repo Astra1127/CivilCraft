@@ -152,6 +152,11 @@ function connection(): ReturnType<typeof postgres> {
   return pool;
 }
 
+/** Shared restricted, TLS-verifying pool. Callers must expose only vetted SQL functions. */
+export function currencyDatabaseConnection(): ReturnType<typeof postgres> {
+  return connection();
+}
+
 export async function closeCurrencyDatabasePool(): Promise<void> {
   const closing = pool;
   pool = undefined;

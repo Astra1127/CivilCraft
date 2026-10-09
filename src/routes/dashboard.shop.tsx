@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { toast } from "sonner";
 
@@ -30,6 +30,7 @@ import {
   displayBalance,
   shopCurrency,
   shopDestination,
+  shopGameLink,
   type ShopCurrency,
 } from "@/lib/payments/shop-display";
 import { cn } from "@/lib/utils";
@@ -39,12 +40,23 @@ interface PlayerCurrencies {
   coins: number | null;
   diamonds: number | null;
   diamondsAvailable: boolean;
+  coinsAvailable?: boolean;
+  coinsMigrationRequired?: boolean;
+}
+
+interface GameLinkStatus {
+  valid: boolean;
+  currency?: ShopCurrency;
+  expiresAt?: string;
+  mismatch?: boolean;
+  error?: string;
 }
 
 export const Route = createFileRoute("/dashboard/shop")({
   ssr: false,
   validateSearch: (search: Record<string, unknown>) => ({
     currency: shopCurrency(search["currency"]),
+    ...(shopGameLink(search["gameLink"]) ? { gameLink: shopGameLink(search["gameLink"]) } : {}),
   }),
   head: () => ({
     meta: [
@@ -66,14 +78,15 @@ export const Route = createFileRoute("/dashboard/shop")({
 });
 
 function AuthenticatedShopPage() {
-  const { isAuthenticated, player } = useAuth();
+  const { isAuthenticated, player, logout } = useAuth();
   const navigate = useNavigate();
-  const { currency: selectedCurrency } = Route.useSearch();
-  const destination = shopDestination(selectedCurrency);
+  const { currency: selectedCurrency, gameLink } = Route.useSearch();
+  const destination = shopDestination(selectedCurrency, gameLink);
   const selectedCode = selectedCurrency === "diamonds" ? "DI" : "CO";
   const selectedLabel = currencyLabel(selectedCode);
   const SelectedIcon = selectedCode === "DI" ? Diamond : Coins;
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
+  const purchaseInFlight = useRef(false);
 
   // Both balances come from the authenticated backend; an outage is not a zero balance.
   const balanceQuery = useQuery<PlayerCurrencies>({
@@ -85,10 +98,40 @@ function AuthenticatedShopPage() {
         headers: { Authorization: `Bearer ${ticket}` },
       });
       if (!res.ok) throw new Error("Currency balances are unavailable.");
-      return (await res.json()) as PlayerCurrencies;
+      const data = (await res.json()) as PlayerCurrencies;
+      if (currentSessionTicket() !== ticket)
+        throw new Error("Your account changed. Please refresh.");
+      return data;
     },
     enabled: isAuthenticated && Boolean(player?.playFabId),
     staleTime: 15_000,
+  });
+
+  const gameLinkQuery = useQuery<GameLinkStatus>({
+    queryKey: ["game-shop-link", player?.playFabId, gameLink],
+    queryFn: async ({ signal }) => {
+      const ticket = currentSessionTicket();
+      if (!ticket || !gameLink) throw new Error("Please sign in again.");
+      const res = await playerFetch(`/api/game/shop-link?token=${encodeURIComponent(gameLink)}`, {
+        headers: { Authorization: `Bearer ${ticket}` },
+        signal,
+      });
+      const data = (await res.json()) as GameLinkStatus;
+      if (currentSessionTicket() !== ticket)
+        throw new Error("Your account changed. Verify the shop link again.");
+      if (res.status === 409)
+        return {
+          valid: false,
+          mismatch: true,
+          error: data.error || "Switch accounts to match the player in the game.",
+        };
+      if (!res.ok) throw new Error(data.error || "Unable to verify this game shop link.");
+      if (data.valid !== true) throw new Error("Unable to verify this game shop link.");
+      return data;
+    },
+    enabled: Boolean(gameLink) && isAuthenticated && Boolean(player?.playFabId),
+    retry: false,
+    staleTime: 0,
   });
 
   // Never reactivate disabled products using a static catalog during an outage.
@@ -110,11 +153,33 @@ function AuthenticatedShopPage() {
   );
   const diamondCheckoutAvailable =
     balanceQuery.data?.diamondsAvailable === true && !balanceQuery.isError;
+  const coinCheckoutAvailable =
+    balanceQuery.data !== undefined &&
+    !balanceQuery.isError &&
+    balanceQuery.data?.coinsAvailable === true &&
+    balanceQuery.data?.coinsMigrationRequired !== true;
+  const gameAccountVerified =
+    !gameLink ||
+    (gameLinkQuery.data?.valid === true && !gameLinkQuery.isPending && !gameLinkQuery.isError);
 
   const selectCurrency = (currency: ShopCurrency) =>
-    navigate({ to: "/dashboard/shop", search: { currency }, replace: true });
+    navigate({
+      to: "/dashboard/shop",
+      search: { currency, ...(gameLink ? { gameLink } : {}) },
+      replace: true,
+    });
+
+  const switchAccount = async () => {
+    try {
+      await logout("player");
+      navigate({ to: "/login", search: { redirect: destination }, replace: true });
+    } catch {
+      toast.error("Unable to switch accounts. Please try again.");
+    }
+  };
 
   const handleBuy = async (product: PaymentProduct) => {
+    if (purchaseInFlight.current) return;
     if (!isAuthenticated) {
       toast.info(`Please sign in to purchase ${selectedLabel}.`, {
         description: "You'll be redirected to sign in to your Civil Craft account.",
@@ -130,12 +195,27 @@ function AuthenticatedShopPage() {
       return;
     }
 
+    if (!gameAccountVerified) {
+      toast.error("Verify the matching game account before starting checkout.");
+      return;
+    }
+
+    if (normalizeProductReward(product).rewardCurrency === "CO" && !coinCheckoutAvailable) {
+      toast.error(
+        balanceQuery.data?.coinsMigrationRequired
+          ? "Open the updated game and finish selecting your account save before buying Coins."
+          : "Coin purchases are temporarily unavailable. No payment has been started.",
+      );
+      return;
+    }
+
     if (normalizeProductReward(product).rewardCurrency === "DI" && !diamondCheckoutAvailable) {
       toast.error("Diamond purchases are temporarily unavailable. No payment has been started.");
       return;
     }
 
     try {
+      purchaseInFlight.current = true;
       setPurchasingId(product.id);
       const res = await playerFetch("/api/payments/paymongo/create-checkout", {
         method: "POST",
@@ -143,7 +223,7 @@ function AuthenticatedShopPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${ticket}`,
         },
-        body: JSON.stringify({ productId: product.id }),
+        body: JSON.stringify({ productId: product.id, ...(gameLink ? { gameLink } : {}) }),
       });
 
       const data = (await res.json()) as {
@@ -156,6 +236,9 @@ function AuthenticatedShopPage() {
       if (!res.ok || !data.checkoutUrl) {
         throw new Error(data.error || "Failed to initialize checkout session.");
       }
+      // A response from a previous signed-in account cannot start a new account's checkout.
+      if (currentSessionTicket() !== ticket)
+        throw new Error("Your account changed. Please try again.");
 
       // Redirect user to PayMongo Hosted Checkout
       window.location.href = data.checkoutUrl;
@@ -163,6 +246,7 @@ function AuthenticatedShopPage() {
       const msg = err instanceof Error ? err.message : "Payment initialization failed.";
       toast.error(msg);
     } finally {
+      purchaseInFlight.current = false;
       setPurchasingId(null);
     }
   };
@@ -190,6 +274,43 @@ function AuthenticatedShopPage() {
               Optional currency packages support Civil Craft development. Core bridge-engineering
               lessons remain free.
             </p>
+
+            {gameLink ? (
+              <div role={gameAccountVerified ? "status" : "alert"} className="panel p-4 text-sm">
+                {gameLinkQuery.isPending ? (
+                  "Checking that this website account matches your game account…"
+                ) : gameLinkQuery.data?.mismatch ? (
+                  <>
+                    <p>
+                      This website is signed in to a different Civil Craft account. Switch accounts
+                      to receive this purchase on the account playing the game.
+                    </p>
+                    <Button variant="outline" className="mt-3" onClick={switchAccount}>
+                      Switch Account
+                    </Button>
+                  </>
+                ) : gameLinkQuery.isError ? (
+                  <>
+                    <p>
+                      {gameLinkQuery.error instanceof Error
+                        ? gameLinkQuery.error.message
+                        : "This game shop link could not be verified. Open the shop again from the game."}
+                    </p>
+                    <Button
+                      variant="outline"
+                      className="mt-3"
+                      onClick={() => gameLinkQuery.refetch()}
+                    >
+                      Try again
+                    </Button>
+                  </>
+                ) : gameAccountVerified ? (
+                  "Game account verified. Test purchases will be delivered to this account."
+                ) : (
+                  "Open the shop again from Civil Craft to verify your account."
+                )}
+              </div>
+            ) : null}
 
             {/* Player Balance Card */}
             <div className="pt-4">
@@ -232,6 +353,14 @@ function AuthenticatedShopPage() {
                     <span className="mt-1 block font-mono">PlayFab ID: {player?.playFabId}</span>
                   </p>
                   <div className="mt-2 flex items-center justify-center gap-3 text-xs text-muted-foreground">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={balanceQuery.isFetching}
+                      onClick={() => balanceQuery.refetch()}
+                    >
+                      Refresh balance
+                    </Button>
                     <Link to="/dashboard" className="font-bold text-gold hover:underline">
                       Dashboard →
                     </Link>
@@ -331,6 +460,16 @@ function AuthenticatedShopPage() {
                   : "Diamond purchases are temporarily unavailable. No payment will be started."}
               </p>
             ) : null}
+            {selectedCode === "CO" && !coinCheckoutAvailable ? (
+              <p
+                role="status"
+                className="rounded-lg border border-gold/40 bg-gold/10 p-4 text-center text-sm"
+              >
+                {balanceQuery.data?.coinsMigrationRequired
+                  ? "Open the updated game and finish selecting your account save before buying Coins. Your existing Coins have not been replaced."
+                  : "Coin purchases are temporarily unavailable. No payment will be started."}
+              </p>
+            ) : null}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 items-stretch pt-2">
               {products.map((product) => {
@@ -427,6 +566,8 @@ function AuthenticatedShopPage() {
                           onClick={() => handleBuy(product)}
                           disabled={
                             purchasingId !== null ||
+                            !gameAccountVerified ||
+                            (selectedCode === "CO" && !coinCheckoutAvailable) ||
                             (selectedCode === "DI" && !diamondCheckoutAvailable)
                           }
                         >
@@ -483,7 +624,8 @@ function AuthenticatedShopPage() {
               </p>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Currency purchases are optional. Diamonds are a separate wallet; they do not change
-                your Coins or game gold.
+                your Coins. Diamonds can be displayed in the game but cannot be spent in this
+                update.
               </p>
             </div>
 

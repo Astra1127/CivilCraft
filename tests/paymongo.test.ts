@@ -736,6 +736,8 @@ test("unconfigured Diamonds cannot start a payment, and unavailable balances are
     coins: null,
     diamonds: null,
     diamondsAvailable: false,
+    coinsAvailable: false,
+    coinsMigrationRequired: false,
   });
 });
 
