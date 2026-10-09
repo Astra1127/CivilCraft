@@ -6,6 +6,7 @@ import { runInNewContext } from "node:vm";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import ts from "typescript";
+import { playerNameDependencies } from "./helpers/player-name-ui.mjs";
 
 const require = createRequire(import.meta.url);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -27,14 +28,15 @@ function load(path, dependencies = {}, extra = "") {
 
 // Use the production JSON reader; no network or player writes are available.
 const player = load("../src/lib/playfab/player.ts", {
-  "./client": {},
-  "./statistics": {},
-  "./leaderboard-shared": {},
+  "./equipment.ts": {},
+  "./client.ts": {},
+  "./statistics.ts": {},
+  "./leaderboard-shared.ts": {},
 });
 async function journeyFrom(record) {
   let reads = 0;
   const service = load("../src/lib/playfab/almanac.ts", {
-    "./player": {
+    "./player.ts": {
       jsonFrom: player.jsonFrom,
       getPlayerData: async (keys) => {
         reads++;
@@ -119,9 +121,10 @@ test("Materials UI reveals only exact game-written entries and preserves empty s
       discoveredMaterials: ids,
     };
     const component = load("../src/components/dashboard/almanac/AlmanacJournal.tsx", {
+      ...playerNameDependencies,
       "@tanstack/react-query": {
         useQuery: ({ queryKey }) => ({
-          data: queryKey[0] === "almanac-journey" ? journey : undefined,
+          data: queryKey[0] === "almanac-journey" ? journey : { displayName: "<#BF40BF>.dev_hyakkimaru" },
         }),
       },
       "lucide-react": widgets,
@@ -152,6 +155,10 @@ test("Materials UI reveals only exact game-written entries and preserves empty s
       assert.equal(tab.findAllByType("EmptyState").length, expected.length ? 0 : 1);
       assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Levels completed|0 \/ 20/);
       assert.match(JSON.stringify(renderer.toJSON()), /Projects completed|Regions completed/);
+      assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /<#BF40BF>/);
+      assert.equal(renderer.root.findByType("AvatarFallback").children.join(""), ".D");
+      const playerLabel = renderer.root.findAllByType("span").find((node) => node.children.join("") === ".dev_hyakkimaru");
+      assert.equal(playerLabel.props.style.color, "#BF40BF");
     } finally {
       await act(async () => renderer.unmount());
     }

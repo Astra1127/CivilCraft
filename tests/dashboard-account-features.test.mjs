@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { playerNameDependencies } from "./helpers/player-name-ui.mjs";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import {
@@ -167,6 +168,7 @@ function uiModule(path, overrides = {}) {
     exports,
     require: (name) =>
       overrides[name] ??
+      playerNameDependencies[name] ??
       (name === "react" || name === "react/jsx-runtime"
         ? require(name)
         : name === "@tanstack/react-router"
@@ -262,7 +264,7 @@ test("profile removes Current Region and never renders empty slots for missing o
             return {
               data: {
                 playFabId: "PLAYER",
-                displayName: "Engineer",
+                displayName: "<#BF40BF>Engineer",
                 level: 1,
                 xp: 0,
                 xpToNextLevel: 10,
@@ -307,6 +309,9 @@ test("profile removes Current Region and never renders empty slots for missing o
       );
       const content = JSON.stringify(renderer.toJSON());
       assert.ok(!content.toLowerCase().includes("current region"));
+      assert.doesNotMatch(content, /<#BF40BF>/);
+      const playerLabel = renderer.root.findAllByType("span").find((node) => node.children.join("") === "Engineer");
+      assert.equal(playerLabel.props.style.color, "#BF40BF");
       if (state === "missing") assert.ok(content.includes("Awaiting game sync"));
       if (state === "error") assert.ok(content.includes("Unable to load equipment"));
       if (state === "native") {

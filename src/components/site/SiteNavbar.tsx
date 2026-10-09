@@ -3,6 +3,7 @@ import { ChevronDown, LayoutDashboard, LogIn, LogOut, Menu, Settings, User } fro
 import { useState } from "react";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { PlayerName } from "@/components/common/PlayerName";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth } from "@/lib/auth";
+import { parsePlayerName } from "@/lib/player-name";
 import { BrandMark } from "./BrandMark";
 
 const publicLinks = [
@@ -42,6 +44,9 @@ export function SiteNavbar() {
   const { isAuthenticated, isAdmin, adminReady, player, admin, logout } = useAuth();
   const hasAccount = adminReady && (isAuthenticated || isAdmin);
   const account = isAdmin ? admin : player;
+  const accountName = isAdmin
+    ? { text: account?.displayName ?? "Account" }
+    : parsePlayerName(account?.displayName, "Account");
   const dashboardTo = isAdmin ? "/admin" : "/dashboard";
 
   const signOut = async () => {
@@ -91,11 +96,15 @@ export function SiteNavbar() {
                 >
                   <Avatar className="h-7 w-7 border border-border">
                     <AvatarFallback className="bg-gold/15 text-xs font-extrabold text-gold">
-                      {initials(account?.displayName ?? "Account")}
+                      {initials(accountName.text)}
                     </AvatarFallback>
                   </Avatar>
                   <span className="hidden max-w-[8rem] truncate sm:inline">
-                    {account?.displayName ?? "Account"}
+                    {isAdmin ? (
+                      accountName.text
+                    ) : (
+                      <PlayerName name={account?.displayName} fallback="Account" />
+                    )}
                   </span>
                   <ChevronDown
                     className="hidden h-4 w-4 text-muted-foreground sm:block"

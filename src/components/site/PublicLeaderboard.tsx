@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { PlayerName } from "@/components/common/PlayerName";
 import {
   DEFAULT_CONTRACT,
   DEFAULT_MODE,
@@ -99,7 +100,9 @@ function Rankings({ contract, mode }: { contract: LeaderboardContract; mode: Lea
               {query.data.entries.map((entry) => (
                 <tr key={entry.rank} className="border-b border-border">
                   <td className="px-3 py-4 font-bold">{entry.rank}</td>
-                  <td className="max-w-48 break-words px-3 py-4">{entry.displayName}</td>
+                  <td className="max-w-48 break-words px-3 py-4">
+                    <PlayerName name={entry.displayName} />
+                  </td>
                   <td className="px-3 py-4">{entry.cost.toLocaleString()}</td>
                   <td className="px-3 py-4">{entry.peakStress.toFixed(1)}%</td>
                 </tr>

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { DemoBadge } from "@/components/common/DemoBadge";
+import { PlayerName } from "@/components/common/PlayerName";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/States";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +27,7 @@ import {
 } from "@/components/dashboard/almanac/LevelEntryDialog";
 import { bridgeTypes, engineeringConcepts, getBridgeType, materials } from "@/lib/almanac/content";
 import { useAuth } from "@/lib/auth";
+import { parsePlayerName } from "@/lib/player-name";
 import { almanacService, profileService, type AlmanacLevel } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
 
@@ -111,11 +113,13 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
             <Avatar className="h-14 w-14 border-2 border-primary">
               {p?.avatarUrl ? <AvatarImage src={p.avatarUrl} alt="" /> : null}
               <AvatarFallback className="font-display">
-                {(p?.displayName ?? "?").slice(0, 2).toUpperCase()}
+                {parsePlayerName(p?.displayName, "?").text.slice(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="min-w-0">
-              <p className="truncate font-display text-lg">{p?.displayName ?? "—"}</p>
+              <p className="truncate font-display text-lg">
+                <PlayerName name={p?.displayName} fallback="—" />
+              </p>
               <p className="text-sm text-muted-foreground">{p ? `Level ${p.level}` : "—"}</p>
             </div>
             <dl className="grid w-full gap-1 text-sm sm:w-auto">

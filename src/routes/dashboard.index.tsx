@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Clock, Hammer, Medal, RefreshCw, Star, Target, Zap } from "lucide-react";
 import { useState } from "react";
 import { DemoBadge } from "@/components/common/DemoBadge";
+import { PlayerName } from "@/components/common/PlayerName";
 import { CharacterPreview } from "@/components/dashboard/CharacterPreview";
 import { YourRanking } from "@/components/dashboard/YourRanking";
 import { SectionHeading } from "@/components/common/PageHeader";
@@ -105,7 +106,9 @@ function PlayerOverview() {
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-gold">
                 Welcome back
               </p>
-              <h1 className="truncate text-2xl sm:text-3xl">{p.displayName}</h1>
+              <h1 className="truncate text-2xl sm:text-3xl">
+                <PlayerName name={p.displayName} />
+              </h1>
               <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
                 <span>
                   Level {p.level ?? "\u2014"} · {p.xp?.toLocaleString() ?? "\u2014"} /{" "}

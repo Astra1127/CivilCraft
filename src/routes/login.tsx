@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
+import { parsePlayerName } from "@/lib/player-name";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string; reason?: "expired" } => ({
@@ -75,7 +76,7 @@ function LoginPage() {
     setPending(true);
     try {
       const identity = await login(parsed.data);
-      toast.success(`Welcome back, ${identity.displayName}`);
+      toast.success(`Welcome back, ${parsePlayerName(identity.displayName).text}`);
       navigate({ to: destination, replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Sign in failed");

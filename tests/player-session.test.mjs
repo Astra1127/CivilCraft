@@ -6,6 +6,7 @@ import { runInNewContext } from "node:vm";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import ts from "typescript";
+import { playerNameDependencies } from "./helpers/player-name-ui.mjs";
 import * as store from "../src/lib/playfab/session-store.ts";
 import * as errors from "../src/lib/playfab/session-errors.ts";
 import { playFabAdmin } from "../src/lib/playfab/admin-client.server.ts";
@@ -455,6 +456,7 @@ test("protected dashboard and shop preserve destination and distinguish expirati
 
 test("Login displays expiration message and returns to a validated internal destination", async () => {
   const navigations = [];
+  const welcomeMessages = [];
   const component = ({ children, ...props }) => React.createElement("div", props, children);
   const generic = new Proxy({}, { get: () => component });
   const destination = "/dashboard/leaderboards?contract=VancesContract#rank";
@@ -463,12 +465,13 @@ test("Login displays expiration message and returns to a validated internal dest
       react: React,
       "react/jsx-runtime": require("react/jsx-runtime"),
       zod: require("zod"),
+      ...playerNameDependencies,
       "@/lib/playfab/session-errors": errors,
       "@/lib/auth": {
         useAuth: () => ({
           isAuthenticated: false,
           sessionExpired: true,
-          login: async () => identity,
+          login: async () => ({ ...identity, displayName: `<#BF40BF>${identity.displayName}` }),
         }),
       },
       "@tanstack/react-router": {
@@ -481,7 +484,7 @@ test("Login displays expiration message and returns to a validated internal dest
       },
       sonner: {
         toast: {
-          success: () => {},
+          success: (message) => welcomeMessages.push(message),
           error: (message) => {
             throw new Error(message);
           },
@@ -514,6 +517,7 @@ test("Login displays expiration message and returns to a validated internal dest
     });
     await act(async () => renderer.root.findByType("form").props.onSubmit({ preventDefault() {} }));
     assert.equal(navigations.at(-1).to, destination);
+    assert.deepEqual(welcomeMessages, [`Welcome back, ${identity.displayName}`]);
   } finally {
     if (renderer) await act(async () => renderer.unmount());
   }
