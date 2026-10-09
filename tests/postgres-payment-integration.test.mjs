@@ -18,6 +18,14 @@ const WALLET = {
   schemaVersion: 1,
 };
 const RECEIPT = { storage: "postgres", databaseId: ID, targetId: TARGET, schemaVersion: 1 };
+const GAME_WALLET = {
+  storage: "postgres",
+  namespace: "civilcraft_game_wallet_v3",
+  databaseId: ID,
+  targetId: TARGET,
+  protocolVersion: 3,
+  entity: ENTITY,
+};
 class ApiError extends Error {
   constructor(status, message) {
     super(message);
@@ -59,6 +67,13 @@ function harness() {
     checkouts: 0,
     coinReads: 0,
     failure: false,
+    gameEnabled: false,
+    gameMigrated: true,
+    gameBalance: 7,
+    gameGrants: 0,
+    gameReceipts: new Set(),
+    gateDepth: 0,
+    legacyRecords: new Set(),
   };
   const admin = {
     AdminApiError: ApiError,
@@ -155,6 +170,59 @@ function harness() {
       throw new Error("Unexpected retrieval");
     },
   };
+  const gameWallet = {
+    isGameWalletEnabled: () => state.gameEnabled,
+    isGameWalletInstalled: () => state.gameEnabled || state.gameInstalled === true,
+    requireGameWalletReady: () => {
+      if (state.gameUnavailable) throw new ApiError(503, "Unified wallet unavailable");
+      return GAME_WALLET;
+    },
+    gameCoinSnapshot: async () => GAME_WALLET,
+    gameCoinBalance: async () => ({
+      coins: state.gameMigrated ? state.gameBalance : null,
+      ready: state.gameMigrated,
+      version: 1,
+    }),
+    assertGameShopLink: async (token, id) => {
+      assert.equal(id, "ABC123");
+      if (token !== "correct-game-token") throw new ApiError(409, "Switch accounts");
+      return { valid: true, currency: "coins" };
+    },
+    grantGameCoins: async (order) => {
+      assert.equal(order.coinReceiptVersion, 3);
+      assert.deepEqual(plain(order.gameWallet), GAME_WALLET);
+      const alreadyGranted = state.gameReceipts.has(order.orderId);
+      if (!alreadyGranted) {
+        state.gameReceipts.add(order.orderId);
+        state.gameGrants++;
+      }
+      return { alreadyGranted };
+    },
+    repairGameCoinOrder: async (order) => {
+      if (state.gameReceipts.has(order.orderId))
+        return { ...order, status: "fulfilled", fulfillmentReviewRequired: false };
+      if (order.status === "fulfilled") throw new ApiError(503, "No permanent receipt");
+      return order;
+    },
+    withLegacyCoinGate: async (id, task) => {
+      assert.equal(id, "ABC123");
+      state.gateDepth++;
+      try {
+        return await task();
+      } finally {
+        state.gateDepth--;
+      }
+    },
+    recordLegacyCoinGrant: async (order) => {
+      if (!state.gameEnabled && !state.gameInstalled) return;
+      assert.ok(state.gateDepth > 0, "Legacy records must be serialized against migration");
+      assert.ok(
+        state.receipts.has(order.orderId),
+        "An old permanent receipt must prove the classic grant",
+      );
+      state.legacyRecords.add(order.orderId);
+    },
+  };
   const mocks = {
     "../playfab/admin-client.server.ts": admin,
     "../playfab/premium-wallet.server.ts": wallet,
@@ -162,6 +230,7 @@ function harness() {
     "./orders.server.ts": orders,
     "./paymongo.server.ts": paymongo,
     "./coin-receipts.server.ts": coin,
+    "../game-wallet/index.server.ts": gameWallet,
   };
   const fulfillment = load("payments/fulfillment.server.ts", mocks);
   let currency = "DI";
@@ -187,7 +256,7 @@ function harness() {
     },
     { COIN_RECEIPTS_STORAGE: "postgres" },
   );
-  const checkout = () =>
+  const checkout = (extras = {}) =>
     api.handlePaymentsRequest(
       new Request("https://civilcraft.example/api/payments/paymongo/create-checkout", {
         method: "POST",
@@ -198,6 +267,7 @@ function harness() {
           rewardCurrency: "CO",
           price: 1,
           databaseId: "forged",
+          ...extras,
         }),
       }),
     );
@@ -259,6 +329,173 @@ test("Postgres Coin checkout snapshots version2 and distinct receipt provider", 
   assert.equal(order.coinReceiptVersion, 2);
   assert.deepEqual(order.coinReceipt, RECEIPT);
   assert.equal(order.coinCurrencyCode, "CO");
+});
+
+test("unified Coin checkout binds version3, ignores browser wallet data and never grants classic CO", async () => {
+  const h = harness();
+  h.state.gameEnabled = true;
+  h.setCurrency("CO");
+  assert.equal(
+    (await h.checkout({ gameLink: "correct-game-token", gameWallet: { databaseId: "forged" } }))
+      .status,
+    200,
+  );
+  const order = h.state.orders.get("CC-DATABASE-ORDER");
+  assert.equal(order.coinReceiptVersion, 3);
+  assert.deepEqual(order.gameWallet, GAME_WALLET);
+  assert.equal(order.coinReceipt, undefined);
+  assert.equal(order.coinCurrencyCode, undefined);
+  assert.equal((await h.webhook()).status, 200);
+  assert.equal(h.state.grants, 0);
+  assert.equal(h.state.gameGrants, 1);
+  assert.equal((await h.webhook()).body.idempotent, true);
+  assert.equal(h.state.gameGrants, 1);
+});
+
+test("a bound v3 order keeps its wallet after feature rollback and receipt repairs an audit failure", async () => {
+  const h = harness();
+  h.state.gameEnabled = true;
+  h.setCurrency("CO");
+  await h.checkout();
+  h.state.gameEnabled = false;
+  const update = h.orders.updateOrderStatus;
+  h.orders.updateOrderStatus = async (id, values) => {
+    if (values.status === "fulfilled") throw new ApiError(503, "Audit unavailable");
+    return update(id, values);
+  };
+  assert.equal((await h.webhook()).status, 500);
+  assert.equal(h.state.gameGrants, 1);
+  h.orders.updateOrderStatus = update;
+  assert.equal((await h.webhook()).body.idempotent, true);
+  assert.equal(h.state.gameGrants, 1);
+  assert.equal(h.state.grants, 0);
+});
+
+test("unmigrated, overflowing and mismatched game accounts never start Coin checkout", async () => {
+  for (const scenario of ["migration", "overflow", "mismatch", "malformed-link", "database"]) {
+    const h = harness();
+    h.state.gameEnabled = true;
+    h.setCurrency("CO");
+    if (scenario === "migration") h.state.gameMigrated = false;
+    if (scenario === "overflow") h.state.gameBalance = 2_147_483_647;
+    if (scenario === "database") h.state.gameUnavailable = true;
+    const extras =
+      scenario === "mismatch"
+        ? { gameLink: "other-game-token" }
+        : scenario === "malformed-link"
+          ? { gameLink: 123 }
+          : {};
+    assert.notEqual((await h.checkout(extras)).status, 200);
+    assert.equal(h.state.checkouts, 0);
+    assert.equal(h.state.orders.size, 0);
+  }
+});
+
+test("unified currency display uses account wallet; no import is represented as unavailable, not zero", async () => {
+  const h = harness();
+  h.state.gameEnabled = true;
+  h.state.gameBalance = 1234;
+  const read = async () =>
+    (
+      await h.api.handlePaymentsRequest(
+        new Request("https://civilcraft.example/api/player/currencies"),
+      )
+    ).json();
+  assert.deepEqual(await read(), {
+    coins: 1234,
+    diamonds: 0,
+    diamondsAvailable: true,
+    coinsAvailable: true,
+    coinsMigrationRequired: false,
+  });
+  h.state.gameMigrated = false;
+  assert.deepEqual(await read(), {
+    coins: null,
+    diamonds: 0,
+    diamondsAvailable: true,
+    coinsAvailable: false,
+    coinsMigrationRequired: true,
+  });
+});
+
+test("installed wallet maintenance retains its balance and refuses new classic Coin orders", async () => {
+  const h = harness();
+  h.state.gameInstalled = true;
+  h.state.gameEnabled = false;
+  h.state.gameBalance = 888;
+  h.setCurrency("CO");
+  const response = await h.api.handlePaymentsRequest(
+    new Request("https://civilcraft.example/api/player/currencies"),
+  );
+  const balances = await response.json();
+  assert.equal(balances.coins, 888);
+  assert.equal(balances.coinsAvailable, false);
+  assert.equal(balances.coinsMigrationRequired, false);
+  assert.equal((await h.checkout()).status, 503);
+  assert.equal(h.state.checkouts, 0);
+  assert.equal(h.state.orders.size, 0);
+});
+
+test("a late legacy payment still receives its overlay while new wallet operations are disabled", async () => {
+  const h = harness();
+  h.setCurrency("CO");
+  await h.checkout();
+  h.state.gameInstalled = true;
+  h.state.gameEnabled = false;
+  assert.equal((await h.webhook()).status, 200);
+  assert.equal(h.state.grants, 1);
+  assert.equal(h.state.legacyRecords.size, 1);
+  assert.equal((await h.webhook()).body.idempotent, true);
+  assert.equal(h.state.grants, 1);
+  assert.equal(h.state.legacyRecords.size, 1);
+});
+
+test("late legacy Coin grant preserves v2 and records credit under the migration gate", async () => {
+  const h = harness();
+  h.setCurrency("CO");
+  await h.checkout();
+  const before = structuredClone(h.state.orders.get("CC-DATABASE-ORDER"));
+  h.state.gameEnabled = true;
+  assert.equal((await h.webhook()).status, 200);
+  assert.equal(h.state.grants, 1);
+  assert.equal(h.state.gameGrants, 0);
+  assert.equal(h.state.legacyRecords.size, 1);
+  const after = h.state.orders.get("CC-DATABASE-ORDER");
+  assert.deepEqual(after.coinReceipt, before.coinReceipt);
+  assert.equal(after.coinReceiptVersion, 2);
+});
+
+test("fulfilled legacy order repairs its missing overlay from the permanent old receipt", async () => {
+  const h = harness();
+  h.setCurrency("CO");
+  await h.checkout();
+  await h.webhook();
+  assert.equal(h.state.legacyRecords.size, 0);
+  h.state.gameEnabled = true;
+  const response = await h.api.handlePaymentsRequest(
+    new Request("https://civilcraft.example/api/payments/paymongo/order?id=CC-DATABASE-ORDER"),
+  );
+  assert.equal((await response.json()).status, "fulfilled");
+  assert.equal(h.state.legacyRecords.size, 1);
+  assert.equal(h.state.grants, 1);
+  assert.equal((await h.webhook()).body.idempotent, true);
+  assert.equal(h.state.grants, 1);
+});
+
+test("unknown historic fulfilled Coin grant stays review-only when unified wallet is enabled", async () => {
+  const h = harness();
+  h.setCurrency("CO");
+  await h.checkout();
+  const order = h.state.orders.get("CC-DATABASE-ORDER");
+  delete order.coinReceiptVersion;
+  delete order.coinReceipt;
+  order.status = "fulfilled";
+  h.state.gameEnabled = true;
+  assert.equal((await h.webhook()).status, 500);
+  assert.equal(h.state.grants, 0);
+  assert.equal(h.state.gameGrants, 0);
+  assert.equal(h.state.legacyRecords.size, 0);
+  assert.equal(order.fulfillmentReviewRequired, undefined);
 });
 for (const currency of ["DI", "CO"]) {
   test(`${currency}: failed audit persistence after credit repairs from permanent receipt and retry grants nothing`, async () => {
@@ -402,6 +639,7 @@ test("order projection updates cannot overwrite database identities or reward sn
     coinReceiptVersion: 2,
     coinReceipt: RECEIPT,
     premiumWallet: { ...WALLET, entity: ENTITY },
+    gameWallet: GAME_WALLET,
     rewardAmount: 500,
     rewardCurrency: "DI",
   };
@@ -421,10 +659,12 @@ test("order projection updates cannot overwrite database identities or reward sn
     coinReceiptVersion: 1,
     coinReceipt: { ...RECEIPT, databaseId: "other" },
     premiumWallet: undefined,
+    gameWallet: { ...GAME_WALLET, databaseId: "forged" },
     rewardAmount: 900,
   });
   assert.deepEqual(stored.coinReceipt, RECEIPT);
   assert.equal(stored.coinReceiptVersion, 2);
   assert.equal(stored.premiumWallet.databaseId, ID);
+  assert.deepEqual(stored.gameWallet, GAME_WALLET);
   assert.equal(stored.rewardAmount, 500);
 });

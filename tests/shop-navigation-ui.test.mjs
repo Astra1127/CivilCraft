@@ -135,7 +135,7 @@ test("direct shop access waits for player auth and does not accept admin-only au
       });
       if (auth.isAuthenticated) {
         assert.equal(navigations.length, 0);
-        assert.equal(queries.length, 2);
+        assert.equal(queries.length, 3);
       } else {
         assert.equal(queries.length, 0, "Shop queries must not mount before player authentication");
         assert.equal(navigations.length, auth.ready ? 1 : 0);

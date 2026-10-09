@@ -12,7 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { parsePlayerName } from "@/lib/player-name";
-import { DIAMOND_LOGIN_MESSAGE, isDiamondShopDestination } from "@/lib/payments/shop-display";
+import {
+  COIN_LOGIN_MESSAGE,
+  DIAMOND_LOGIN_MESSAGE,
+  isDiamondShopDestination,
+  isShopDestination,
+} from "@/lib/payments/shop-display";
 
 export const Route = createFileRoute("/login")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string; reason?: "expired" } => ({
@@ -108,12 +113,15 @@ function LoginPage() {
             <p className="mt-2 text-sm text-muted-foreground">
               Sign in with the same account you use in the game.
             </p>
-            {isDiamondShopDestination(destination) ? (
+            {isShopDestination(destination) ? (
               <p
                 role="note"
                 className="mt-4 rounded-lg border border-gold/40 bg-gold/10 p-3 text-sm font-semibold"
               >
-                {DIAMOND_LOGIN_MESSAGE}
+                {isDiamondShopDestination(destination) ? DIAMOND_LOGIN_MESSAGE : COIN_LOGIN_MESSAGE}
+                {destination.includes("gameLink=")
+                  ? " We will check that this website account matches the account that opened the shop in the game."
+                  : ""}
               </p>
             ) : null}
 

@@ -34,6 +34,7 @@ function load(path, options = {}) {
   const auth = options.auth ?? {
     isAuthenticated: true,
     player: { playFabId: "PLAYER-A", displayName: "Engineer A" },
+    logout: async () => {},
   };
   const queryClient = {
     invalidateQueries: async (args) => {
@@ -98,16 +99,20 @@ function load(path, options = {}) {
               coins: 123,
               diamonds: 500,
               diamondsAvailable: true,
+              coinsAvailable: true,
               ...options.balances,
             };
             return {
               data:
                 config.queryKey[0] === "player-currencies"
                   ? balances
-                  : (options.products ?? products.DEFAULT_PRODUCTS),
+                  : config.queryKey[0] === "game-shop-link"
+                    ? options.gameLinkStatus
+                    : (options.products ?? products.DEFAULT_PRODUCTS),
               isPending: false,
               isError: false,
               ...options.queryResult,
+              ...(config.queryKey[0] === "game-shop-link" ? options.gameLinkQueryResult : {}),
               refetch: () => {},
             };
           },
@@ -154,6 +159,193 @@ test("legacy shop preserves Diamonds and defaults invalid currency to Coins", ()
       () => Route.beforeLoad({ search }),
       (error) => error.to === "/dashboard/shop" && error.search.currency === expected,
     );
+  }
+});
+
+test("game shop context is opaque and preserved by legacy redirects and currency changes", async () => {
+  const token = "A".repeat(43);
+  assert.equal(display.shopGameLink(token), token);
+  for (const bad of ["ticket", "https://attacker.example", "A".repeat(129), { token }])
+    assert.throws(() => display.shopGameLink(bad), /invalid/);
+  assert.equal(
+    display.shopDestination("diamonds", token),
+    `/dashboard/shop?currency=diamonds&gameLink=${token}`,
+  );
+  const legacy = load("../src/routes/shop.tsx").Route;
+  assert.throws(
+    () =>
+      legacy.beforeLoad({
+        search: legacy.validateSearch({ currency: "diamonds", gameLink: token }),
+      }),
+    (error) => error.search.gameLink === token,
+  );
+  const module = load("../src/routes/dashboard.shop.tsx", {
+    search: { currency: "diamonds", gameLink: token },
+    gameLinkStatus: { valid: true },
+  });
+  const renderer = await mount(module);
+  try {
+    const coins = renderer.root
+      .findAllByType("button")
+      .find((button) => renderedText(button) === "Coins");
+    await act(async () => coins.props.onClick());
+    assert.deepEqual(JSON.parse(JSON.stringify(module.navigation[0].search)), {
+      currency: "coins",
+      gameLink: token,
+    });
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("Coin login explains account-linked purchases and retains the game link", async () => {
+  const redirect = `/dashboard/shop?currency=coins&gameLink=${"A".repeat(43)}`;
+  const module = load("../src/routes/login.tsx", {
+    search: { redirect },
+    auth: { isAuthenticated: false },
+  });
+  const renderer = await mount(module);
+  try {
+    assert.match(JSON.stringify(renderer.toJSON()), /before buying Coins/);
+    assert.match(JSON.stringify(renderer.toJSON()), /matches the account that opened/);
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("game-link mismatch blocks checkout and Switch Account retains the destination", async () => {
+  const token = "B".repeat(43);
+  let loggedOut = false;
+  const module = load("../src/routes/dashboard.shop.tsx", {
+    search: { currency: "coins", gameLink: token },
+    auth: {
+      isAuthenticated: true,
+      player: { playFabId: "OTHER" },
+      logout: async (scope) => {
+        loggedOut = scope === "player";
+      },
+    },
+    gameLinkStatus: { valid: false, mismatch: true },
+  });
+  const renderer = await mount(module);
+  try {
+    const buy = buyButton(renderer);
+    assert.equal(buy.props.disabled, true);
+    await act(async () => buy.props.onClick());
+    assert.equal(module.requests.length, 0);
+    const switchButton = renderer.root
+      .findAllByType("button")
+      .find((button) => renderedText(button) === "Switch Account");
+    await act(async () => switchButton.props.onClick());
+    assert.equal(loggedOut, true);
+    assert.equal(module.navigation[0].to, "/login");
+    assert.equal(module.navigation[0].search.redirect, display.shopDestination("coins", token));
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("verified game link is checked with a header ticket and included in checkout", async () => {
+  const token = "C".repeat(43);
+  const module = load("../src/routes/dashboard.shop.tsx", {
+    search: { currency: "diamonds", gameLink: token },
+    gameLinkStatus: { valid: true },
+    fetch: async (path) =>
+      path.startsWith("/api/game/")
+        ? Response.json({ valid: true, currency: "diamonds", expiresAt: "2026-12-01T00:00:00Z" })
+        : Response.json({ checkoutUrl: "https://checkout.paymongo.test/verified" }),
+  });
+  const renderer = await mount(module);
+  try {
+    const query = module.queries.find((query) => query.queryKey[0] === "game-shop-link");
+    assert.equal(query.retry, false);
+    await query.queryFn({ signal: new AbortController().signal });
+    assert.equal(module.requests[0].path, `/api/game/shop-link?token=${token}`);
+    assert.equal(module.requests[0].init.headers.Authorization, "Bearer ticket-A");
+    assert.ok(!module.requests[0].path.includes("ticket-A"));
+    await act(async () => buyButton(renderer).props.onClick());
+    assert.deepEqual(JSON.parse(module.requests[1].init.body), {
+      productId: "diamonds_500",
+      gameLink: token,
+    });
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("expired game link and migration-required Coins cannot start payments", async () => {
+  for (const options of [
+    {
+      search: { currency: "coins", gameLink: "D".repeat(43) },
+      gameLinkQueryResult: { isError: true, error: new Error("This game shop link expired.") },
+    },
+    {
+      search: { currency: "coins" },
+      balances: { coins: null, coinsAvailable: false, coinsMigrationRequired: true },
+    },
+  ]) {
+    const module = load("../src/routes/dashboard.shop.tsx", options);
+    const renderer = await mount(module);
+    try {
+      assert.equal(buyButton(renderer).props.disabled, true);
+      await act(async () => buyButton(renderer).props.onClick());
+      assert.equal(module.requests.length, 0);
+      assert.match(
+        JSON.stringify(renderer.toJSON()),
+        options.search.gameLink ? /expired/ : /finish selecting your account save/,
+      );
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  }
+});
+
+test("rapid repeat Buy clicks create one checkout request while it is in flight", async () => {
+  let release;
+  const response = new Promise((resolve) => {
+    release = resolve;
+  });
+  const module = load("../src/routes/dashboard.shop.tsx", { fetch: async () => response });
+  const renderer = await mount(module);
+  try {
+    let first;
+    await act(async () => {
+      const button = buyButton(renderer);
+      first = button.props.onClick();
+      await button.props.onClick();
+    });
+    assert.equal(module.requests.length, 1);
+    await act(async () => {
+      release(Response.json({ checkoutUrl: "https://checkout.paymongo.test/one" }));
+      await first;
+    });
+    assert.equal(module.window.location.href, "https://checkout.paymongo.test/one");
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("a checkout response arriving after account switching cannot redirect the new account", async () => {
+  let release;
+  const response = new Promise((resolve) => {
+    release = resolve;
+  });
+  const options = { ticket: "ticket-A", fetch: async () => response };
+  const module = load("../src/routes/dashboard.shop.tsx", options);
+  const renderer = await mount(module);
+  try {
+    let buying;
+    await act(async () => {
+      buying = buyButton(renderer).props.onClick();
+    });
+    options.ticket = "ticket-B";
+    await act(async () => {
+      release(Response.json({ checkoutUrl: "https://checkout.paymongo.test/old-account" }));
+      await buying;
+    });
+    assert.equal(module.window.location.href, "");
+  } finally {
+    await act(async () => renderer.unmount());
   }
 });
 

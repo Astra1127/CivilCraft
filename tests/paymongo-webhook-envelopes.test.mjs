@@ -122,6 +122,11 @@ function harness(currency = "CO", amount = 500, price = 5000) {
     return { alreadyGranted, balance: amount };
   };
   const api = load("fulfillment.server.ts", {
+    "../game-wallet/index.server.ts": {
+      isGameWalletInstalled: () => false,
+      withLegacyCoinGate: async (_id, task) => task(),
+      recordLegacyCoinGrant: async () => {},
+    },
     "../playfab/admin-client.server.ts": {
       AdminApiError: ApiError,
       object: (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {}),
