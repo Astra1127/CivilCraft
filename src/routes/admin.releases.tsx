@@ -1,12 +1,19 @@
 import { ReleasePosts } from "@/components/admin/ReleasePosts";
 import { ApkUpload } from "@/components/admin/ApkUpload";
-import { useAdminReleases } from "@/lib/cms/releases";
+import { useAdminReleases, type ReleaseNotificationResult } from "@/lib/cms/releases";
 import { ErrorState, LoadingState } from "@/components/common/States";
 import { createFileRoute } from "@tanstack/react-router";
-import { ListChecks, Package } from "lucide-react";
+import { ChevronRight, ListChecks, Mail, Package, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { AdminHeading, AdminPage, DataRow, Panel, StatusPill } from "@/components/admin/ui";
+import {
+  AdminHeading,
+  AdminPage,
+  ConfirmDialog,
+  DataRow,
+  Panel,
+  StatusPill,
+} from "@/components/admin/ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,14 +33,41 @@ function AdminReleases() {
   const [busy, setBusy] = useState(false);
   const [draftVersion, setDraftVersion] = useState("");
   const [draftBuild, setDraftBuild] = useState("");
+  const [expandedBuilds, setExpandedBuilds] = useState<Record<string, boolean>>({});
+  const [deleteTarget, setDeleteTarget] = useState<Release | null>(null);
+  const [currentTarget, setCurrentTarget] = useState<Release | null>(null);
+  const [emailResult, setEmailResult] = useState<ReleaseNotificationResult | null>(null);
   const installSteps = useCms((s) => s.settings.installSteps);
   const [steps, setSteps] = useState(installSteps.join("\n"));
   const current = releases.find((r) => r.status === "current");
+  const byDate = (a: Release, b: Release) =>
+    b.releaseDate.localeCompare(a.releaseDate) || b.id.localeCompare(a.id);
+  const groups = [
+    {
+      id: "current",
+      title: "Active build",
+      description: "The build available on the public Download page.",
+      releases: current ? [current] : [],
+    },
+    {
+      id: "archived",
+      title: "Backups",
+      description: "Previous downloads kept for reference or rollback.",
+      releases: releases.filter((r) => r.status === "archived").sort(byDate),
+    },
+    {
+      id: "draft",
+      title: "Drafts",
+      description: "Prepare the APK and build details before making a draft current.",
+      releases: releases.filter((r) => r.status === "draft").sort(byDate),
+    },
+  ].filter((group) => group.releases.length);
 
   const update = (id: string, patch: Partial<Release>) =>
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   const save = async (release: Release) => {
-    await query.mutate({ action: "save", release });
+    const result = await query.mutate({ action: "save", release });
+    if (result?.notification) setEmailResult(result.notification);
   };
   const clearPatch = (id: string) => {
     setPatches((prev) => {
@@ -55,17 +89,42 @@ function AdminReleases() {
     }
   };
   const makeCurrent = async (release: Release) => {
-    if (busy || !release.fileUrl) return;
+    if (busy || !release.fileUrl || release.id === current?.id) return;
     setBusy(true);
     try {
       if (patches[release.id]) {
         await save(release);
         clearPatch(release.id);
       }
-      await query.mutate({ action: "current", id: release.id });
+      const result = await query.mutate({ action: "current", id: release.id });
+      if (result?.notification) setEmailResult(result.notification);
+      setCurrentTarget(null);
       toast.success(`v${release.version} is now the public build`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not set current build.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const requestDelete = (release: Release) => {
+    if (!busy && release.status !== "current" && query.data?.initialized) setDeleteTarget(release);
+  };
+  const deleteBuild = async () => {
+    const release = deleteTarget;
+    if (!release || busy || release.id === current?.id) return;
+    setBusy(true);
+    try {
+      await query.mutate({ action: "delete", id: release.id });
+      clearPatch(release.id);
+      setExpandedBuilds((prev) => {
+        const next = { ...prev };
+        delete next[release.id];
+        return next;
+      });
+      setDeleteTarget(null);
+      toast.success(`v${release.version} build ${release.build} deleted`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete build.");
     } finally {
       setBusy(false);
     }
@@ -116,8 +175,9 @@ function AdminReleases() {
       await ensureInitialized();
       const today = new Date();
       const releaseDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      const id = crypto.randomUUID();
       await save({
-        id: crypto.randomUUID(),
+        id,
         version,
         build,
         title: "",
@@ -134,6 +194,7 @@ function AdminReleases() {
         fileUrl: null,
         downloads: 0,
       });
+      setExpandedBuilds((prev) => ({ ...prev, [id]: true }));
       setDraftVersion("");
       setDraftBuild("");
       toast.success("Draft build created. Upload its APK below.");
@@ -188,7 +249,7 @@ function AdminReleases() {
         }
       />
 
-      <Panel title="Current build" icon={Package} tone="blueprint" bodyClassName="p-3">
+      <Panel title="Active download" icon={Package} tone="blueprint" bodyClassName="p-3">
         <div className="grid gap-x-6 sm:grid-cols-2">
           <DataRow tone="blueprint" label="Version" value={current?.version ?? "—"} />
           <DataRow tone="blueprint" label="Build" value={current?.build ?? "—"} />
@@ -213,25 +274,51 @@ function AdminReleases() {
         </div>
       </Panel>
 
-      <section id="whats-new" className="scroll-mt-24">
-        <Panel title="What's New" icon={ListChecks} bodyClassName="p-4 space-y-3">
-          {query.data.initialized ? (
-            <fieldset disabled={busy}>
-              <ReleasePosts releases={releases} save={savePost} />
-            </fieldset>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                Import the existing release records to manage shared update posts. APK details and
-                the current build selection are preserved; notes start as drafts.
-              </p>
-              <Button variant="gold" disabled={busy} onClick={initialize}>
-                Import existing releases
-              </Button>
-            </>
-          )}
-        </Panel>
-      </section>
+      <Panel title="Version update emails" icon={Mail} bodyClassName="space-y-3 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm">
+              Activating a different version or saving a changed active version queues an update for
+              players who opted in and confirmed their contact email.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {query.data.emailNotifications?.message ?? "Email delivery status is unavailable."}
+            </p>
+          </div>
+          <StatusPill
+            tone={
+              query.data.emailNotifications
+                ? query.data.emailNotifications.configured
+                  ? "ok"
+                  : "warn"
+                : "off"
+            }
+          >
+            {query.data.emailNotifications
+              ? query.data.emailNotifications.configured
+                ? "Ready to queue"
+                : "Not configured"
+              : "Status unavailable"}
+          </StatusPill>
+        </div>
+        {emailResult ? (
+          <div
+            role="status"
+            aria-live="polite"
+            data-testid="release-email-result"
+            className="rounded-lg border border-border bg-secondary/40 px-3 py-2 text-sm"
+          >
+            <p className="font-bold">
+              {emailResult.status === "queued"
+                ? "Version update queued"
+                : emailResult.status === "not-configured"
+                  ? "Build saved · email not queued"
+                  : "No new version email"}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{emailResult.message}</p>
+          </div>
+        ) : null}
+      </Panel>
 
       <Panel title="Create draft build" icon={Package} bodyClassName="p-4 space-y-3">
         <p className="text-sm text-muted-foreground">
@@ -278,146 +365,244 @@ function AdminReleases() {
       </Panel>
 
       <ul className="space-y-3">
-        {releases.map((saved) => {
-          const r = { ...saved, ...patches[saved.id] };
-          return (
-            <li key={r.id} className="overflow-hidden rounded-xl border-2 border-border bg-card">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b-2 border-border bg-secondary/40 px-4 py-2.5">
-                <div className="min-w-0">
-                  <p className="font-display text-base">
-                    v{r.version} · build {r.build}
-                  </p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {r.platform} · {r.fileName ?? "No file"} · {formatBytes(r.fileSizeBytes)} ·{" "}
-                    {r.downloads.toLocaleString()} downloads
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <StatusPill
-                    tone={r.status === "current" ? "ok" : r.status === "draft" ? "warn" : "off"}
-                  >
-                    {r.status}
-                  </StatusPill>
-                  {r.status !== "current" ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy || !query.data.initialized || !r.fileUrl}
-                      title={!r.fileUrl ? "Upload an APK or save a download URL first" : undefined}
-                      onClick={() => makeCurrent(r)}
-                    >
-                      Make current
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-
-              <fieldset disabled={busy || !query.data.initialized} className="space-y-3 p-4">
-                <div className="grid gap-3 sm:grid-cols-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`v-${r.id}`}>Version</Label>
-                    <Input
-                      id={`v-${r.id}`}
-                      value={r.version}
-                      onChange={(e) => update(r.id, { version: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`b-${r.id}`}>Build</Label>
-                    <Input
-                      id={`b-${r.id}`}
-                      value={r.build}
-                      onChange={(e) => update(r.id, { build: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`a-${r.id}`}>Minimum Android</Label>
-                    <Input
-                      id={`a-${r.id}`}
-                      value={r.minAndroid}
-                      onChange={(e) => update(r.id, { minAndroid: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`f-${r.id}`}>APK file name</Label>
-                    <Input
-                      id={`f-${r.id}`}
-                      value={r.fileName ?? ""}
-                      placeholder="civilcraft.apk"
-                      readOnly={r.apkHosted}
-                      onChange={(e) => update(r.id, { fileName: e.target.value || null })}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor={`u-${r.id}`}>
-                    {r.apkHosted
-                      ? "Uploaded APK URL"
-                      : "Manual download URL (optional legacy link)"}
-                  </Label>
-                  <Input
-                    id={`u-${r.id}`}
-                    value={r.fileUrl ?? ""}
-                    placeholder="https://"
-                    readOnly={r.apkHosted}
-                    onChange={(e) => update(r.id, { fileUrl: e.target.value || null })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {r.apkHosted
-                      ? "File name, size and URL are set by the verified upload. Upload another APK to replace it."
-                      : "Existing external download links are supported. Upload an APK to host the file for this build."}
-                  </p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`min-${r.id}`}>Minimum requirements (one per line)</Label>
-                    <Textarea
-                      id={`min-${r.id}`}
-                      rows={4}
-                      value={r.minRequirements.join("\n")}
-                      onChange={(e) =>
-                        update(r.id, {
-                          minRequirements: e.target.value.split("\n").filter(Boolean),
-                        })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor={`rec-${r.id}`}>Recommended requirements (one per line)</Label>
-                    <Textarea
-                      id={`rec-${r.id}`}
-                      rows={4}
-                      value={r.recommendedRequirements.join("\n")}
-                      onChange={(e) =>
-                        update(r.id, {
-                          recommendedRequirements: e.target.value.split("\n").filter(Boolean),
-                        })
-                      }
-                    />
-                  </div>
-                </div>
-                <Button
-                  variant="gold"
-                  size="sm"
-                  disabled={!patches[r.id]}
-                  onClick={() => saveBuild(r)}
+        {groups.flatMap((group) => [
+          <li key={`group-${group.id}`} data-build-group={group.id} className="pt-2">
+            <h2 className="flex items-center gap-2 font-display text-base">
+              {group.title}
+              <span className="rounded-full bg-secondary px-2 py-0.5 font-sans text-xs text-muted-foreground">
+                {group.releases.length}
+              </span>
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">{group.description}</p>
+          </li>,
+          ...group.releases.map((saved) => {
+            const r = { ...saved, ...patches[saved.id] };
+            const isCurrent = saved.status === "current";
+            const expanded = isCurrent || expandedBuilds[saved.id] === true;
+            const detailsId = `build-details-${r.id}`;
+            const summary = (
+              <span className="block min-w-0">
+                <span id={`build-heading-${r.id}`} className="block font-display text-base">
+                  v{r.version} · build {r.build}
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {r.platform} · {saved.fileName ?? "No APK attached"} ·{" "}
+                  {formatBytes(saved.fileSizeBytes)}
+                  {saved.releaseDate ? ` · ${formatDate(saved.releaseDate)}` : ""}
+                </span>
+              </span>
+            );
+            return (
+              <li
+                key={r.id}
+                data-release-id={r.id}
+                className={`overflow-hidden rounded-xl border-2 bg-card ${isCurrent ? "border-gold/60" : "border-border"}`}
+              >
+                <div
+                  className={`flex flex-wrap items-center justify-between gap-3 bg-secondary/40 px-4 py-3 ${expanded ? "border-b-2 border-border" : ""}`}
                 >
-                  Save build
-                </Button>
-              </fieldset>
-              <div className="px-4 pb-4">
-                <ApkUpload
-                  release={saved}
-                  disabled={busy}
-                  onUpload={(file, onProgress) => uploadApk(saved, file, onProgress)}
-                />
-              </div>
-            </li>
-          );
-        })}
+                  {isCurrent ? (
+                    <div className="min-w-0 flex-1">{summary}</div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-expanded={expanded}
+                      aria-controls={detailsId}
+                      aria-label={`${expanded ? "Collapse" : "Expand"} v${r.version} build ${r.build}`}
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                      onClick={() => setExpandedBuilds((prev) => ({ ...prev, [r.id]: !expanded }))}
+                    >
+                      <ChevronRight
+                        className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-90" : ""}`}
+                        aria-hidden="true"
+                      />
+                      {summary}
+                    </button>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <StatusPill tone={isCurrent ? "ok" : r.status === "draft" ? "warn" : "off"}>
+                      {isCurrent ? "Active" : r.status === "draft" ? "Draft" : "Backup"}
+                    </StatusPill>
+                    {r.published ? <StatusPill tone="info">Notes published</StatusPill> : null}
+                    {patches[r.id] ? (
+                      <span className="text-xs font-bold text-warning">Unsaved</span>
+                    ) : null}
+                    {!isCurrent ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy || !query.data.initialized || !r.fileUrl}
+                          title={
+                            !r.fileUrl ? "Upload an APK or save a download URL first" : undefined
+                          }
+                          onClick={() => setCurrentTarget(r)}
+                        >
+                          Make current
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          disabled={busy || !query.data.initialized}
+                          aria-label={`Delete v${r.version} build ${r.build}`}
+                          onClick={() => requestDelete(r)}
+                        >
+                          <Trash2 aria-hidden="true" />
+                          Delete
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div id={detailsId} hidden={!expanded} aria-labelledby={`build-heading-${r.id}`}>
+                  {isCurrent ? (
+                    <p className="border-b border-border bg-gold/5 px-4 py-3 text-xs text-muted-foreground">
+                      Changing the active version can queue update emails. For a new APK, create a
+                      draft, upload and verify its file, then make that build current.
+                    </p>
+                  ) : null}
+                  <fieldset disabled={busy || !query.data.initialized} className="space-y-3 p-4">
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`v-${r.id}`}>Version</Label>
+                        <Input
+                          id={`v-${r.id}`}
+                          value={r.version}
+                          onChange={(e) => update(r.id, { version: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`b-${r.id}`}>Build</Label>
+                        <Input
+                          id={`b-${r.id}`}
+                          value={r.build}
+                          onChange={(e) => update(r.id, { build: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`a-${r.id}`}>Minimum Android</Label>
+                        <Input
+                          id={`a-${r.id}`}
+                          value={r.minAndroid}
+                          onChange={(e) => update(r.id, { minAndroid: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`f-${r.id}`}>APK file name</Label>
+                        <Input
+                          id={`f-${r.id}`}
+                          value={r.fileName ?? ""}
+                          placeholder="civilcraft.apk"
+                          readOnly={r.apkHosted}
+                          onChange={(e) => update(r.id, { fileName: e.target.value || null })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`u-${r.id}`}>
+                        {r.apkHosted
+                          ? "Uploaded APK URL"
+                          : "Manual download URL (optional legacy link)"}
+                      </Label>
+                      <Input
+                        id={`u-${r.id}`}
+                        value={r.fileUrl ?? ""}
+                        placeholder="https://"
+                        readOnly={r.apkHosted}
+                        onChange={(e) => update(r.id, { fileUrl: e.target.value || null })}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        {r.apkHosted
+                          ? "File name, size and URL are set by the verified upload. Upload another APK to replace it."
+                          : "Existing external download links are supported. Upload an APK to host the file for this build."}
+                      </p>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`min-${r.id}`}>Minimum requirements (one per line)</Label>
+                        <Textarea
+                          id={`min-${r.id}`}
+                          rows={4}
+                          value={r.minRequirements.join("\n")}
+                          onChange={(e) =>
+                            update(r.id, {
+                              minRequirements: e.target.value.split("\n").filter(Boolean),
+                            })
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor={`rec-${r.id}`}>
+                          Recommended requirements (one per line)
+                        </Label>
+                        <Textarea
+                          id={`rec-${r.id}`}
+                          rows={4}
+                          value={r.recommendedRequirements.join("\n")}
+                          onChange={(e) =>
+                            update(r.id, {
+                              recommendedRequirements: e.target.value.split("\n").filter(Boolean),
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      variant="gold"
+                      size="sm"
+                      disabled={!patches[r.id]}
+                      onClick={() => saveBuild(r)}
+                    >
+                      Save build
+                    </Button>
+                  </fieldset>
+                  <div className="px-4 pb-4">
+                    <ApkUpload
+                      release={saved}
+                      disabled={busy}
+                      onUpload={(file, onProgress) => uploadApk(saved, file, onProgress)}
+                    />
+                  </div>
+                </div>
+              </li>
+            );
+          }),
+        ])}
       </ul>
+
+      <section id="whats-new" className="scroll-mt-24">
+        <Panel title="What's New" icon={ListChecks} bodyClassName="p-4 space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Publish release notes for the public Download page. Notes can stay in draft while the
+            corresponding build is active.
+          </p>
+          {query.data.initialized ? (
+            <fieldset disabled={busy}>
+              <ReleasePosts
+                releases={releases}
+                save={savePost}
+                disabled={busy}
+                onDelete={requestDelete}
+              />
+            </fieldset>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Import the existing release records to manage shared update posts. APK details and
+                the current build selection are preserved; notes start as drafts.
+              </p>
+              <Button variant="gold" disabled={busy} onClick={initialize}>
+                Import existing releases
+              </Button>
+            </>
+          )}
+        </Panel>
+      </section>
 
       <Panel title="Installation guide" icon={ListChecks} bodyClassName="p-4 space-y-3">
         <p className="text-sm text-muted-foreground">
@@ -433,6 +618,37 @@ function AdminReleases() {
           Save guide
         </Button>
       </Panel>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={
+          deleteTarget
+            ? `Delete v${deleteTarget.version} build ${deleteTarget.build}?`
+            : "Delete build?"
+        }
+        description={`The build record and its ${deleteTarget?.published ? "published " : ""}release notes will be removed${deleteTarget?.published ? " from What's New" : ""}. Any uploaded APK file is retained in storage. The active download stays available.`}
+        confirmLabel="Delete build"
+        onConfirm={() => void deleteBuild()}
+      />
+      <ConfirmDialog
+        open={currentTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setCurrentTarget(null);
+        }}
+        title={
+          currentTarget
+            ? `Make v${currentTarget.version} build ${currentTarget.build} current?`
+            : "Make build current?"
+        }
+        description={`This replaces the active download with the selected build.${currentTarget && current?.version.trim() !== currentTarget.version.trim() ? " Players who opted in and confirmed their contact email will be queued for a version update when email delivery is configured." : " The version is unchanged, so no new version email is queued."}`}
+        confirmLabel="Make current"
+        destructive={false}
+        onConfirm={() => {
+          if (currentTarget) void makeCurrent(currentTarget);
+        }}
+      />
     </AdminPage>
   );
 }

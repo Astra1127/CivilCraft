@@ -8,9 +8,17 @@ import { apkStorage } from "./apk-storage.server.ts";
 import { validateApkArchive } from "./apk-validation.server.ts";
 import { apkPathSchema, createApkUploadTicket, readApkUploadTicket } from "./apk-ticket.server.ts";
 import type { HandleUploadPresignedBody } from "@vercel/blob/client";
+import {
+  createVersionAnnouncement,
+  dispatchVersionNotifications,
+  releaseEmailReadiness,
+  versionAnnouncementSchema,
+  type VersionAnnouncement,
+} from "../email/release-notifications.server.ts";
 
 const prefix = "civilcraft.website.v1.releases.";
 const configKey = "civilcraft.website.v1.release-config";
+const deletedPrefix = "civilcraft.website.v1.release-deleted.";
 const idSchema = z.string().regex(/^[a-zA-Z0-9-]{1,64}$/);
 const apkSchema = z.object({
   storagePath: apkPathSchema,
@@ -44,6 +52,33 @@ const schema = z
     "Published updates require a title and release notes.",
   );
 type StoredRelease = z.infer<typeof schema>;
+const releaseConfigSchema = z
+  .object({
+    currentId: idSchema.nullable(),
+    notification: versionAnnouncementSchema.optional(),
+  })
+  .passthrough();
+function readConfig(saved: Record<string, unknown>) {
+  return releaseConfigSchema.parse(JSON.parse(String(saved[configKey])));
+}
+async function announceVersion(notification: VersionAnnouncement) {
+  const readiness = releaseEmailReadiness();
+  if (!readiness.configured)
+    return { status: "not-configured" as const, message: readiness.message };
+  try {
+    const result = await dispatchVersionNotifications({ maxRecipients: 10, timeBudgetMs: 8000 });
+    return {
+      status: "queued" as const,
+      message: `Version ${notification.version} is queued for subscribed players. ${result.sent} email(s) accepted in the first batch; remaining work continues through the scheduled worker.${result.uncertain ? " Some delivery attempts need review and will not be resent automatically." : ""}`,
+    };
+  } catch {
+    return {
+      status: "queued" as const,
+      message:
+        "The version notification is saved, but the first batch could not finish. The scheduled worker will resume; check email configuration if delivery remains unavailable.",
+    };
+  }
+}
 
 function publicRelease(release: StoredRelease): Release {
   const { apk, ...fields } = release;
@@ -72,11 +107,11 @@ async function save(key: string, value: unknown) {
 function read(saved: Record<string, unknown>) {
   if (!saved[configKey]) return { initialized: false, releases: [] as StoredRelease[] };
   try {
-    const config = z
-      .object({ currentId: idSchema.nullable() })
-      .parse(JSON.parse(String(saved[configKey])));
+    const config = readConfig(saved);
     const releases: StoredRelease[] = Object.entries(saved)
-      .filter(([k, v]) => k.startsWith(prefix) && v != null)
+      .filter(
+        ([k, v]) => k.startsWith(prefix) && v != null && !isDeleted(saved, k.slice(prefix.length)),
+      )
       .map(([key, value]) => {
         const release = schema.parse(JSON.parse(String(value)));
         if (key !== prefix + release.id) throw new Error();
@@ -100,6 +135,9 @@ function read(saved: Record<string, unknown>) {
   } catch {
     throw new AdminApiError(502, "Release data could not be read.");
   }
+}
+function isDeleted(saved: Record<string, unknown>, id: string) {
+  return saved[deletedPrefix + id] != null;
 }
 const json = (body: unknown, status = 200) =>
   Response.json(body, {
@@ -227,7 +265,12 @@ export async function releaseRequest(
       return json({ error: "Endpoint not found." }, 404);
     }
     if (request.method === "GET") {
-      if (admin) return json({ ...state, releases: state.releases.map(publicRelease) });
+      if (admin)
+        return json({
+          ...state,
+          releases: state.releases.map(publicRelease),
+          emailNotifications: releaseEmailReadiness(),
+        });
       const latest = state.releases
         .filter((r) => r.published)
         .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate) || b.id.localeCompare(a.id))[0];
@@ -269,19 +312,68 @@ export async function releaseRequest(
       if (!state.initialized) throw new AdminApiError(409, "Import existing releases first.");
       if (body["action"] === "current") {
         const id = idSchema.parse(body["id"]);
-        const chosen = state.releases.find((r) => r.id === id);
+        const fresh = await data();
+        const latest = read(fresh);
+        const config = readConfig(fresh);
+        const chosen = latest.releases.find((r) => r.id === id);
         if (!chosen) throw new AdminApiError(404, "Release not found.");
         if (!chosen.apk && !chosen.fileUrl?.trim())
           throw new AdminApiError(
             400,
             "Attach an APK or download link before making this build current.",
           );
-        await save(configKey, { currentId: id });
+        const active = latest.releases.find((r) => r.status === "current");
+        const changed = active?.version !== chosen.version;
+        const notification = changed
+          ? createVersionAnnouncement({
+              releaseId: id,
+              version: chosen.version,
+              build: chosen.build,
+            })
+          : config.notification?.version === chosen.version
+            ? { ...config.notification, releaseId: id, build: chosen.build }
+            : config.notification;
+        // One write commits the active pointer and its version announcement together.
+        await save(configKey, {
+          ...config,
+          currentId: id,
+          ...(notification ? { notification } : {}),
+        });
+        return json({
+          success: true,
+          notification:
+            changed && notification
+              ? await announceVersion(notification)
+              : {
+                  status: "unchanged",
+                  message: "The public version has not changed. No new version email was queued.",
+                },
+        });
+      } else if (body["action"] === "delete") {
+        const id = idSchema.parse(body["id"]);
+        const fresh = await data();
+        if (isDeleted(fresh, id)) return json({ success: true });
+        const chosen = read(fresh).releases.find((r) => r.id === id);
+        if (!chosen) throw new AdminApiError(404, "Release not found.");
+        if (chosen.status === "current")
+          throw new AdminApiError(
+            409,
+            "The active build cannot be deleted. Make another build current first.",
+          );
+        // A separate durable tombstone prevents stale saves/uploads from restoring
+        // a deleted record. Retain the private metadata and APK for recovery.
+        await save(deletedPrefix + id, { id, deletedAt: new Date().toISOString() });
       } else if (body["action"] === "save") {
         if (Object.hasOwn(object(body["release"]), "apk"))
           throw new AdminApiError(400, "APK storage references cannot be supplied by the browser.");
         const release = schema.parse(body["release"]);
-        const previous = read(await data()).releases.find((r) => r.id === release.id);
+        const fresh = await data();
+        if (isDeleted(fresh, release.id))
+          throw new AdminApiError(
+            409,
+            "This build was deleted. Refresh before making further changes.",
+          );
+        const previous = read(fresh).releases.find((r) => r.id === release.id);
         await save(prefix + release.id, {
           ...release,
           status: previous?.status ?? "draft",
@@ -294,6 +386,64 @@ export async function releaseRequest(
               }
             : {}),
         });
+        if (
+          previous?.status === "current" &&
+          (previous.version !== release.version || previous.build !== release.build)
+        ) {
+          try {
+            // Do not overwrite a concurrently changed active pointer or announce
+            // metadata replaced by another staff edit after this save.
+            const latest = await data();
+            const config = readConfig(latest);
+            const persisted = read(latest).releases.find((r) => r.id === release.id);
+            if (
+              config.currentId !== release.id ||
+              !persisted ||
+              persisted.version !== release.version ||
+              persisted.build !== release.build
+            )
+              return json({
+                success: true,
+                notification: {
+                  status: "unchanged",
+                  message:
+                    "Build saved, but another edit changed the active build. No version email was queued.",
+                },
+              });
+            const changed = previous.version !== release.version;
+            const notification = changed
+              ? createVersionAnnouncement({
+                  releaseId: release.id,
+                  version: release.version,
+                  build: release.build,
+                })
+              : config.notification?.version === release.version
+                ? { ...config.notification, build: release.build }
+                : undefined;
+            if (!notification) return json({ success: true });
+            await save(configKey, { ...config, notification });
+            return json({
+              success: true,
+              notification: changed
+                ? await announceVersion(notification)
+                : {
+                    status: "unchanged",
+                    message: "Build saved. The version is unchanged; no new email was queued.",
+                  },
+            });
+          } catch {
+            // Metadata is already committed: don't report a failed build save or
+            // encourage blindly repeating a successful version change.
+            return json({
+              success: true,
+              notification: {
+                status: "not-configured",
+                message:
+                  "Build saved, but the version email queue could not be saved. Ask an administrator to check game services before announcing this version.",
+              },
+            });
+          }
+        }
       } else throw new AdminApiError(400, "Choose a valid release action.");
     }
     return json({ success: true });

@@ -8,6 +8,12 @@ export type PublishedRelease = Pick<
   Release,
   "id" | "title" | "version" | "build" | "releaseDate" | "notes"
 >;
+export type ReleaseNotificationResult = {
+  status: "queued" | "not-configured" | "unchanged";
+  message: string;
+};
+export type ReleaseMutationResult = { success: boolean; notification?: ReleaseNotificationResult };
+export type ReleaseEmailReadiness = { configured: boolean; provider: string; message: string };
 export function useReleasePosts() {
   return useQuery({
     queryKey: ["releases", "public"],
@@ -29,16 +35,18 @@ export function useAdminReleases() {
       contentFetch<{
         initialized: boolean;
         releases: Release[];
+        emailNotifications?: ReleaseEmailReadiness;
       }>("/api/admin/releases"),
     staleTime: 0,
   });
   const mutate = async (body: unknown) => {
-    await contentFetch("/api/admin/releases", {
+    const result = await contentFetch<ReleaseMutationResult>("/api/admin/releases", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     await client.invalidateQueries({ queryKey: ["releases"] });
+    return result;
   };
   const uploadApk = async (
     releaseId: string,

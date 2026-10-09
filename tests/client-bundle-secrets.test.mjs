@@ -39,7 +39,7 @@ test(
       // privileged PlayFab transport, mailer, and payment-verification code.
       assert.doesNotMatch(
         source,
-        /civilcraft-apk-upload:v1|civilcraft-admin:v3:session|X-SecretKey|Admin\/SetTitleInternalData|nodemailer|paymongo\.server|verifyPayMongoSignature/,
+        /civilcraft-apk-upload:v1|civilcraft-admin:v3:session|civilcraft\/email\/version-claims\/|X-SecretKey|Admin\/SetTitleInternalData|nodemailer|paymongo\.server|verifyPayMongoSignature/,
         "Application server-only implementation found in client bundle",
       );
     }

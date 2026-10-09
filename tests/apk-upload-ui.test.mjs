@@ -322,7 +322,11 @@ async function mountRoute(t, overrides = {}) {
   };
   const query = {
     get data() {
-      return { initialized: state.initialized, releases: state.releases };
+      return {
+        initialized: state.initialized,
+        releases: state.releases,
+        emailNotifications: { configured: true, provider: "PlayFab", message: "Ready to queue." },
+      };
     },
     isPending: false,
     isError: false,
@@ -346,6 +350,7 @@ async function mountRoute(t, overrides = {}) {
                 : release.status,
         }));
       }
+      return { success: true };
     },
     uploadApk: async (...args) => {
       state.uploads.push(args);
@@ -461,11 +466,25 @@ test("Make current requires an attachment and saves pending build edits before c
   };
   const { renderer, state } = await mountRoute(t, { releases: [draft] });
   assert.equal(button(renderer, "Make current").props.disabled, true);
+  await act(() =>
+    renderer.root
+      .findAllByType("button")
+      .find((node) => node.props["aria-controls"] === "build-details-draft-build")
+      .props.onClick(),
+  );
   await change(renderer, "u-draft-build", "https://example.test/legacy.apk");
   await change(renderer, "v-draft-build", "1.1");
   assert.equal(button(renderer, "Make current").props.disabled, false);
   await act(async () => {
     await button(renderer, "Make current").props.onClick();
+  });
+  assert.equal(state.mutations.length, 0, "selection requires confirming the build change");
+  const confirmation = renderer.root
+    .findAllByType("ConfirmDialog")
+    .find((node) => node.props.confirmLabel === "Make current");
+  assert.equal(confirmation.props.open, true);
+  await act(async () => {
+    confirmation.props.onConfirm();
   });
   assert.deepEqual(
     state.mutations.map((mutation) => mutation.action),

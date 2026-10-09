@@ -9,6 +9,7 @@ import {
 import { smallBody } from "../playfab/request-body.server.ts";
 import { listContent } from "../cms/content.server.ts";
 import { emailDelivery } from "./delivery.server.ts";
+import { dispatchVersionNotifications } from "./release-notifications.server.ts";
 
 export const recoveryMessage =
   "If an account exists for that email, password recovery instructions have been sent.";
@@ -205,10 +206,30 @@ export async function dispatchNotifications() {
 export async function handleEmailRequest(request: Request): Promise<Response | null> {
   const path = new URL(request.url).pathname;
   if (
-    !["/api/email/recovery", "/api/player/email-preference", "/api/email/dispatch"].includes(path)
+    ![
+      "/api/email/recovery",
+      "/api/player/email-preference",
+      "/api/email/dispatch",
+      "/api/email/releases/dispatch",
+    ].includes(path)
   )
     return null;
   try {
+    if (path === "/api/email/releases/dispatch") {
+      const secret = process.env["CRON_SECRET"]?.trim();
+      const token = request.headers.get("authorization")?.match(/^Bearer (\S+)$/)?.[1] ?? "";
+      if (
+        !secret ||
+        !timingSafeEqual(
+          createHash("sha256").update(token).digest(),
+          createHash("sha256").update(secret).digest(),
+        )
+      )
+        return json({ error: "Not authorized." }, 401);
+      if (request.method !== "GET" && request.method !== "POST")
+        return json({ error: "Method not allowed." }, 405);
+      return json(await dispatchVersionNotifications());
+    }
     if (path === "/api/email/dispatch") {
       const secret = process.env["CRON_SECRET"];
       const token = request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
