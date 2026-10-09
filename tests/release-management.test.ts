@@ -235,7 +235,10 @@ test("drafts, notes, same-version selection and build-only edits never create a 
   assert.deepEqual(JSON.parse(records[configKey]!), { currentId: "active" });
   const response = await admin({ action: "current", id: "draft" });
   assert.equal((await response.json()).notification.status, "unchanged");
-  assert.deepEqual(JSON.parse(records[configKey]!), { currentId: "draft" });
+  assert.deepEqual(JSON.parse(records[configKey]!), {
+    currentId: "draft",
+    archivedIds: ["active"],
+  });
 });
 test("active version edits queue once and same-version build or target changes retain the original event identity", async () => {
   const updated = { ...release, version: "1.1.0" };
@@ -267,4 +270,18 @@ test("failed email queue persistence does not falsely report that a committed ac
   assert.match(result.notification.message, /Build saved/);
   assert.equal((await publicData()).current.version, "1.1.0");
   assert.equal(JSON.parse(records[configKey]!).notification, undefined);
+});
+
+test("activating a draft remembers previous active builds as backups without mutating their attachments", async () => {
+  const original = records[prefix + "draft"];
+  await admin({ action: "current", id: "draft" });
+  await admin({ action: "current", id: "backup" });
+  const state = await (await admin()).json();
+  assert.equal(state.releases.find((r: { id: string }) => r.id === "draft").status, "archived");
+  assert.equal(state.releases.find((r: { id: string }) => r.id === "backup").status, "current");
+  assert.equal(records[prefix + "draft"], original);
+  assert.ok(JSON.parse(records[configKey]!).notification);
+  await admin({ action: "delete", id: "draft" });
+  await admin({ action: "current", id: "active" });
+  assert.ok(!JSON.parse(records[configKey]!).archivedIds.includes("draft"));
 });

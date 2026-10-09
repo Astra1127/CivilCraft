@@ -55,6 +55,7 @@ type StoredRelease = z.infer<typeof schema>;
 const releaseConfigSchema = z
   .object({
     currentId: idSchema.nullable(),
+    archivedIds: z.array(idSchema).max(100).optional(),
     notification: versionAnnouncementSchema.optional(),
   })
   .passthrough();
@@ -126,7 +127,7 @@ function read(saved: Record<string, unknown>) {
           status:
             release.id === config.currentId
               ? "current"
-              : release.status === "current"
+              : release.status === "current" || config.archivedIds?.includes(release.id)
                 ? "archived"
                 : release.status,
         };
@@ -323,6 +324,19 @@ export async function releaseRequest(
             "Attach an APK or download link before making this build current.",
           );
         const active = latest.releases.find((r) => r.status === "current");
+        const archivedIds = [
+          ...new Set([
+            ...(config.archivedIds ?? []).filter(
+              (backupId) => backupId !== id && !isDeleted(fresh, backupId),
+            ),
+            ...(active && active.id !== id ? [active.id] : []),
+          ]),
+        ];
+        if (archivedIds.length > 100)
+          throw new AdminApiError(
+            400,
+            "Delete older backup entries before activating another build.",
+          );
         const changed = active?.version !== chosen.version;
         const notification = changed
           ? createVersionAnnouncement({
@@ -337,6 +351,7 @@ export async function releaseRequest(
         await save(configKey, {
           ...config,
           currentId: id,
+          ...(archivedIds.length || config.archivedIds ? { archivedIds } : {}),
           ...(notification ? { notification } : {}),
         });
         return json({

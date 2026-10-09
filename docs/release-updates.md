@@ -17,7 +17,10 @@ Staff use `GET/POST /api/admin/releases` behind the existing administrator sessi
 The active build is first and stays expanded. Drafts and backups start collapsed;
 their details can be opened without losing selected APKs or unsaved edits. Newly
 created drafts open for uploading. Making a different build current requires a
-confirmation showing the selected version and its email consequence.
+confirmation showing the selected version and its email consequence. The active
+pointer also remembers prior active IDs, so a formerly active draft becomes a
+backup on the next switch without rewriting its APK attachment. Older records
+without this history retain their existing status.
 
 Noncurrent drafts and published backups have a Delete action with confirmation.
 Deletion hides both the build and its release notes; a separate permanent
