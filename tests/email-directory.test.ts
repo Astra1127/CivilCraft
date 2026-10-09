@@ -25,10 +25,16 @@ const players = Array.from({ length: 53 }, (_, i) => ({
       DisplayName: `Engineer ${String(52 - i).padStart(2, "0")}`,
       Created: new Date(now - i * day).toISOString(),
       LastLogin: new Date(now - i * day).toISOString(),
-      isBanned: i % 2 === 0,
     },
   }),
+  // Directory filtering receives identities enriched by authoritative ban lookup.
+  accountStatus: i % 2 === 0 ? ("banned" as const) : ("active" as const),
 }));
+test("identity mapping leaves ban status unknown until authoritative enrichment", () => {
+  for (const isBanned of [true, false]) {
+    assert.equal(mapIdentity({ PlayFabId: "AA", TitleInfo: { isBanned } }).accountStatus, null);
+  }
+});
 test("full directory sorts/filter before 20-row pagination", () => {
   const source = [...players].reverse();
   const recent = filterSortPlayers(source, defaultDirectoryOptions, now);

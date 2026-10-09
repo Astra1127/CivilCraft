@@ -375,7 +375,9 @@ function LevelCard({ level, onOpen }: { level: AlmanacLevel; onOpen: () => void 
             <p className="text-xs text-muted-foreground">
               {bridge ? `${bridge.name} · ` : ""}
               {level.completion
-                ? new Date(level.completion.completedAt).toLocaleDateString()
+                ? Number.isFinite(Date.parse(level.completion.completedAt))
+                  ? new Date(level.completion.completedAt).toLocaleDateString()
+                  : "Date unavailable"
                 : null}
             </p>
           </div>

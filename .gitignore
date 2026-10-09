@@ -39,4 +39,6 @@ dist-ssr
 .vercel
 .env*
 !.env.example
+# Private credential handoffs, including copies under docs/
+env.production-handoff.md
 node_modules

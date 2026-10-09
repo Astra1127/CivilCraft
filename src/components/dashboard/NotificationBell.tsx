@@ -21,6 +21,7 @@ const KIND_ICON: Record<NotificationKind, LucideIcon> = {
 };
 
 function timeAgo(iso: string) {
+  if (!Number.isFinite(Date.parse(iso))) return "Date unavailable";
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.round(diff / 60000);
   if (mins < 1) return "Just now";
@@ -36,7 +37,10 @@ function timeAgo(iso: string) {
  */
 export function NotificationBell() {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ["notifications"], queryFn: notificationService.getNotifications });
+  const q = useQuery({
+    queryKey: ["notifications"],
+    queryFn: notificationService.getNotifications,
+  });
   const items = q.data ?? [];
   const unread = items.filter((n) => !n.read);
 
@@ -109,7 +113,10 @@ export function NotificationBell() {
                       <span className="flex items-center gap-2">
                         <span className="truncate text-sm font-bold">{n.title}</span>
                         {!n.read ? (
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold" aria-hidden="true" />
+                          <span
+                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold"
+                            aria-hidden="true"
+                          />
                         ) : null}
                       </span>
                       {n.description ? (

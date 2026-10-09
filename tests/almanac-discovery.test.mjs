@@ -87,11 +87,45 @@ test("material field does not alter existing project or bridge progression", asy
     discoveredMaterials: ["wood_support"],
   };
   const journey = await journeyFrom(JSON.stringify(record));
-  assert.deepEqual(journey.regions, record.regions);
+  const { discoveredMaterials, ...withoutMaterials } = record;
+  const baseline = await journeyFrom(JSON.stringify(withoutMaterials));
+  assert.deepEqual(journey.regions, baseline.regions);
+  assert.deepEqual(journey.discoveredMaterials, discoveredMaterials);
+  assert.equal(journey.regions[0].name, "canyon");
+  assert.equal(journey.regions[0].levels[0].levelId, "level_0");
+  assert.equal(journey.regions[0].levels[0].order, 1);
+  assert.deepEqual(journey.regions[0].levels[0].engineeringConceptIds, []);
+  assert.equal(journey.regions[0].levels[0].completion.completedAt, "");
   assert.equal(journey.levelsCompleted, 7);
   assert.equal(journey.levelsTotal, 37);
   assert.equal(journey.journeyPercent, 24);
   assert.deepEqual(journey.discoveredBridgeTypeIds, ["beam"]);
+});
+
+test("completion dates are game-written, never generated while reading", async () => {
+  for (const dateField of ["completedAt", "CompletedAt"]) {
+    const completedAt = "2026-09-01T10:00:00.000Z";
+    const journey = await journeyFrom(
+      JSON.stringify({
+        regions: [
+          {
+            levels: [
+              {
+                status: "completed",
+                completion: { [dateField]: completedAt, score: 123, bridgeTypeId: "arch" },
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const level = journey.regions[0].levels[0];
+    assert.equal(level.completion.completedAt, completedAt);
+    assert.equal(level.completion.score, 123);
+    assert.equal(level.status, "completed");
+    assert.equal(journey.levelsCompleted, 1);
+    assert.deepEqual(journey.discoveredBridgeTypeIds, ["arch"]);
+  }
 });
 
 const content = load("../src/lib/almanac/content.ts");
@@ -100,6 +134,65 @@ const wrap =
   ({ children, ...props }) =>
     React.createElement(tag, props, children);
 const widgets = new Proxy({}, { get: (_, name) => wrap(name) });
+
+test("completion dialog keeps undated completions visible without inventing a date", async () => {
+  const component = load("../src/components/dashboard/almanac/LevelEntryDialog.tsx", {
+    "lucide-react": widgets,
+    "@/components/common/BrandedCover": widgets,
+    "@/components/ui/badge": widgets,
+    "@/components/ui/button": widgets,
+    "@/components/ui/dialog": widgets,
+    "@/lib/almanac/content": content,
+  });
+  for (const completedAt of ["", "not-a-date", "2026-09-01T10:00:00.000Z"]) {
+    const level = {
+      levelId: "beam_1",
+      regionId: "canyon",
+      order: 1,
+      status: "completed",
+      engineeringConceptIds: [],
+      completion: { completedAt, score: 123, bridgeTypeId: "beam" },
+    };
+    let renderer;
+    await act(async () => {
+      renderer = create(
+        React.createElement(component.LevelEntryDialog, {
+          level,
+          open: true,
+          onOpenChange: () => {},
+        }),
+      );
+    });
+    try {
+      const rendered = JSON.stringify(renderer.toJSON());
+      assert.equal(
+        rendered.includes("Date unavailable"),
+        !Number.isFinite(Date.parse(completedAt)),
+      );
+      assert.ok(!rendered.includes("Invalid Date"));
+      assert.ok(rendered.includes("123"));
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  }
+});
+
+test("completion notifications label missing and invalid dates as unavailable", () => {
+  const component = load(
+    "../src/components/dashboard/NotificationBell.tsx",
+    {
+      "lucide-react": widgets,
+      "@/components/ui/button": widgets,
+      "@/components/ui/dropdown-menu": widgets,
+      "@/lib/playfab": {},
+      "@/lib/utils": {},
+    },
+    "\nexports.timeAgo = timeAgo;",
+  );
+  assert.equal(component.timeAgo(""), "Date unavailable");
+  assert.equal(component.timeAgo("bad-date"), "Date unavailable");
+  assert.notEqual(component.timeAgo("2026-09-01T10:00:00.000Z"), "Date unavailable");
+});
 
 test("Materials UI reveals only exact game-written entries and preserves empty states", async () => {
   for (const [ids, expected] of [
@@ -124,7 +217,10 @@ test("Materials UI reveals only exact game-written entries and preserves empty s
       ...playerNameDependencies,
       "@tanstack/react-query": {
         useQuery: ({ queryKey }) => ({
-          data: queryKey[0] === "almanac-journey" ? journey : { displayName: "<#BF40BF>.dev_hyakkimaru" },
+          data:
+            queryKey[0] === "almanac-journey"
+              ? journey
+              : { displayName: "<#BF40BF>.dev_hyakkimaru" },
         }),
       },
       "lucide-react": widgets,
@@ -157,7 +253,9 @@ test("Materials UI reveals only exact game-written entries and preserves empty s
       assert.match(JSON.stringify(renderer.toJSON()), /Projects completed|Regions completed/);
       assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /<#BF40BF>/);
       assert.equal(renderer.root.findByType("AvatarFallback").children.join(""), ".D");
-      const playerLabel = renderer.root.findAllByType("span").find((node) => node.children.join("") === ".dev_hyakkimaru");
+      const playerLabel = renderer.root
+        .findAllByType("span")
+        .find((node) => node.children.join("") === ".dev_hyakkimaru");
       assert.equal(playerLabel.props.style.color, "#BF40BF");
     } finally {
       await act(async () => renderer.unmount());

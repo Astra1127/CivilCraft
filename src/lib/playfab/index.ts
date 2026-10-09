@@ -336,7 +336,7 @@ export const notificationService = {
       }));
     return [...fromAchievements, ...fromLevels]
       .map((n) => ({ ...n, read: read.has(n.id) }))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
   },
   async markRead(ids: string[]): Promise<void> {
     const set = readIds();

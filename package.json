@@ -18,7 +18,7 @@
     "test:payments": "node --test tests/paymongo.test.ts",
     "test:transactions": "node --test tests/dashboard-transactions-layout.test.mjs",
     "test:currencies": "node --test tests/paymongo.test.ts tests/paymongo-webhook-envelopes.test.mjs tests/premium-wallet.test.ts tests/entity-diamond-wallet.test.mjs tests/currency-products.test.ts tests/diamonds-setup.test.mjs tests/diamond-shop-ui.test.mjs tests/shop-navigation-ui.test.mjs tests/diamond-dev-config.test.mjs tests/coin-receipts.test.mjs tests/coins-setup.test.mjs tests/currency-database.test.mjs tests/currency-database-sql.test.mjs tests/currency-database-setup.test.mjs tests/postgres-coin-receipts.test.mjs tests/postgres-payment-integration.test.mjs",
-    "verify:currencies": "node --env-file=.env scripts/verify-currency-database.mjs"
+    "verify:currencies": "node scripts/verify-currency-database-local.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -73,7 +73,7 @@
     "react-hook-form": "^7.71.2",
     "react-resizable-panels": "^4.6.5",
     "recharts": "^2.15.4",
-    "sharp": "^0.35.4",
+    "sharp": "0.35.5",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",

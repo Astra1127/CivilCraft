@@ -49,7 +49,7 @@ The schema health function checks the installation/title/schema binding and the 
 
 ## 4. Configure private local values
 
-Use a private, git-ignored `.env` file in the website root. Keep all keys and connection strings out of chat, screenshots, commits, and browser code. Node's `--env-file` loads the values without printing their contents. Do not create `VITE_CURRENCY_DATABASE_URL` or any other public-prefixed copy of a secret.
+Use an existing private, git-ignored `.env` or `.env.local` file in the website root; do not duplicate secrets just to run verification. `npm run verify:currencies` selects `.env` when present, otherwise `.env.local`; with neither file it uses the injected process environment. It never automatically selects `.env.production` or `.env.example`, and does not merge local files. Already-injected variables take precedence. To choose a different private file deliberately, use `node --env-file=<private-file> scripts/verify-currency-database.mjs`. Keep all keys and connection strings out of chat, screenshots, commits, and browser code. Node's `--env-file` loads the values without printing their contents. Do not create `VITE_CURRENCY_DATABASE_URL` or any other public-prefixed copy of a secret.
 
 ```dotenv
 VITE_PLAYFAB_TITLE_ID=17FA03
@@ -79,7 +79,7 @@ Before testing Coin checkout, confirm that the existing classic PlayFab currency
 Install the repository's dependencies and use Node 22.18 or newer. From the website folder:
 
 ```powershell
-node --env-file=.env scripts/verify-currency-database.mjs
+npm run verify:currencies
 ```
 
 This verifier checks the real connected database, installation UUID, title binding, schema version, and runtime role restrictions. It does not install SQL, change privileges, create a wallet, grant Coins or Diamonds, call PayMongo, generate test receipts, or edit `.env`/Vercel settings. It needs no player session ticket.

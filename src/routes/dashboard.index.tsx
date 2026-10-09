@@ -304,8 +304,8 @@ function PlayerOverview() {
               .filter((l) => l.completion)
               .sort(
                 (a, b) =>
-                  new Date(b.completion!.completedAt).getTime() -
-                  new Date(a.completion!.completedAt).getTime(),
+                  (Date.parse(b.completion!.completedAt) || 0) -
+                  (Date.parse(a.completion!.completedAt) || 0),
               )
               .slice(0, 3)
               .map((l) => {
@@ -327,7 +327,9 @@ function PlayerOverview() {
                       <p className="truncate font-display">{l.levelName}</p>
                       <p className="text-xs text-muted-foreground">
                         {bridge ? `${bridge.name} · ` : ""}
-                        {new Date(c.completedAt).toLocaleDateString()}
+                        {Number.isFinite(Date.parse(c.completedAt))
+                          ? new Date(c.completedAt).toLocaleDateString()
+                          : "Date unavailable"}
                       </p>
                       <p className="font-display">{c.score.toLocaleString()}</p>
                       <Button asChild variant="outline" size="sm" className="mt-2">

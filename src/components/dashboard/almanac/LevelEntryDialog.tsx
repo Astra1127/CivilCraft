@@ -94,11 +94,13 @@ export function LevelEntryDialog({
             <div className="grid grid-cols-2 gap-2 bg-card px-3 py-2">
               <dt className="text-muted-foreground">Completed</dt>
               <dd className="text-right font-bold">
-                {new Date(c.completedAt).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
+                {Number.isFinite(Date.parse(c.completedAt))
+                  ? new Date(c.completedAt).toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "Date unavailable"}
               </dd>
             </div>
           </dl>
@@ -117,7 +119,10 @@ export function LevelEntryDialog({
           </h3>
           <ul className="mt-2 space-y-2">
             {concepts.map((concept) => (
-              <li key={concept.id} className="rounded-xl border-2 border-border bg-secondary/40 px-3 py-2">
+              <li
+                key={concept.id}
+                className="rounded-xl border-2 border-border bg-secondary/40 px-3 py-2"
+              >
                 <p className="font-display text-base">{concept.name}</p>
                 <p className="text-sm text-muted-foreground">{concept.summary}</p>
                 {concept.diagram ? (

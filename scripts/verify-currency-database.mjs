@@ -99,7 +99,7 @@ export async function runCurrencyDatabaseVerification({
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv.includes("--help")) {
     console.log(
-      "Usage: node --env-file=.env scripts/verify-currency-database.mjs\nRead-only database schema/installation/restricted-role check. Requires explicit postgres storage selections, disabled checkout, and a PayMongo test key. Does not grant currency, create receipts, alter SQL/roles, or edit environment files. No player session ticket is required.",
+      "Usage: npm run verify:currencies (uses .env, otherwise .env.local, otherwise injected environment)\nExplicit file: node --env-file=<private-file> scripts/verify-currency-database.mjs\nRead-only database schema/installation/restricted-role check. Requires explicit postgres storage selections, disabled checkout, and a PayMongo test key. Does not grant currency, create receipts, alter SQL/roles, or edit environment files. No player session ticket is required.",
     );
   } else if (process.argv.length > 2) {
     console.error("Unexpected verifier arguments. Use --help; no database check was performed.");

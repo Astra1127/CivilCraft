@@ -183,7 +183,10 @@ test("gallery items can be uploaded with description, edited by admin, and updat
 
   const updatedPublic = await (await publicRead())!.json();
   assert.equal(updatedPublic.gallery[0].caption, "Updated Suspension Span");
-  assert.equal(updatedPublic.gallery[0].description, "Detailed description of cable tension and deck truss.");
+  assert.equal(
+    updatedPublic.gallery[0].description,
+    "Detailed description of cable tension and deck truss.",
+  );
   assert.equal(updatedPublic.gallery[0].category, "Gameplay");
 
   await change("/gallery", { id: uploaded.id, action: "delete" });
@@ -209,6 +212,24 @@ test("public content is read-only and empty storage produces no seed records", a
     404,
   );
   assert.equal(writes, 0);
+});
+test("CMS re-encodes supported PNG, JPEG and WebP images with the patched Sharp runtime", async () => {
+  for (const [format, mime] of [
+    ["png", "image/png"],
+    ["jpeg", "image/jpeg"],
+    ["webp", "image/webp"],
+  ] as const) {
+    const input = await sharp({ create: { width: 3, height: 2, channels: 3, background: "red" } })
+      .toFormat(format)
+      .toBuffer();
+    const output = await validateImage(input, mime);
+    const metadata = await sharp(output.bytes).metadata();
+    assert.equal(output.mime, mime);
+    assert.equal(output.extension, format);
+    assert.equal(metadata.format, format);
+    assert.equal(metadata.width, 3);
+    assert.equal(metadata.height, 2);
+  }
 });
 test("server rejects mismatched MIME, corrupt files, SVG and oversized uploads", async () => {
   const png = await sharp({ create: { width: 1, height: 1, channels: 3, background: "red" } })

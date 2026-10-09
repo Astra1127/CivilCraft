@@ -71,7 +71,9 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
 
     const regions: AlmanacRegion[] = rawRegions.map((r, rIdx) => {
       const robj = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
-      const regionId = String(robj["regionId"] ?? robj["RegionId"] ?? robj["id"] ?? `region_${rIdx}`);
+      const regionId = String(
+        robj["regionId"] ?? robj["RegionId"] ?? robj["id"] ?? `region_${rIdx}`,
+      );
       const name = String(robj["name"] ?? robj["Name"] ?? regionId);
       const rawStatus = robj["status"] ?? robj["Status"] ?? "locked";
       const status = String(rawStatus).toLowerCase() as AlmanacRegion["status"];
@@ -91,7 +93,8 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
         const rawConceptIds = lobj["engineeringConceptIds"] ?? lobj["EngineeringConceptIds"];
         const conceptIds = Array.isArray(rawConceptIds) ? (rawConceptIds as string[]) : [];
 
-        const comp = (lobj["completion"] ?? lobj["Completion"]) as Record<string, unknown> | undefined;
+        const comp = (lobj["completion"] ?? lobj["Completion"]) as
+          Record<string, unknown> | undefined;
         let completion: PlayerLevelCompletion | undefined;
         if (comp && typeof comp === "object") {
           const rawUrl = comp["completionScreenshotUrl"] ?? comp["CompletionScreenshotUrl"];
@@ -104,7 +107,8 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
             score: Number(comp["score"] ?? comp["Score"] ?? 0),
             status: "success",
             completionScreenshotUrl: typeof rawUrl === "string" ? rawUrl : undefined,
-            completedAt: String(comp["completedAt"] ?? comp["CompletedAt"] ?? new Date().toISOString()),
+            // A read must not invent the date of a game-written completion.
+            completedAt: String(comp["completedAt"] ?? comp["CompletedAt"] ?? ""),
             achievementId: typeof rawAchId === "string" ? rawAchId : undefined,
           };
         }
@@ -136,7 +140,8 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
       levelsCompleted: explicitCompleted ?? completedCount,
       levelsTotal: explicitTotal ?? allLevels.length,
       journeyPercent:
-        explicitPercent ?? (allLevels.length ? Math.round((completedCount / allLevels.length) * 100) : 0),
+        explicitPercent ??
+        (allLevels.length ? Math.round((completedCount / allLevels.length) * 100) : 0),
       discoveredBridgeTypeIds: explicitBridgeTypes ?? [
         ...new Set(allLevels.map((l) => l.completion?.bridgeTypeId).filter(Boolean) as string[]),
       ],
