@@ -1,5 +1,11 @@
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
-import { getProduct, PAYMENT_PRODUCTS, DEFAULT_PRODUCTS } from "./products.ts";
+import {
+  assertDiamondCheckoutCapacity,
+  getDiamondBalance,
+  requireDiamondCheckoutReady,
+  resolvePremiumEntity,
+} from "../playfab/premium-wallet.server.ts";
+import { normalizeOrderReward, normalizeProductReward } from "./products.ts";
 import { getProductById, listActiveProducts } from "./products.server.ts";
 import {
   generateOrderId,
@@ -8,127 +14,181 @@ import {
   saveOrder,
   updateOrderStatus,
 } from "./orders.server.ts";
-import { createPayMongoCheckout, getPayMongoConfig } from "./paymongo.server.ts";
-import { processPayMongoWebhook } from "./fulfillment.server.ts";
+import { createPayMongoCheckout, requirePayMongoCheckoutReady } from "./paymongo.server.ts";
+import {
+  getCoinsCurrencyCode,
+  processPayMongoWebhook,
+  repairPaymentOrder,
+} from "./fulfillment.server.ts";
+import { authenticatePaymentPlayer } from "./player-auth.server.ts";
 import type { PaymentOrder } from "./types.ts";
-
-function resolveRequestOrigin(request: Request): string {
-  const headerOrigin = request.headers.get("origin")?.trim();
-  if (headerOrigin && headerOrigin !== "null") {
-    return headerOrigin.replace(/\/+$/, "");
-  }
-
-  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
-  if (host) {
-    const proto =
-      request.headers.get("x-forwarded-proto") ||
-      (request.url.startsWith("https:") ? "https" : "http");
-    return `${proto}://${host}`.replace(/\/+$/, "");
-  }
-
-  try {
-    const parsed = new URL(request.url);
-    if (parsed.origin && parsed.origin !== "null") {
-      return parsed.origin.replace(/\/+$/, "");
-    }
-  } catch {
-    // fallback below
-  }
-
-  const { appUrl } = getPayMongoConfig();
-  return appUrl;
-}
-
-async function authenticatePlayer(request: Request): Promise<string> {
-  const authorization = request.headers.get("authorization");
-  const ticket = authorization?.match(/^Bearer (\S+)$/)?.[1];
-  if (!ticket || ticket.length > 4096) {
-    throw new AdminApiError(401, "Player sign-in is required.");
-  }
-  const auth = await playFabAdmin("Server/AuthenticateSessionTicket", {
-    SessionTicket: ticket,
-  });
-  const userInfo = object(auth["UserInfo"]);
-  const id = userInfo["PlayFabId"];
-  if (
-    auth["IsSessionTicketExpired"] ||
-    typeof id !== "string" ||
-    !/^[a-f0-9]{1,32}$/i.test(id)
-  ) {
-    throw new AdminApiError(401, "Player sign-in is required.");
-  }
-  return id.toUpperCase();
-}
+import {
+  assertClassicCurrencyConfigured,
+  assertCoinCheckoutReady,
+  coinReceiptSnapshot,
+} from "./coin-receipts.server.ts";
 
 function jsonResponse(data: unknown, status = 200) {
   return Response.json(data, {
     status,
     headers: {
       "Cache-Control": "no-store, private",
+      Vary: "Authorization",
       "X-Content-Type-Options": "nosniff",
     },
   });
 }
 
+function configuredReturnOrigin(): string {
+  const url = new URL(requirePayMongoCheckoutReady().appUrl);
+  if (
+    url.protocol !== "https:" &&
+    !(url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+  ) {
+    throw new AdminApiError(503, "Payment return URL is not configured safely.");
+  }
+  // Never use caller-controlled Origin/forwarded-host headers for checkout redirects.
+  return url.origin;
+}
+
+function safeOrder(order: PaymentOrder) {
+  const reward = normalizeOrderReward(order);
+  return {
+    orderId: order.orderId,
+    productId: order.productId,
+    status: order.status,
+    ...reward,
+    expectedCoins: reward.rewardCurrency === "CO" ? reward.rewardAmount : 0,
+    expectedAmount: order.expectedAmount,
+    currency: order.currency,
+    createdAt: order.createdAt,
+    paidAt: order.paidAt,
+    fulfilledAt: order.fulfilledAt,
+    fulfillmentReviewRequired: order.fulfillmentReviewRequired === true,
+  };
+}
+
 export async function handlePaymentsRequest(request: Request): Promise<Response | null> {
   const url = new URL(request.url);
   const path = url.pathname;
-
-  // 1. Webhook endpoint
   if (path === "/api/webhooks/paymongo") {
-    if (request.method !== "POST") {
-      return jsonResponse({ error: "Method not allowed" }, 405);
-    }
-
+    if (request.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
     try {
-      const rawBody = await request.clone().text();
-      const signatureHeader =
-        request.headers.get("paymongo-signature") ||
-        request.headers.get("Paymongo-Signature");
-
-      const result = await processPayMongoWebhook(rawBody, signatureHeader);
+      const rawBody = await request.text();
+      if (Buffer.byteLength(rawBody) > 262144)
+        return jsonResponse({ error: "Webhook payload too large" }, 413);
+      const result = await processPayMongoWebhook(
+        rawBody,
+        request.headers.get("paymongo-signature"),
+      );
       return jsonResponse(result.body, result.status);
-    } catch (err) {
-      console.error("[payments/webhook] Unexpected webhook error:", err);
-      return jsonResponse({ error: "Internal server error" }, 500);
+    } catch {
+      return jsonResponse({ error: "Payment processing is temporarily unavailable." }, 503);
     }
   }
-
-  // 2. Create Checkout endpoint
-  if (path === "/api/payments/paymongo/create-checkout") {
-    if (request.method !== "POST") {
-      return jsonResponse({ error: "Method not allowed" }, 405);
-    }
-
-    try {
-      const playFabId = await authenticatePlayer(request);
-
-      let body: Record<string, unknown> = {};
+  const handled = [
+    "/api/payments/paymongo/create-checkout",
+    "/api/payments/paymongo/order",
+    "/api/payments/paymongo/player-orders",
+    "/api/shop/products",
+    "/api/player/currencies",
+  ];
+  if (!handled.includes(path)) return null;
+  if (request.method !== (path.endsWith("create-checkout") ? "POST" : "GET"))
+    return jsonResponse({ error: "Method not allowed" }, 405);
+  try {
+    if (path === "/api/shop/products")
+      return jsonResponse({ products: await listActiveProducts() });
+    const { playFabId } = await authenticatePaymentPlayer(request);
+    if (path === "/api/player/currencies") {
+      const readCoins = async () => {
+        if (process.env["COIN_RECEIPTS_STORAGE"]?.trim() === "postgres") {
+          if (getCoinsCurrencyCode() !== "CO")
+            throw new AdminApiError(503, "Coin balance is unavailable.");
+          await assertClassicCurrencyConfigured();
+        }
+        const inventory = await playFabAdmin("Server/GetUserInventory", { PlayFabId: playFabId });
+        const raw = inventory["VirtualCurrency"];
+        if (!raw || typeof raw !== "object" || Array.isArray(raw))
+          throw new AdminApiError(503, "Coin balance is unavailable.");
+        const amount = object(raw)[getCoinsCurrencyCode()] ?? 0;
+        if (!Number.isSafeInteger(amount) || (amount as number) < 0)
+          throw new AdminApiError(503, "Coin balance is unavailable.");
+        return amount as number;
+      };
+      const readDiamonds = async () => {
+        requireDiamondCheckoutReady();
+        return getDiamondBalance(playFabId);
+      };
+      const [coins, diamonds] = await Promise.allSettled([readCoins(), readDiamonds()]);
+      let paymentReady = false;
       try {
-        body = (await request.json()) as Record<string, unknown>;
+        requirePayMongoCheckoutReady();
+        paymentReady = true;
+      } catch {
+        /* Disable checkout, not an existing balance. */
+      }
+      return jsonResponse({
+        coins: coins.status === "fulfilled" ? coins.value : null,
+        diamonds: diamonds.status === "fulfilled" ? diamonds.value : null,
+        diamondsAvailable: diamonds.status === "fulfilled" && paymentReady,
+      });
+    }
+    if (path === "/api/payments/paymongo/create-checkout") {
+      let body: Record<string, unknown>;
+      try {
+        body = object(await request.json());
       } catch {
         return jsonResponse({ error: "Invalid JSON body" }, 400);
       }
-
-      const rawProductId = typeof body["productId"] === "string" ? body["productId"] : "";
-      const product = await getProductById(rawProductId);
-      if (!product || product.active === false) {
-        return jsonResponse(
-          { error: `Unknown or unavailable product: '${rawProductId}'` },
-          400,
-        );
+      const id = typeof body["productId"] === "string" ? body["productId"] : "";
+      const product = await getProductById(id);
+      if (!product || product.active === false)
+        return jsonResponse({ error: "Unknown or unavailable product." }, 400);
+      const reward = normalizeProductReward(product);
+      const returnOrigin = configuredReturnOrigin();
+      const orderId = generateOrderId(reward.rewardCurrency);
+      if (await getOrder(orderId))
+        throw new AdminApiError(503, "Checkout order ID is already in use. Please try again.");
+      let premiumWallet: PaymentOrder["premiumWallet"];
+      let coinReceipt: PaymentOrder["coinReceipt"];
+      if (reward.rewardCurrency === "DI") {
+        const wallet = requireDiamondCheckoutReady();
+        const entity = await resolvePremiumEntity(playFabId);
+        // Also check the actual wallet before accepting a payment.
+        await assertDiamondCheckoutCapacity({
+          orderId,
+          playFabId,
+          entity,
+          wallet,
+          rewardAmount: reward.rewardAmount,
+        });
+        premiumWallet = { ...wallet, entity };
+      } else {
+        coinReceipt = coinReceiptSnapshot();
+        await assertCoinCheckoutReady({
+          orderId,
+          playFabId,
+          currencyCode: getCoinsCurrencyCode(),
+          rewardAmount: reward.rewardAmount,
+          ...(coinReceipt ? { receipt: coinReceipt } : {}),
+        });
       }
-
-      const orderId = generateOrderId();
-      const origin = resolveRequestOrigin(request);
-
       const order: PaymentOrder = {
         orderId,
         playFabId,
         productId: product.id,
         expectedAmount: product.amount,
         currency: product.currency,
-        expectedCoins: product.rewardCoins,
+        ...reward,
+        expectedCoins: reward.rewardCurrency === "CO" ? reward.rewardAmount : 0,
+        ...(reward.rewardCurrency === "CO"
+          ? {
+              coinCurrencyCode: getCoinsCurrencyCode(),
+              coinReceiptVersion: coinReceipt ? 2 : 1,
+              ...(coinReceipt ? { coinReceipt } : {}),
+            }
+          : { premiumWallet }),
         PayMongoCheckoutSessionId: null,
         PayMongoReferenceNumber: orderId,
         status: "pending",
@@ -137,105 +197,42 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         fulfilledAt: null,
         webhookEventId: null,
       };
-
       await saveOrder(order);
-
       const checkout = await createPayMongoCheckout({
         orderId,
         product,
         playFabId,
-        requestOrigin: origin,
+        requestOrigin: returnOrigin,
       });
-
+      if (checkout.referenceNumber !== orderId)
+        throw new AdminApiError(503, "Checkout reference could not be verified.");
       await updateOrderStatus(orderId, {
         PayMongoCheckoutSessionId: checkout.checkoutId,
         checkoutUrl: checkout.checkoutUrl,
       });
-
-      return jsonResponse({
-        success: true,
-        orderId,
-        checkoutUrl: checkout.checkoutUrl,
-      });
-    } catch (err) {
-      if (err instanceof AdminApiError) {
-        return jsonResponse({ error: err.message }, err.status);
-      }
-      const message = err instanceof Error ? err.message : "Failed to create checkout";
-      console.error("[payments/checkout] Checkout creation error:", err);
-      return jsonResponse({ error: message }, 500);
+      return jsonResponse({ success: true, orderId, checkoutUrl: checkout.checkoutUrl });
     }
+    if (path === "/api/payments/paymongo/order") {
+      const orderId = url.searchParams.get("id") || "";
+      if (!/^[a-z0-9_-]{1,128}$/i.test(orderId))
+        return jsonResponse({ error: "Invalid order id" }, 400);
+      const order = await getOrder(orderId);
+      if (!order || order.playFabId.toUpperCase() !== playFabId.toUpperCase())
+        return jsonResponse({ error: "Order not found" }, 404);
+      return jsonResponse(safeOrder(await repairPaymentOrder(order)));
+    }
+    const orders = await listOrdersForPlayer(playFabId);
+    return jsonResponse({ orders: orders.map(safeOrder) });
+  } catch (error) {
+    const status = error instanceof AdminApiError ? error.status : 503;
+    return jsonResponse(
+      {
+        error:
+          error instanceof AdminApiError
+            ? error.message
+            : "Game services are temporarily unavailable.",
+      },
+      status,
+    );
   }
-
-  // 3. Query single order status (for confirmation polling)
-  if (path === "/api/payments/paymongo/order") {
-    if (request.method !== "GET") {
-      return jsonResponse({ error: "Method not allowed" }, 405);
-    }
-
-    const orderId = (url.searchParams.get("id") || "").trim();
-    if (!orderId) {
-      return jsonResponse({ error: "Missing order id" }, 400);
-    }
-
-    const order = await getOrder(orderId);
-    if (!order) {
-      return jsonResponse({ error: "Order not found" }, 404);
-    }
-
-    // Return safe public status only
-    return jsonResponse({
-      orderId: order.orderId,
-      productId: order.productId,
-      status: order.status,
-      expectedCoins: order.expectedCoins,
-      expectedAmount: order.expectedAmount,
-      currency: order.currency,
-      createdAt: order.createdAt,
-      paidAt: order.paidAt,
-      fulfilledAt: order.fulfilledAt,
-    });
-  }
-
-  // 4. Query player's past orders
-  if (path === "/api/payments/paymongo/player-orders") {
-    if (request.method !== "GET") {
-      return jsonResponse({ error: "Method not allowed" }, 405);
-    }
-
-    try {
-      const playFabId = await authenticatePlayer(request);
-      const orders = await listOrdersForPlayer(playFabId);
-
-      const safeOrders = orders.map((o) => ({
-        orderId: o.orderId,
-        productId: o.productId,
-        status: o.status,
-        expectedCoins: o.expectedCoins,
-        expectedAmount: o.expectedAmount,
-        currency: o.currency,
-        createdAt: o.createdAt,
-        paidAt: o.paidAt,
-        fulfilledAt: o.fulfilledAt,
-      }));
-
-      return jsonResponse({ orders: safeOrders });
-    } catch (err) {
-      if (err instanceof AdminApiError) {
-        return jsonResponse({ error: err.message }, err.status);
-      }
-      return jsonResponse({ error: "Unable to retrieve orders" }, 500);
-    }
-  }
-
-  // 5. Public shop products catalog
-  if (path === "/api/shop/products") {
-    if (request.method !== "GET") {
-      return jsonResponse({ error: "Method not allowed" }, 405);
-    }
-    const products = await listActiveProducts();
-    return jsonResponse({ products });
-  }
-
-  return null;
 }

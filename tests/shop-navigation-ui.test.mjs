@@ -7,6 +7,8 @@ import React from "react";
 import { act, create } from "react-test-renderer";
 import ts from "typescript";
 import { playerNameDependencies } from "./helpers/player-name-ui.mjs";
+import * as shopDisplay from "../src/lib/payments/shop-display.ts";
+import * as products from "../src/lib/payments/products.ts";
 
 const require = createRequire(import.meta.url);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -30,7 +32,10 @@ function load(path, auth, navigations, queries = [], adminSession = null) {
           Link: ({ to, children, ...props }) =>
             React.createElement("a", { ...props, href: to }, children),
           useNavigate: () => navigate,
-          createFileRoute: () => (config) => config,
+          createFileRoute: () => (config) => ({
+            ...config,
+            useSearch: () => ({ currency: "coins" }),
+          }),
           Outlet: () => {
             const child = load("../src/routes/dashboard.shop.tsx", auth, navigations, queries).Route
               .component;
@@ -48,8 +53,8 @@ function load(path, auth, navigations, queries = [], adminSession = null) {
             return { data: options.initialData };
           },
         };
-      if (name === "@/lib/payments/products")
-        return { DEFAULT_PRODUCTS: [], formatProductPrice: () => "" };
+      if (name === "@/lib/payments/products") return { ...products, DEFAULT_PRODUCTS: [] };
+      if (name === "@/lib/payments/shop-display") return shopDisplay;
       if (name === "@/lib/utils") return { cn: (...values) => values.filter(Boolean).join(" ") };
       if (name.endsWith("/button")) return { Button: element("button") };
       return new Proxy({}, { get: () => element("div") });
@@ -66,7 +71,7 @@ test("desktop and mobile public menus have the requested links and no shop", asy
       renderer = create(React.createElement(SiteNavbar));
     });
     const menus = renderer.root.findAllByType("ul");
-    const expected = ["Home", "About", "Gallery", "FAQ", "Download", "Contact"];
+    const expected = ["Home", "About", "Gallery", "Leaderboard", "FAQ", "Download", "Contact"];
     assert.deepEqual(
       menus[0].findAllByType("a").map((a) => a.props.children),
       expected,
@@ -86,18 +91,30 @@ test("desktop and mobile public menus have the requested links and no shop", asy
 });
 
 test("account menu colors the player name and derives initials without its color tag", async () => {
-  const { SiteNavbar } = load("../src/components/site/SiteNavbar.tsx", {
-    adminReady: true, isAuthenticated: true, isAdmin: false,
-    player: { displayName: "<#BF40BF>Colored Engineer" },
-  }, []);
+  const { SiteNavbar } = load(
+    "../src/components/site/SiteNavbar.tsx",
+    {
+      adminReady: true,
+      isAuthenticated: true,
+      isAdmin: false,
+      player: { displayName: "<#BF40BF>Colored Engineer" },
+    },
+    [],
+  );
   let renderer;
   try {
-    await act(async () => { renderer = create(React.createElement(SiteNavbar)); });
-    const label = renderer.root.findAllByType("span").find((node) => node.children.join("") === "Colored Engineer");
+    await act(async () => {
+      renderer = create(React.createElement(SiteNavbar));
+    });
+    const label = renderer.root
+      .findAllByType("span")
+      .find((node) => node.children.join("") === "Colored Engineer");
     assert.equal(label.props.style.color, "#BF40BF");
     assert.ok(renderer.root.findAllByType("div").some((node) => node.children.join("") === "CE"));
     assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /<#BF40BF>/);
-  } finally { await act(async () => renderer?.unmount()); }
+  } finally {
+    await act(async () => renderer?.unmount());
+  }
 });
 
 test("direct shop access waits for player auth and does not accept admin-only auth", async () => {
@@ -142,7 +159,7 @@ test("admin products inherits the admin-only direct route guard", async () => {
 test("legacy shop and checkout callbacks redirect into the dashboard without losing the order", () => {
   const shop = load("../src/routes/shop.tsx", {}, []).Route;
   assert.throws(
-    () => shop.beforeLoad(),
+    () => shop.beforeLoad({ search: shop.validateSearch({}) }),
     (e) => e.to === "/dashboard/shop" && e.replace,
   );
   for (const kind of ["success", "cancel"]) {

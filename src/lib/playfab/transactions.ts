@@ -6,6 +6,7 @@ import { playerFetch } from "./client";
 import { currentSessionTicket } from "./client";
 import { getRawInventory } from "./inventory";
 import type { Transaction } from "./types";
+import { currencyLabel, normalizeOrderReward } from "../payments/products.ts";
 
 export async function getTransactions(playerId: string): Promise<Transaction[]> {
   const [inventory, paymentOrders] = await Promise.all([
@@ -50,30 +51,36 @@ async function fetchPlayerPaymentTransactions(playerId: string): Promise<Transac
         productId: string;
         status: string;
         expectedCoins: number;
+        rewardCurrency?: "CO" | "DI";
+        rewardAmount?: number;
         expectedAmount: number;
         currency: string;
         createdAt: string;
       }>;
     };
 
-    return (data.orders ?? []).map((o) => ({
-      transactionId: o.orderId,
-      playerId,
-      itemId: o.productId,
-      itemName: o.productId === "coins_500" ? "500 Civil Craft Coins" : o.productId,
-      itemCategory: "Currency",
-      amount: o.expectedAmount / 100,
-      currency: o.currency,
-      type: "purchase" as const,
-      status:
-        o.status === "fulfilled"
-          ? ("completed" as const)
-          : o.status === "failed" || o.status === "cancelled"
-            ? ("refunded" as const)
-            : ("pending" as const),
-      paymentMethod: "PayMongo",
-      createdAt: o.createdAt,
-    }));
+    return (data.orders ?? []).map((o) => {
+      const reward = normalizeOrderReward(o);
+      return {
+        transactionId: o.orderId,
+        playerId,
+        itemId: o.productId,
+        itemName: `${reward.rewardAmount.toLocaleString()} Civil Craft ${currencyLabel(reward.rewardCurrency)}`,
+        itemCategory: "Currency",
+        ...reward,
+        amount: o.expectedAmount / 100,
+        currency: o.currency,
+        type: "purchase" as const,
+        status:
+          o.status === "fulfilled"
+            ? ("completed" as const)
+            : o.status === "failed" || o.status === "cancelled"
+              ? ("refunded" as const)
+              : ("pending" as const),
+        paymentMethod: "PayMongo",
+        createdAt: o.createdAt,
+      };
+    });
   } catch {
     return [];
   }

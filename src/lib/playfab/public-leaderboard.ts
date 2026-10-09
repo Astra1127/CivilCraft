@@ -1,4 +1,8 @@
-import type { LeaderboardContract, LeaderboardMode } from "./leaderboard-shared";
+import type {
+  LeaderboardContract,
+  LeaderboardMode,
+  MultiplayerLeaderboardPage,
+} from "./leaderboard-shared";
 
 export interface PublicLeaderboardPage {
   entries: { rank: number; displayName: string; cost: number; peakStress: number }[];
@@ -19,5 +23,14 @@ export async function getPublicLeaderboard(
     cache: "no-store",
   });
   if (!response.ok) throw new Error("Unable to load the leaderboard. Please try again.");
+  return response.json();
+}
+
+export async function getPublicMultiplayerLeaderboard(): Promise<MultiplayerLeaderboardPage> {
+  const response = await fetch("/api/leaderboard/public/multiplayer", {
+    credentials: "omit",
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error("Unable to load multiplayer rankings. Please try again.");
   return response.json();
 }
