@@ -8,6 +8,7 @@ import { SectionHeading } from "@/components/common/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/States";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { FeedbackForm } from "@/components/dashboard/FeedbackForm";
 
 export const Route = createFileRoute("/dashboard/messages")({ component: PlayerMessages });
 function PlayerMessages() {
@@ -26,6 +27,13 @@ function PlayerMessages() {
             <Link to="/contact">New message</Link>
           </Button>
         }
+      />
+      <FeedbackForm
+        playerId={player?.playFabId ?? ""}
+        onSubmitted={async (id) => {
+          setSelectedId(id);
+          await query.refetch();
+        }}
       />
       {query.isPending ? (
         <LoadingState label="Loading conversations..." />
@@ -56,6 +64,7 @@ function PlayerMessages() {
           <section className="panel min-w-0 space-y-4 p-4">
             <h2 className="break-words text-xl">{selected.subject}</h2>
             <Badge variant="outline">{selected.status}</Badge>
+            <p className="text-sm text-muted-foreground">{selected.inquiryType}</p>
             <MessageConversation
               key={selected.id}
               message={selected}

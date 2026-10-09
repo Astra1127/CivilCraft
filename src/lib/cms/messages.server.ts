@@ -2,7 +2,18 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
 import { smallBody } from "../playfab/request-body.server.ts";
-import { contactSchema } from "./message-types.ts";
+import {
+  contactSchema,
+  publicContactSchema,
+  feedbackSchema,
+  feedbackCategories,
+  inquiryTypes,
+} from "./message-types.ts";
+import {
+  hasAcceptedCivilCraftRun,
+  limitFeedback,
+  feedbackLocked,
+} from "./feedback-eligibility.server.ts";
 import { notifyContact } from "../email/contact-notifications.server.ts";
 
 const prefix = "civilcraft.website.v1.messages.";
@@ -12,6 +23,8 @@ const notificationPrefix = "civilcraft.website.v1.message-notifications.";
 const idSchema = z.string().uuid();
 const statusSchema = z.enum(["New", "In Progress", "Resolved"]);
 const messageSchema = contactSchema.extend({
+  inquiryType: z.enum([...inquiryTypes, ...feedbackCategories]),
+  email: contactSchema.shape.email.or(z.literal("")),
   id: idSchema,
   createdAt: z.string().datetime(),
   status: statusSchema,
@@ -114,7 +127,13 @@ async function playerId(request: Request, optional = false): Promise<string | nu
 async function notify(
   id: string,
   kind: "admin" | "player",
-  content: z.infer<typeof contactSchema> & {
+  content: {
+    name: string;
+    email: string;
+    subject: string;
+    inquiryType: string;
+    message: string;
+  } & {
     createdAt?: string;
     originalMessage?: string;
     replyMessage?: string;
@@ -159,6 +178,8 @@ export async function messageRequest(request: Request, admin = false): Promise<R
     )
       return json({ error: "This request is not permitted." }, 403);
     const owner = admin ? null : await playerId(request, !player);
+    if (player && request.method === "GET" && url.searchParams.get("action") === "eligibility")
+      return json({ eligible: await hasAcceptedCivilCraftRun(owner!) });
     if (request.method === "GET") {
       const data = await records();
       const requested = url.searchParams.get("id");
@@ -177,8 +198,42 @@ export async function messageRequest(request: Request, admin = false): Promise<R
       return json({ messages });
     }
     const body = await smallBody(request);
+    if (player && object(body)["action"] === "feedback") {
+      limitFeedback(owner!);
+      const input = feedbackSchema.parse(body);
+      if (!(await hasAcceptedCivilCraftRun(owner!))) throw new AdminApiError(403, feedbackLocked);
+      const profile = object(
+        (
+          await playFabAdmin("Server/GetPlayerProfile", {
+            PlayFabId: owner,
+            ProfileConstraints: { ShowDisplayName: true, ShowContactEmailAddresses: true },
+          })
+        )["PlayerProfile"],
+      );
+      const contacts = profile["ContactEmailAddresses"];
+      const email = Array.isArray(contacts)
+        ? contacts
+            .map((c) => object(c)["EmailAddress"])
+            .find((e) => contactSchema.shape.email.safeParse(e).success)
+        : undefined;
+      const content = {
+        subject: input.subject,
+        message: input.message,
+        inquiryType: input.inquiryType,
+        name:
+          typeof profile["DisplayName"] === "string" && profile["DisplayName"].trim().length >= 2
+            ? profile["DisplayName"].slice(0, 100)
+            : "Engineer " + owner,
+        email: typeof email === "string" ? email : "",
+      };
+      const id = randomUUID(),
+        createdAt = new Date().toISOString();
+      await save(prefix + id, { ...content, id, ownerId: owner, createdAt, status: "New" });
+      const notificationStatus = await notify(id, "admin", { ...content, createdAt });
+      return json({ id, notificationStatus }, 201);
+    }
     if (!admin && !player) {
-      const input = contactSchema.parse(body),
+      const input = publicContactSchema.parse(body),
         id = randomUUID(),
         createdAt = new Date().toISOString();
       await save(prefix + id, {

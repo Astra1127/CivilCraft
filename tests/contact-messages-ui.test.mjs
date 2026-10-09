@@ -6,7 +6,7 @@ import { runInNewContext } from "node:vm";
 import React from "react";
 import { act, create } from "react-test-renderer";
 import ts from "typescript";
-import { contactSchema, inquiryTypes } from "../src/lib/cms/message-types.ts";
+import { publicContactSchema, publicInquiryTypes } from "../src/lib/cms/message-types.ts";
 
 const require = createRequire(import.meta.url);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -40,7 +40,8 @@ function load(file, messages, notifications) {
           return {
             MessageConversation: ({ message }) => React.createElement("p", null, message.message),
           };
-        if (name === "@/lib/cms/message-types") return { contactSchema, inquiryTypes };
+        if (name === "@/lib/cms/message-types") return { publicContactSchema, publicInquiryTypes };
+        if (name === "@/lib/cms/faq") return { useFaq: () => ({ data: [] }) };
         if (name === "@/lib/cms/content-types") return { isRealText: () => false };
         if (name === "@/lib/cms/store")
           return {

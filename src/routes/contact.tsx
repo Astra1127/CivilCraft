@@ -32,19 +32,22 @@ export const Route = createFileRoute("/contact")({
       {
         name: "description",
         content:
-          "Contact the Civil Craft: Bridge Edition team with questions, feedback or technical issues.",
+          "Contact the Civil Craft: Bridge Edition team with general questions or technical support inquiries.",
       },
       { property: "og:title", content: "Contact the Civil Craft team" },
       {
         property: "og:description",
-        content: "Questions, feedback and technical support for Civil Craft.",
+        content: "General questions and technical support for Civil Craft.",
       },
     ],
   }),
   component: ContactPage,
 });
 
-import { contactSchema as schema, inquiryTypes } from "@/lib/cms/message-types";
+import {
+  publicContactSchema as schema,
+  publicInquiryTypes as inquiryTypes,
+} from "@/lib/cms/message-types";
 import { messageService } from "@/lib/cms/messages";
 
 import { isRealText } from "@/lib/cms/content-types";
@@ -113,7 +116,7 @@ function ContactPage() {
       <PageHeader
         eyebrow="Contact"
         title="Contact Us"
-        description="Contact the Civil Craft team with questions, feedback or technical issues. To report a bug, choose Bug Report below."
+        description="Contact the Civil Craft team with general questions or technical support inquiries. Game feedback and bug reports are available in Player Dashboard Messages."
       />
 
       <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
