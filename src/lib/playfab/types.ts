@@ -157,6 +157,9 @@ export interface Transaction {
   itemImageUrl?: string;
   amount: number;
   currency: string;
+  /** Immutable payment reward; absent for ordinary inventory transactions. */
+  rewardCurrency?: "CO" | "DI";
+  rewardAmount?: number;
   quantity?: number;
   type: TransactionType;
   status: TransactionStatus;

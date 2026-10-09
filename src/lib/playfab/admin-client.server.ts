@@ -26,6 +26,7 @@ type Operation =
   | "Admin/ExportPlayersInSegment"
   | "Admin/GetSegmentExport"
   | "Admin/GetUserAccountInfo"
+  | "Admin/ListVirtualCurrencyTypes"
   | "Admin/GetUserBans"
   | "Admin/BanUsers"
   | "Admin/RevokeAllBansForUser"
