@@ -22,6 +22,7 @@ export default defineConfig(({ command, mode }) => {
       "PLAYFAB_CONTACT_REPLY_EMAIL_TEMPLATE_ID",
       "VERCEL_OIDC_TOKEN",
       "BLOB_STORE_ID",
+      "BLOB_WEBHOOK_PUBLIC_KEY",
       "BLOB_READ_WRITE_TOKEN",
       "CRON_SECRET",
       "SMTP_HOST",

@@ -17,6 +17,7 @@
     "test:reset": "node --test tests/reset-password.test.ts tests/reset-password-ui.test.mjs",
     "test:payments": "node --test tests/paymongo.test.ts",
     "test:transactions": "node --test tests/dashboard-transactions-layout.test.mjs",
+    "test:apk": "node --test tests/apk-validation.test.ts tests/apk-releases.test.ts tests/apk-storage.test.ts tests/apk-upload-ui.test.mjs",
     "test:currencies": "node --test tests/paymongo.test.ts tests/paymongo-webhook-envelopes.test.mjs tests/premium-wallet.test.ts tests/entity-diamond-wallet.test.mjs tests/currency-products.test.ts tests/diamonds-setup.test.mjs tests/diamond-shop-ui.test.mjs tests/shop-navigation-ui.test.mjs tests/diamond-dev-config.test.mjs tests/coin-receipts.test.mjs tests/coins-setup.test.mjs tests/currency-database.test.mjs tests/currency-database-sql.test.mjs tests/currency-database-setup.test.mjs tests/postgres-coin-receipts.test.mjs tests/postgres-payment-integration.test.mjs",
     "verify:currencies": "node --env-file=.env scripts/verify-currency-database.mjs"
   },

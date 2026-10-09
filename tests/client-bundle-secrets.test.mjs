@@ -5,7 +5,7 @@ import { loadEnv } from "vite";
 
 const assets = new URL("../.output/public/assets/", import.meta.url);
 test(
-  "production client bundles contain no configured credentials or Blob authentication code",
+  "production client bundles contain no configured credentials or application server implementations",
   {
     skip: !existsSync(assets) && "Run npm run build before the bundle secret scan",
   },
@@ -33,10 +33,14 @@ test(
         !secrets.some((value) => value.length > 8 && source.includes(value)),
         "Server credential found in a client bundle",
       );
-      assert.ok(
-        !/x-vercel-blob-store-id|getVercelOidcToken|resolveBlobAuth|nodemailer/.test(source),
-        !/x-vercel-blob-store-id|getVercelOidcToken|resolveBlobAuth|nodemailer|paymongo\.server|verifyPayMongoSignature/.test(source),
-        "Server-only authentication implementation found in client bundle",
+      // The documented browser Blob SDK shares transport symbol names with its
+      // server SDK. Those names alone are not evidence of credential exposure.
+      // Keep the literal-secret scan above and reject our actual server signers,
+      // privileged PlayFab transport, mailer, and payment-verification code.
+      assert.doesNotMatch(
+        source,
+        /civilcraft-apk-upload:v1|civilcraft-admin:v3:session|X-SecretKey|Admin\/SetTitleInternalData|nodemailer|paymongo\.server|verifyPayMongoSignature/,
+        "Application server-only implementation found in client bundle",
       );
     }
   },

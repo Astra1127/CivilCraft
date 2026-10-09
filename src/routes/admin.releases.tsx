@@ -1,4 +1,5 @@
 import { ReleasePosts } from "@/components/admin/ReleasePosts";
+import { ApkUpload } from "@/components/admin/ApkUpload";
 import { useAdminReleases } from "@/lib/cms/releases";
 import { ErrorState, LoadingState } from "@/components/common/States";
 import { createFileRoute } from "@tanstack/react-router";
@@ -23,6 +24,8 @@ function AdminReleases() {
   const releases = query.data?.initialized ? query.data.releases : localReleases;
   const [patches, setPatches] = useState<Record<string, Partial<Release>>>({});
   const [busy, setBusy] = useState(false);
+  const [draftVersion, setDraftVersion] = useState("");
+  const [draftBuild, setDraftBuild] = useState("");
   const installSteps = useCms((s) => s.settings.installSteps);
   const [steps, setSteps] = useState(installSteps.join("\n"));
   const current = releases.find((r) => r.status === "current");
@@ -32,9 +35,33 @@ function AdminReleases() {
   const save = async (release: Release) => {
     await query.mutate({ action: "save", release });
   };
-  const makeCurrent = async (release: Release) => {
+  const clearPatch = (id: string) => {
+    setPatches((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+  const ensureInitialized = async () => {
+    if (!query.data?.initialized)
+      await query.mutate({ action: "initialize", releases: localReleases });
+  };
+  const savePost = async (release: Release) => {
     setBusy(true);
     try {
+      await save(release);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const makeCurrent = async (release: Release) => {
+    if (busy || !release.fileUrl) return;
+    setBusy(true);
+    try {
+      if (patches[release.id]) {
+        await save(release);
+        clearPatch(release.id);
+      }
       await query.mutate({ action: "current", id: release.id });
       toast.success(`v${release.version} is now the public build`);
     } catch (error) {
@@ -47,14 +74,71 @@ function AdminReleases() {
     setBusy(true);
     try {
       await save(release);
-      setPatches((prev) => {
-        const next = { ...prev };
-        delete next[release.id];
-        return next;
-      });
+      clearPatch(release.id);
       toast.success("Build saved");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save build.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const uploadApk = async (
+    release: Release,
+    file: File,
+    onProgress: (percentage: number) => void,
+  ) => {
+    setBusy(true);
+    try {
+      await ensureInitialized();
+      const patch = patches[release.id];
+      if (patch) {
+        // Preserve the saved attachment until the server verifies its replacement.
+        const { fileName, fileUrl, fileSizeBytes, apkHosted, ...metadata } = patch;
+        if (Object.keys(metadata).length) await save({ ...release, ...metadata });
+      }
+      await query.uploadApk(release.id, file, onProgress);
+      clearPatch(release.id);
+      toast.success("APK uploaded and attached to the build");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const createDraft = async () => {
+    const version = draftVersion.trim();
+    const build = draftBuild.trim();
+    if (busy) return;
+    if (!version || !build) {
+      toast.error("Enter a version and build number.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await ensureInitialized();
+      const today = new Date();
+      const releaseDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+      await save({
+        id: crypto.randomUUID(),
+        version,
+        build,
+        title: "",
+        platform: "Android",
+        minAndroid: current?.minAndroid ?? "",
+        minRequirements: [...(current?.minRequirements ?? [])],
+        recommendedRequirements: [...(current?.recommendedRequirements ?? [])],
+        releaseDate,
+        notes: "",
+        published: false,
+        status: "draft",
+        fileName: null,
+        fileSizeBytes: null,
+        fileUrl: null,
+        downloads: 0,
+      });
+      setDraftVersion("");
+      setDraftBuild("");
+      toast.success("Draft build created. Upload its APK below.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create draft build.");
     } finally {
       setBusy(false);
     }
@@ -132,7 +216,9 @@ function AdminReleases() {
       <section id="whats-new" className="scroll-mt-24">
         <Panel title="What's New" icon={ListChecks} bodyClassName="p-4 space-y-3">
           {query.data.initialized ? (
-            <ReleasePosts releases={releases} save={save} />
+            <fieldset disabled={busy}>
+              <ReleasePosts releases={releases} save={savePost} />
+            </fieldset>
           ) : (
             <>
               <p className="text-sm text-muted-foreground">
@@ -146,6 +232,50 @@ function AdminReleases() {
           )}
         </Panel>
       </section>
+
+      <Panel title="Create draft build" icon={Package} bodyClassName="p-4 space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Create a build record, then upload its APK. Use Make current when it is ready for the
+          public Download page. Release notes are managed in What's New.
+        </p>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void createDraft();
+          }}
+        >
+          <fieldset
+            disabled={busy}
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end"
+          >
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="draft-build-version">Version</Label>
+              <Input
+                id="draft-build-version"
+                value={draftVersion}
+                placeholder="e.g. 1.2.0"
+                maxLength={40}
+                required
+                onChange={(event) => setDraftVersion(event.target.value)}
+              />
+            </div>
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="draft-build-number">Build number</Label>
+              <Input
+                id="draft-build-number"
+                value={draftBuild}
+                placeholder="e.g. 12"
+                maxLength={40}
+                required
+                onChange={(event) => setDraftBuild(event.target.value)}
+              />
+            </div>
+            <Button type="submit" variant="gold" className="sm:col-span-2 lg:col-span-1">
+              Create draft build
+            </Button>
+          </fieldset>
+        </form>
+      </Panel>
 
       <ul className="space-y-3">
         {releases.map((saved) => {
@@ -172,7 +302,8 @@ function AdminReleases() {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={busy || !query.data.initialized}
+                      disabled={busy || !query.data.initialized || !r.fileUrl}
+                      title={!r.fileUrl ? "Upload an APK or save a download URL first" : undefined}
                       onClick={() => makeCurrent(r)}
                     >
                       Make current
@@ -213,19 +344,30 @@ function AdminReleases() {
                       id={`f-${r.id}`}
                       value={r.fileName ?? ""}
                       placeholder="civilcraft.apk"
+                      readOnly={r.apkHosted}
                       onChange={(e) => update(r.id, { fileName: e.target.value || null })}
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor={`u-${r.id}`}>Download URL</Label>
+                  <Label htmlFor={`u-${r.id}`}>
+                    {r.apkHosted
+                      ? "Uploaded APK URL"
+                      : "Manual download URL (optional legacy link)"}
+                  </Label>
                   <Input
                     id={`u-${r.id}`}
                     value={r.fileUrl ?? ""}
                     placeholder="https://"
+                    readOnly={r.apkHosted}
                     onChange={(e) => update(r.id, { fileUrl: e.target.value || null })}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    {r.apkHosted
+                      ? "File name, size and URL are set by the verified upload. Upload another APK to replace it."
+                      : "Existing external download links are supported. Upload an APK to host the file for this build."}
+                  </p>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -265,6 +407,13 @@ function AdminReleases() {
                   Save build
                 </Button>
               </fieldset>
+              <div className="px-4 pb-4">
+                <ApkUpload
+                  release={saved}
+                  disabled={busy}
+                  onUpload={(file, onProgress) => uploadApk(saved, file, onProgress)}
+                />
+              </div>
             </li>
           );
         })}
@@ -274,8 +423,13 @@ function AdminReleases() {
         <p className="text-sm text-muted-foreground">
           Shown as numbered steps on the public Download page. One step per line.
         </p>
-        <Textarea rows={6} value={steps} onChange={(e) => setSteps(e.target.value)} />
-        <Button variant="gold" size="sm" onClick={saveSteps}>
+        <Textarea
+          rows={6}
+          value={steps}
+          disabled={busy}
+          onChange={(e) => setSteps(e.target.value)}
+        />
+        <Button variant="gold" size="sm" disabled={busy} onClick={saveSteps}>
           Save guide
         </Button>
       </Panel>

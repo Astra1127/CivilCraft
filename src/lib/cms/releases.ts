@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { contentFetch } from "./content";
 import type { Release } from "./types";
+import { APK_CONTENT_TYPE, validateApkSelection } from "./apk";
+import { uploadPresigned } from "@vercel/blob/client";
 
 export type PublishedRelease = Pick<
   Release,
@@ -38,5 +40,38 @@ export function useAdminReleases() {
     });
     await client.invalidateQueries({ queryKey: ["releases"] });
   };
-  return { ...query, mutate };
+  const uploadApk = async (
+    releaseId: string,
+    file: File,
+    onProgress?: (percentage: number) => void,
+  ) => {
+    validateApkSelection(file);
+    const prepared = await contentFetch<{ ticket: string; pathname: string }>(
+      "/api/admin/releases/apk/prepare",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ releaseId, fileName: file.name, fileSizeBytes: file.size }),
+      },
+    );
+    onProgress?.(0);
+    const result = await uploadPresigned(prepared.pathname, file, {
+      access: "private",
+      contentType: APK_CONTENT_TYPE,
+      multipart: true,
+      handleUploadUrl: "/api/admin/releases/apk/upload",
+      clientPayload: prepared.ticket,
+      onUploadProgress: ({ percentage }) => onProgress?.(percentage),
+    });
+    if (result.pathname !== prepared.pathname)
+      throw new Error("Upload did not match the selected build.");
+    onProgress?.(100);
+    await contentFetch("/api/admin/releases/apk/finalize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ticket: prepared.ticket }),
+    });
+    await client.invalidateQueries({ queryKey: ["releases"] });
+  };
+  return { ...query, mutate, uploadApk };
 }
