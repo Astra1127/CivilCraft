@@ -68,7 +68,7 @@ function ItemImage({ tx, className }: { tx: Transaction; className?: string }) {
   return (
     <div
       className={cn(
-        "blueprint relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden border-b-2 border-border bg-secondary/60",
+        "blueprint relative flex h-24 w-full shrink-0 items-center justify-center overflow-hidden border-b-2 border-border bg-secondary/60 sm:h-28",
         className,
       )}
     >
@@ -99,7 +99,7 @@ function TransactionsPage() {
   const visible = filter === "all" ? rows : rows.filter((r) => r.type === filter);
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <SectionHeading
         title="Purchase History"
         description="View the items and game content acquired through your Civil Craft account."
@@ -135,28 +135,32 @@ function TransactionsPage() {
             </div>
           ) : null}
 
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {visible.map((tx) => {
               const TypeIcon = TYPE_META[tx.type].icon;
               return (
-                <li key={tx.transactionId}>
+                <li key={tx.transactionId} className="min-w-0">
                   <button
                     type="button"
                     onClick={() => setSelected(tx)}
-                    className="panel hover-lift flex h-full w-full flex-col overflow-hidden p-0 text-left"
+                    className="panel hover-lift flex h-full w-full min-w-0 flex-col overflow-hidden p-0 text-left"
                   >
                     <ItemImage tx={tx} />
-                    <div className="flex flex-1 flex-col gap-1 p-4">
-                      <h3 className="font-display text-base leading-tight">{tx.itemName}</h3>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
+                      <h3 className="min-h-10 whitespace-normal break-words font-display text-base leading-tight">
+                        {tx.itemName}
+                      </h3>
+                      <p className="break-words text-xs uppercase tracking-wide text-muted-foreground">
                         {tx.itemCategory}
                         {tx.itemSlot ? ` • ${SLOT_META[tx.itemSlot].label}` : ""}
                       </p>
-                      <p className="mt-2 font-display text-lg">{formatAmount(tx)}</p>
+                      <p className="mt-2 whitespace-normal break-words font-display text-lg">
+                        {formatAmount(tx)}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {TYPE_META[tx.type].label} · {new Date(tx.createdAt).toLocaleDateString()}
                       </p>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
                         <Badge variant="secondary" className="capitalize">
                           <TypeIcon className="mr-1 h-3 w-3" aria-hidden="true" />
                           {tx.status}
@@ -179,15 +183,17 @@ function TransactionsPage() {
       )}
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] min-w-0 grid-cols-[minmax(0,1fr)] overflow-y-auto rounded-2xl p-4 sm:p-6">
           {selected ? (
             <>
-              <DialogHeader>
-                <DialogTitle>{selected.itemName}</DialogTitle>
+              <DialogHeader className="min-w-0">
+                <DialogTitle className="min-w-0 break-words pr-8 leading-snug">
+                  {selected.itemName}
+                </DialogTitle>
                 <DialogDescription>Item details — read-only.</DialogDescription>
               </DialogHeader>
-              <ItemImage tx={selected} className="rounded-xl border-2" />
-              <dl className="grid gap-2 text-sm">
+              <ItemImage tx={selected} className="h-32 rounded-xl border-2 sm:h-40" />
+              <dl className="grid min-w-0 gap-3 text-sm">
                 {[
                   ["Category", selected.itemCategory],
                   ["Amount", formatAmount(selected)],
@@ -204,9 +210,19 @@ function TransactionsPage() {
                   ["Status", selected.status],
                   ...(selected.paymentMethod ? [["Payment method", selected.paymentMethod]] : []),
                 ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between gap-3 border-b border-border pb-1">
-                    <dt className="text-muted-foreground">{k}</dt>
-                    <dd className="min-w-0 truncate font-semibold capitalize">{v}</dd>
+                  <div
+                    key={k}
+                    className="grid min-w-0 gap-1 border-b border-border pb-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] sm:gap-3"
+                  >
+                    <dt className="min-w-0 break-words text-muted-foreground">{k}</dt>
+                    <dd
+                      className={cn(
+                        "min-w-0 whitespace-normal font-semibold [overflow-wrap:anywhere] sm:text-right",
+                        k === "Transaction ID" ? "font-mono text-xs" : "capitalize",
+                      )}
+                    >
+                      {v}
+                    </dd>
                   </div>
                 ))}
               </dl>
