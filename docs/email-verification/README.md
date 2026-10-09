@@ -6,7 +6,7 @@ Copy the complete contents of `email-verification.html` into the existing PlayFa
 
 ## Branding and support
 
-Branding follows the player reply HTML in `src/lib/email/contact-resend.server.ts`: cream background #F3E7D1, card #FCF6EC, brown #4E372C, gold #C58A42, footer #F5ECE0, and system sans-serif fallbacks. The button uses the existing darker gold border color #A87332 as its fill for clearer white text. Text branding works without downloading a logo or external fonts. Password Recovery is currently plain text according to the supplied configuration; this is a shared visual identity, not a claim to reproduce a branded recovery template.
+This template reuses the Support Reply layout in the player/user reply branch of `src/lib/email/contact-resend.server.ts`: cream background #F3E7D1, centered 600px off-white card #FCF6EC, brown border #4A3428, 5px gold accent #C58A42, Nunito/system font stack, 11px uppercase label, 22px heading, and 32px horizontal padding. The instructions use the existing rounded reply box (#FAF2E6 with a gold left border), and the security note uses the original-inquiry box styling (#F2E5D3). The button reuses #C58A42 fill, #A87332 border, 6px radius, and 12px/26px padding. The footer reuses #F5ECE0, 12px text, and 20px/32px padding. Support Reply source was inspected but not changed.
 
 Microsoft documents HTML directly in the Email Verification Email body, including an anchor using `$ConfirmationUrl$`:
 https://learn.microsoft.com/en-us/xbox/playfab/live-service-management/game-configuration/title-communications/emails/using-a-rule-to-verify-a-contact-email-address
