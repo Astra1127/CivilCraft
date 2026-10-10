@@ -3,6 +3,7 @@ import { AdminApiError, object } from "../playfab/admin-client.server.ts";
 import { getDiamondBalance, resolvePremiumEntity } from "../playfab/premium-wallet.server.ts";
 import { normalizeOrderReward } from "../payments/products.ts";
 import { updateOrderStatus } from "../payments/orders.server.ts";
+import { assertCoinFulfillmentAvailable } from "../payments/coin-maintenance.server.ts";
 import {
   isGameWalletEnabled,
   isGameWalletInstalled,
@@ -70,6 +71,7 @@ export async function gameWallet(playFabId: string): Promise<GameWalletDTO> {
   return { ...coins, diamonds };
 }
 export async function gameCoinSnapshot(playFabId: string): Promise<GameWalletSnapshot> {
+  assertCoinFulfillmentAvailable();
   const config = requireGameWalletReady();
   const entity = await resolvePremiumEntity(playFabId);
   const rows = await walletCall("wallet_balance", walletIdentity(config, playFabId, entity));
@@ -113,6 +115,7 @@ function orderInput(order: GameCoinOrder) {
   return { identity, amount: reward.rewardAmount, fingerprint };
 }
 export async function grantGameCoins(order: GameCoinOrder): Promise<{ alreadyGranted: boolean }> {
+  assertCoinFulfillmentAvailable();
   const input = orderInput(order);
   const rows = await walletCall(
     "credit",
@@ -124,6 +127,7 @@ export async function grantGameCoins(order: GameCoinOrder): Promise<{ alreadyGra
   return { alreadyGranted: rows[0]["already_granted"] };
 }
 export async function repairGameCoinOrder<T extends GameCoinOrder>(order: T): Promise<T> {
+  assertCoinFulfillmentAvailable();
   const input = orderInput(order);
   const rows = await walletCall(
     "receipt",

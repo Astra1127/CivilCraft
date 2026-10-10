@@ -3,6 +3,7 @@ import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.ser
 import { resolvePremiumEntity } from "../playfab/premium-wallet.server.ts";
 import { getCoinReceiptStatus, type CoinGrantInput } from "../payments/coin-receipts.server.ts";
 import { normalizeOrderReward } from "../payments/products.ts";
+import { assertCoinFulfillmentAvailable } from "../payments/coin-maintenance.server.ts";
 import { isLegacyCoinGateRequired, requireGameWalletSettlementReady } from "./config.server.ts";
 import { walletCall, walletIdentity, walletInteger, walletUnavailable } from "./database.server.ts";
 import type { GameCoinOrder } from "./types.ts";
@@ -100,12 +101,14 @@ export async function withAccountGate<T>(
   return result;
 }
 export async function withLegacyCoinGate<T>(playFabId: string, task: () => Promise<T>): Promise<T> {
+  assertCoinFulfillmentAvailable();
   if (!isLegacyCoinGateRequired()) return task();
   return withAccountGate(playFabId, "legacy", task);
 }
 export async function recordLegacyCoinGrant(
   order: GameCoinOrder,
 ): Promise<{ alreadyGranted: boolean; covered: boolean }> {
+  assertCoinFulfillmentAvailable();
   if (!isLegacyCoinGateRequired()) return { alreadyGranted: true, covered: false };
   const input = legacyCoinInput(order);
   if ((await getCoinReceiptStatus(input)) !== "granted")

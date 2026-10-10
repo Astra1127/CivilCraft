@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import vm from "node:vm";
 import { test } from "node:test";
 import ts from "typescript";
+import * as coinMaintenance from "../src/lib/payments/coin-maintenance.server.ts";
 import { PGlite } from "@electric-sql/pglite";
 import * as catalog from "../src/lib/game-wallet/catalog.server.ts";
 import { AdminApiError } from "../src/lib/playfab/admin-client.server.ts";
@@ -40,6 +41,7 @@ function load(file, mocks) {
     exports,
     Buffer,
     require(name) {
+      if (name.endsWith("coin-maintenance.server.ts")) return coinMaintenance;
       if (name in mocks) return mocks[name];
       if (name.startsWith("node:")) return require(name);
       throw new Error(`Unexpected import ${name}`);

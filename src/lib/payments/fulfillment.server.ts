@@ -6,6 +6,10 @@ import { getOrder, markEventProcessed, updateOrderStatus } from "./orders.server
 import { retrievePayMongoCheckout, verifyPayMongoSignature } from "./paymongo.server.ts";
 import type { PaymentOrder } from "./types.ts";
 import {
+  assertCoinFulfillmentAvailable,
+  CoinFulfillmentMaintenance,
+} from "./coin-maintenance.server.ts";
+import {
   CoinGrantReviewRequired,
   getCoinReceiptStatus,
   grantCoinsOnce,
@@ -120,6 +124,7 @@ export function coinGrantInput(order: PaymentOrder) {
 
 export async function repairPaymentOrder(order: PaymentOrder): Promise<PaymentOrder> {
   if (normalizeOrderReward(order).rewardCurrency === "DI") return repairDiamondOrder(order);
+  assertCoinFulfillmentAvailable();
   // Provider selection belongs to the immutable order, including after feature rollback.
   if (order.coinReceiptVersion === 3) return repairGameCoinOrder(order);
   if (![1, 2].includes(order.coinReceiptVersion ?? 0)) {
@@ -318,6 +323,7 @@ export async function processPayMongoWebhook(
     }
     verifiedPayment = true;
     const reward = normalizeOrderReward(order);
+    if (reward.rewardCurrency === "CO") assertCoinFulfillmentAvailable();
     order = await repairPaymentOrder(order);
     if (reward.rewardCurrency === "CO" && order.fulfillmentReviewRequired)
       throw new CoinGrantReviewRequired();
@@ -374,6 +380,8 @@ export async function processPayMongoWebhook(
       },
     };
   } catch (error) {
+    // Retryable fence: do not acknowledge the event or mutate even audit order status.
+    if (error instanceof CoinFulfillmentMaintenance) return fail(503, error.message);
     const status = error instanceof AdminApiError ? error.status : 503;
     const reviewRequired = error instanceof CoinGrantReviewRequired;
     if (order && (verifiedPayment || status === 400)) {
