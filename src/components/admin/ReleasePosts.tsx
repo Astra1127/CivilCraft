@@ -7,16 +7,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { StatusPill } from "./ui";
 import type { Release } from "@/lib/cms/types";
 import { formatDate } from "@/lib/cms/store";
+import { Trash2 } from "lucide-react";
 
 export function ReleasePosts({
   releases,
   save,
+  onDelete,
+  disabled = false,
 }: {
   releases: Release[];
   save: (release: Release) => Promise<void>;
+  onDelete?: (release: Release) => void;
+  disabled?: boolean;
 }) {
   const [editing, setEditing] = useState<Release | null>(null);
   const [busy, setBusy] = useState(false);
+  const locked = busy || disabled;
   const create = () =>
     setEditing({
       id: crypto.randomUUID(),
@@ -37,7 +43,7 @@ export function ReleasePosts({
       downloads: 0,
     });
   const submit = async (published: boolean) => {
-    if (!editing || busy) return;
+    if (!editing || locked) return;
     if (
       !editing.title?.trim() ||
       !editing.version.trim() ||
@@ -71,7 +77,7 @@ export function ReleasePosts({
   };
   return (
     <div className="space-y-4">
-      <Button variant="gold" size="sm" onClick={create} disabled={busy || !!editing}>
+      <Button variant="gold" size="sm" onClick={create} disabled={locked || !!editing}>
         Create update
       </Button>
       {editing ? (
@@ -82,7 +88,13 @@ export function ReleasePosts({
             void submit(false);
           }}
         >
-          <fieldset disabled={busy} className="space-y-3">
+          <fieldset disabled={locked} className="space-y-3">
+            {editing.status === "current" ? (
+              <p className="rounded-lg bg-secondary/50 p-3 text-xs text-muted-foreground">
+                This update belongs to the active build. Changing its version can queue subscriber
+                emails; editing only the title or notes does not.
+              </p>
+            ) : null}
             <div>
               <Label htmlFor="update-title">Title</Label>
               <Input
@@ -152,14 +164,21 @@ export function ReleasePosts({
       ) : null}
       <ul className="space-y-3">
         {[...releases]
-          .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate) || b.id.localeCompare(a.id))
+          .sort(
+            (a, b) =>
+              Number(b.status === "current") - Number(a.status === "current") ||
+              b.releaseDate.localeCompare(a.releaseDate) ||
+              b.id.localeCompare(a.id),
+          )
           .map((release) => (
             <li
               key={release.id}
               className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-border p-3"
             >
               <div className="min-w-0">
-                <p className="break-words font-display">{release.title || "Untitled update"}</p>
+                <p className="break-words font-display">
+                  {release.title || `Release notes for v${release.version}`}
+                </p>
                 <p className="text-sm text-muted-foreground">
                   v{release.version} / build {release.build} / {formatDate(release.releaseDate)}
                 </p>
@@ -167,14 +186,31 @@ export function ReleasePosts({
                   {release.published ? "Published" : "Draft"}
                 </StatusPill>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy || !!editing}
-                onClick={() => setEditing({ ...release })}
-              >
-                Edit update
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={locked || !!editing}
+                  onClick={() => setEditing({ ...release })}
+                >
+                  Edit update
+                </Button>
+                {onDelete && release.status !== "current" ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    disabled={locked || !!editing}
+                    aria-label={`Delete v${release.version} build ${release.build} and release notes`}
+                    onClick={() => {
+                      if (!locked && !editing) onDelete(release);
+                    }}
+                  >
+                    <Trash2 aria-hidden="true" />
+                    Delete
+                  </Button>
+                ) : null}
+              </div>
             </li>
           ))}
       </ul>

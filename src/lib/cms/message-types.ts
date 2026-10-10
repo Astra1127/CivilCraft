@@ -18,3 +18,26 @@ export const contactSchema = z.object({
 });
 
 export type ContactInput = z.infer<typeof contactSchema>;
+export const publicInquiryTypes = [
+  "General",
+  "Technical Support",
+  "Partnership",
+  "Educational",
+] as const;
+export const publicContactSchema = contactSchema.extend({
+  inquiryType: z.enum(publicInquiryTypes),
+});
+export const feedbackCategories = [
+  "Gameplay Feedback",
+  "Bug Report",
+  "Suggestion",
+  "Other Game Feedback",
+] as const;
+export const feedbackSchema = contactSchema
+  .pick({ subject: true, message: true })
+  .extend({
+    action: z.literal("feedback"),
+    inquiryType: z.enum(feedbackCategories),
+  })
+  .strict();
+export type FeedbackInput = z.infer<typeof feedbackSchema>;

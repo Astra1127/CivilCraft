@@ -39,4 +39,8 @@ dist-ssr
 .vercel
 .env*
 !.env.example
+
+# Local game builds are uploaded to object storage, never committed to Git.
+Apk/
+*.apk
 node_modules

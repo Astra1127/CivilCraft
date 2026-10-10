@@ -1,0 +1,25 @@
+Subject: Verify Your CivilCraft Account
+
+CIVIL CRAFT ACCOUNT
+Verify Your Email Address
+
+Hello, Engineer!
+
+Welcome to Civil Craft: Bridge Edition!
+
+Thank you for creating your CivilCraft account. Before you begin your engineering journey, please verify your email address by clicking the button below.
+
+Verify Email Address:
+$ConfirmationUrl$
+
+If the button doesn't work, copy and paste the verification link into your browser:
+$ConfirmationUrl$
+
+If you did not create a CivilCraft account, you can safely ignore this email.
+
+This is an automated email from Civil Craft.
+
+Please do not reply directly to this email.
+
+See you in-game!
+The Civil Craft Team

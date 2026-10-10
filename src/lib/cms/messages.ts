@@ -1,7 +1,7 @@
 import { currentSessionTicket, requireSessionTicket } from "@/lib/playfab/client";
 import { useQuery } from "@tanstack/react-query";
 import { contentFetch } from "./content";
-import type { ContactInput } from "./message-types";
+import type { ContactInput, FeedbackInput } from "./message-types";
 import type { ContactMessage, MessageStatus } from "./types";
 
 export const messageService = {
@@ -68,5 +68,28 @@ export function replyAsPlayer(id: string, message: string) {
       Authorization: "Bearer " + requireSessionTicket(),
     },
     body: JSON.stringify({ action: "reply", id, message }),
+  });
+}
+
+export function useFeedbackEligibility(playerId: string) {
+  return useQuery({
+    queryKey: ["feedback-eligibility", playerId],
+    enabled: !!playerId,
+    queryFn: () =>
+      contentFetch<{ eligible: boolean }>("/api/player/messages?action=eligibility", {
+        headers: { Authorization: "Bearer " + requireSessionTicket() },
+      }),
+    staleTime: 0,
+    retry: 1,
+  });
+}
+export function submitPlayerFeedback(input: FeedbackInput) {
+  return contentFetch<{ id: string }>("/api/player/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + requireSessionTicket(),
+    },
+    body: JSON.stringify(input),
   });
 }

@@ -17,6 +17,8 @@
     "test:reset": "node --test tests/reset-password.test.ts tests/reset-password-ui.test.mjs",
     "test:payments": "node --test tests/paymongo.test.ts",
     "test:transactions": "node --test tests/dashboard-transactions-layout.test.mjs",
+    "test:apk": "node --test tests/apk-validation.test.ts tests/apk-releases.test.ts tests/apk-storage.test.ts tests/apk-upload-ui.test.mjs",
+    "test:releases": "node --test tests/release-posts.test.ts tests/release-posts-ui.test.mjs tests/release-management.test.ts tests/release-management-ui.test.mjs tests/release-emails.test.ts",
     "test:currencies": "node --test tests/paymongo.test.ts tests/paymongo-webhook-envelopes.test.mjs tests/premium-wallet.test.ts tests/entity-diamond-wallet.test.mjs tests/currency-products.test.ts tests/diamonds-setup.test.mjs tests/diamond-shop-ui.test.mjs tests/shop-navigation-ui.test.mjs tests/diamond-dev-config.test.mjs tests/coin-receipts.test.mjs tests/coins-setup.test.mjs tests/currency-database.test.mjs tests/currency-database-sql.test.mjs tests/currency-database-setup.test.mjs tests/postgres-coin-receipts.test.mjs tests/postgres-payment-integration.test.mjs",
     "verify:currencies": "node --env-file=.env scripts/verify-currency-database.mjs"
   },
@@ -57,6 +59,7 @@
     "@tanstack/react-start": "1.168.60",
     "@tanstack/router-plugin": "1.168.42",
     "@vercel/blob": "^2.8.0",
+    "@vercel/oidc": "3.8.7",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",

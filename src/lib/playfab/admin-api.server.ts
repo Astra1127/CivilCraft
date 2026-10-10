@@ -59,7 +59,7 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     )
       return json({ error: "This request is not permitted." }, 403);
 
-    const releasesResponse = await releaseRequest(request, true);
+    const releasesResponse = await releaseRequest(request, true, session.user);
     if (releasesResponse) return releasesResponse;
     const contactSettingsResponse = await contactSettingsRequest(request, true);
     if (contactSettingsResponse) return contactSettingsResponse;

@@ -80,7 +80,7 @@ function AdminMessages() {
     <AdminPage>
       <AdminHeading
         title="Messages"
-        description="Inquiries submitted through the public contact form."
+        description="Contact inquiries and player game feedback."
         status={
           <StatusPill tone={messages.some((m) => m.status === "New") ? "warn" : "ok"}>
             {messages.filter((m) => m.status === "New").length} new
@@ -145,6 +145,11 @@ function AdminMessages() {
             >
               <div className="grid gap-1 text-sm">
                 <p className="font-bold">{selected.name}</p>
+                {selected.ownerId && (
+                  <p className="break-all text-xs text-muted-foreground">
+                    Player: {selected.ownerId}
+                  </p>
+                )}
                 <p className="text-muted-foreground">{selected.email}</p>
                 <p className="text-xs text-muted-foreground">
                   {selected.inquiryType} · {formatDate(selected.createdAt)}

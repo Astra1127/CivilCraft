@@ -86,6 +86,8 @@ export interface Release {
   fileName: string | null;
   fileSizeBytes: number | null;
   fileUrl: string | null;
+  /** True for a server-verified APK hosted by this website; storage paths stay private. */
+  apkHosted?: boolean;
   minAndroid: string;
   minRequirements: string[];
   recommendedRequirements: string[];
