@@ -2,6 +2,7 @@ import { AdminApiError, adminGameConfig } from "../playfab/admin-client.server.t
 import { currencyDatabaseConnection } from "../payments/currency-database.server.ts";
 import {
   gameWalletConfig,
+  requireGameShopLinkReady,
   requireGameWalletReady,
   requireGameWalletSettlementReady,
 } from "./config.server.ts";
@@ -22,8 +23,6 @@ const operations = new Set([
   "reject_purchase",
   "purchase_status",
   "entitlements",
-  "link_issue",
-  "link_read",
   "legacy_receipts",
   "entity_manifest",
 ]);
@@ -73,6 +72,25 @@ export async function walletCall(
   await assertGameWalletHealthy();
   try {
     if (name === "import_wallet") markGameWalletImportAttempted();
+    const rows = await currencyDatabaseConnection().unsafe(
+      `SELECT * FROM civilcraft_game_wallet_v3.${name}(${args.map((_, i) => `$${i + 1}`).join(",")})`,
+      args as never[],
+    );
+    return [...rows];
+  } catch {
+    throw walletUnavailable();
+  }
+}
+/** Only opaque navigation records can use this independent, non-monetary capability. */
+export async function shopLinkCall(
+  name: "link_issue" | "link_read",
+  args: unknown[],
+): Promise<Record<string, unknown>[]> {
+  // The runtime allowlist remains necessary even if a caller bypasses TypeScript.
+  if (name !== "link_issue" && name !== "link_read") throw walletUnavailable();
+  requireGameShopLinkReady();
+  await assertGameWalletHealthy();
+  try {
     const rows = await currencyDatabaseConnection().unsafe(
       `SELECT * FROM civilcraft_game_wallet_v3.${name}(${args.map((_, i) => `$${i + 1}`).join(",")})`,
       args as never[],

@@ -1,9 +1,25 @@
 import { createHash } from "node:crypto";
 import { AdminApiError, adminGameConfig } from "../playfab/admin-client.server.ts";
-import { currencyDatabaseConfig } from "../payments/currency-database.server.ts";
+import {
+  currencyDatabaseConfig,
+  requireCurrencyDatabaseReady,
+} from "../payments/currency-database.server.ts";
 import { GAME_WALLET_NAMESPACE, type GameWalletConfig } from "./types.ts";
 
 const enabled = (key: string) => process.env[key]?.trim().toLowerCase() === "true";
+/** Machine-readable only for trusted wallet readiness failures, not provider errors. */
+export class GameWalletReadinessError extends AdminApiError {
+  readonly code: "GAME_WALLET_DISABLED" | "GAME_WALLET_NOT_READY";
+  constructor(code: "GAME_WALLET_DISABLED" | "GAME_WALLET_NOT_READY") {
+    super(
+      503,
+      code === "GAME_WALLET_DISABLED"
+        ? "Game wallet is not enabled."
+        : "Game wallet requires verified setup and legacy-handler cutover.",
+    );
+    this.code = code;
+  }
+}
 export function isGameWalletEnabled(): boolean {
   return enabled("GAME_WALLET_ENABLED");
 }
@@ -39,7 +55,7 @@ export function gameWalletVerificationFingerprint(): string {
     .digest("hex");
 }
 export function requireGameWalletReady(): GameWalletConfig {
-  if (!isGameWalletEnabled()) throw new AdminApiError(503, "Game wallet is not enabled.");
+  if (!isGameWalletEnabled()) throw new GameWalletReadinessError("GAME_WALLET_DISABLED");
   return requireGameWalletSettlementReady();
 }
 export function requireGameWalletSettlementReady(): GameWalletConfig {
@@ -53,6 +69,13 @@ export function requireGameWalletSettlementReady(): GameWalletConfig {
     process.env["GAME_WALLET_VERIFIED_CONFIG_SHA256"]?.trim().toLowerCase() !==
       gameWalletVerificationFingerprint()
   )
-    throw new AdminApiError(503, "Game wallet requires verified setup and legacy-handler cutover.");
+    throw new GameWalletReadinessError("GAME_WALLET_NOT_READY");
   return config;
+}
+/** Navigation grants no wallet, sign-in, payment or import authority. */
+export function requireGameShopLinkReady(): GameWalletConfig {
+  requireCurrencyDatabaseReady();
+  if (!adminGameConfig().secret)
+    throw new AdminApiError(503, "Website shop navigation is temporarily unavailable.");
+  return gameWalletConfig();
 }

@@ -7,11 +7,13 @@ import { assertCoinFulfillmentAvailable } from "../payments/coin-maintenance.ser
 import {
   isGameWalletEnabled,
   isGameWalletInstalled,
+  requireGameShopLinkReady,
   requireGameWalletReady,
   requireGameWalletSettlementReady,
 } from "./config.server.ts";
 import {
   balanceRow,
+  shopLinkCall,
   walletCall,
   walletIdentity,
   walletInteger,
@@ -346,10 +348,10 @@ export async function gameEntitlements(playFabId: string): Promise<GameEntitleme
   return { shopItems, materials, version: wallet.version };
 }
 export async function issueGameShopLink(playFabId: string, currency: "coins" | "diamonds") {
-  const config = requireGameWalletReady();
+  const config = requireGameShopLinkReady();
   const token = randomBytes(32).toString("base64url");
   const hash = createHash("sha256").update(token).digest("hex");
-  const rows = await walletCall("link_issue", [
+  const rows = await shopLinkCall("link_issue", [
     config.databaseId,
     walletIdentity(config, playFabId, await resolvePremiumEntity(playFabId))[1],
     playFabId.toUpperCase(),
@@ -363,9 +365,9 @@ export async function assertGameShopLink(
   token: string,
   playFabId: string,
 ): Promise<{ valid: true; currency: "coins" | "diamonds"; expiresAt: string }> {
-  const config = requireGameWalletReady();
+  const config = requireGameShopLinkReady();
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(token)) throw new AdminApiError(400, "Shop link is invalid.");
-  const rows = await walletCall("link_read", [
+  const rows = await shopLinkCall("link_read", [
     config.databaseId,
     walletIdentity(config, playFabId, await resolvePremiumEntity(playFabId))[1],
     createHash("sha256").update(token).digest("hex"),

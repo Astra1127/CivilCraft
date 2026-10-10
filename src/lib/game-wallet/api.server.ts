@@ -1,7 +1,9 @@
 import { AdminApiError, object } from "../playfab/admin-client.server.ts";
 import { authenticatePaymentPlayer } from "../payments/player-auth.server.ts";
 import {
+  GameWalletReadinessError,
   isGameWalletInstalled,
+  requireGameShopLinkReady,
   requireGameWalletReady,
   requireGameWalletSettlementReady,
 } from "./config.server.ts";
@@ -44,7 +46,8 @@ async function body(request: Request): Promise<Record<string, unknown>> {
   }
 }
 function shopOrigin(): string {
-  const value = process.env["PUBLIC_APP_URL"] || process.env["PUBLIC_SITE_URL"] || "";
+  const canonical = "https://civil-craft.vercel.app";
+  const value = process.env["PUBLIC_APP_URL"] || process.env["PUBLIC_SITE_URL"] || canonical;
   let url: URL;
   try {
     url = new URL(value);
@@ -57,6 +60,8 @@ function shopOrigin(): string {
     url.password ||
     url.hash ||
     url.search ||
+    (process.env["NODE_ENV"] === "production" &&
+      (url.origin !== canonical || url.pathname !== "/")) ||
     (url.protocol !== "https:" &&
       !(process.env["NODE_ENV"] !== "production" && local && url.protocol === "http:"))
   )
@@ -86,8 +91,9 @@ export async function handleGameWalletRequest(request: Request): Promise<Respons
       return json({ error: "Method not allowed." }, 405);
   } else if (request.method !== method) return json({ error: "Method not allowed." }, 405);
   try {
-    // Default-off performs no PlayFab authentication, database connection, or DNS lookup.
-    if (
+    // Monetary endpoints stay default-off. Navigation has its own verified, narrow capability.
+    if (url.pathname === "/api/game/shop-link") requireGameShopLinkReady();
+    else if (
       request.method === "GET" &&
       url.pathname !== "/api/game/shop-link" &&
       isGameWalletInstalled()
@@ -146,7 +152,15 @@ export async function handleGameWalletRequest(request: Request): Promise<Respons
   } catch (error) {
     if (error instanceof GamePurchaseRejected)
       return json({ error: error.message, operationId: error.operationId, terminal: true }, 400);
-    if (error instanceof AdminApiError) return json({ error: error.message }, error.status);
+    if (error instanceof AdminApiError) {
+      const code =
+        error instanceof GameWalletReadinessError &&
+        error.status === 503 &&
+        (error.code === "GAME_WALLET_DISABLED" || error.code === "GAME_WALLET_NOT_READY")
+          ? error.code
+          : undefined;
+      return json({ error: error.message, ...(code ? { code } : {}) }, error.status);
+    }
     // Never return SQL, tickets, provider details, connection URLs or raw request bodies.
     return json({ error: "Game wallet is temporarily unavailable." }, 503);
   }
