@@ -23,6 +23,10 @@ import {
 import { authenticatePaymentPlayer } from "./player-auth.server.ts";
 import type { PaymentOrder } from "./types.ts";
 import {
+  assertCoinFulfillmentAvailable,
+  isCoinFulfillmentMaintenance,
+} from "./coin-maintenance.server.ts";
+import {
   assertClassicCurrencyConfigured,
   assertCoinCheckoutReady,
   coinReceiptSnapshot,
@@ -151,6 +155,7 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
           coins.status === "fulfilled" &&
           coinsReady &&
           paymentReady &&
+          !isCoinFulfillmentMaintenance() &&
           (!unifiedCoins || isGameWalletEnabled()),
         coinsMigrationRequired: unifiedCoins && coins.status === "fulfilled" && !coinsReady,
       });
@@ -172,6 +177,7 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       if (!product || product.active === false)
         return jsonResponse({ error: "Unknown or unavailable product." }, 400);
       const reward = normalizeProductReward(product);
+      if (reward.rewardCurrency === "CO") assertCoinFulfillmentAvailable();
       const returnOrigin = configuredReturnOrigin();
       const orderId = generateOrderId(reward.rewardCurrency);
       if (await getOrder(orderId))
