@@ -23,10 +23,22 @@ import {
 import { authenticatePaymentPlayer } from "./player-auth.server.ts";
 import type { PaymentOrder } from "./types.ts";
 import {
+  assertCoinFulfillmentAvailable,
+  isCoinFulfillmentMaintenance,
+} from "./coin-maintenance.server.ts";
+import {
   assertClassicCurrencyConfigured,
   assertCoinCheckoutReady,
   coinReceiptSnapshot,
 } from "./coin-receipts.server.ts";
+import {
+  assertGameShopLink,
+  gameCoinBalance,
+  gameCoinSnapshot,
+  isGameWalletEnabled,
+  isGameWalletInstalled,
+  requireGameWalletReady,
+} from "../game-wallet/index.server.ts";
 
 function jsonResponse(data: unknown, status = 200) {
   return Response.json(data, {
@@ -101,7 +113,14 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       return jsonResponse({ products: await listActiveProducts() });
     const { playFabId } = await authenticatePaymentPlayer(request);
     if (path === "/api/player/currencies") {
+      const unifiedCoins = isGameWalletInstalled();
+      let coinsReady = !unifiedCoins;
       const readCoins = async () => {
+        if (unifiedCoins) {
+          const wallet = await gameCoinBalance(playFabId);
+          coinsReady = wallet.ready;
+          return wallet.coins;
+        }
         if (process.env["COIN_RECEIPTS_STORAGE"]?.trim() === "postgres") {
           if (getCoinsCurrencyCode() !== "CO")
             throw new AdminApiError(503, "Coin balance is unavailable.");
@@ -132,6 +151,13 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         coins: coins.status === "fulfilled" ? coins.value : null,
         diamonds: diamonds.status === "fulfilled" ? diamonds.value : null,
         diamondsAvailable: diamonds.status === "fulfilled" && paymentReady,
+        coinsAvailable:
+          coins.status === "fulfilled" &&
+          coinsReady &&
+          paymentReady &&
+          !isCoinFulfillmentMaintenance() &&
+          (!unifiedCoins || isGameWalletEnabled()),
+        coinsMigrationRequired: unifiedCoins && coins.status === "fulfilled" && !coinsReady,
       });
     }
     if (path === "/api/payments/paymongo/create-checkout") {
@@ -142,16 +168,23 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         return jsonResponse({ error: "Invalid JSON body" }, 400);
       }
       const id = typeof body["productId"] === "string" ? body["productId"] : "";
+      if (Object.hasOwn(body, "gameLink")) {
+        if (typeof body["gameLink"] !== "string")
+          throw new AdminApiError(400, "The game shop link is invalid.");
+        await assertGameShopLink(body["gameLink"], playFabId);
+      }
       const product = await getProductById(id);
       if (!product || product.active === false)
         return jsonResponse({ error: "Unknown or unavailable product." }, 400);
       const reward = normalizeProductReward(product);
+      if (reward.rewardCurrency === "CO") assertCoinFulfillmentAvailable();
       const returnOrigin = configuredReturnOrigin();
       const orderId = generateOrderId(reward.rewardCurrency);
       if (await getOrder(orderId))
         throw new AdminApiError(503, "Checkout order ID is already in use. Please try again.");
       let premiumWallet: PaymentOrder["premiumWallet"];
       let coinReceipt: PaymentOrder["coinReceipt"];
+      let gameWallet: PaymentOrder["gameWallet"];
       if (reward.rewardCurrency === "DI") {
         const wallet = requireDiamondCheckoutReady();
         const entity = await resolvePremiumEntity(playFabId);
@@ -164,7 +197,26 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
           rewardAmount: reward.rewardAmount,
         });
         premiumWallet = { ...wallet, entity };
+      } else if (isGameWalletEnabled()) {
+        requireGameWalletReady();
+        gameWallet = await gameCoinSnapshot(playFabId);
+        const balance = await gameCoinBalance(playFabId);
+        if (!balance.ready || balance.coins === null)
+          throw new AdminApiError(
+            409,
+            "Open the updated game and finish selecting your account save before buying Coins.",
+          );
+        if (
+          !Number.isSafeInteger(balance.coins + reward.rewardAmount) ||
+          balance.coins + reward.rewardAmount > 2_147_483_647
+        )
+          throw new AdminApiError(409, "This Coin package would exceed your wallet limit.");
       } else {
+        if (isGameWalletInstalled())
+          throw new AdminApiError(
+            503,
+            "Coin purchases are paused for wallet maintenance. No payment has been started.",
+          );
         coinReceipt = coinReceiptSnapshot();
         await assertCoinCheckoutReady({
           orderId,
@@ -183,11 +235,13 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         ...reward,
         expectedCoins: reward.rewardCurrency === "CO" ? reward.rewardAmount : 0,
         ...(reward.rewardCurrency === "CO"
-          ? {
-              coinCurrencyCode: getCoinsCurrencyCode(),
-              coinReceiptVersion: coinReceipt ? 2 : 1,
-              ...(coinReceipt ? { coinReceipt } : {}),
-            }
+          ? gameWallet
+            ? { coinReceiptVersion: 3 as const, gameWallet }
+            : {
+                coinCurrencyCode: getCoinsCurrencyCode(),
+                coinReceiptVersion: coinReceipt ? 2 : 1,
+                ...(coinReceipt ? { coinReceipt } : {}),
+              }
           : { premiumWallet }),
         PayMongoCheckoutSessionId: null,
         PayMongoReferenceNumber: orderId,
@@ -222,7 +276,18 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       return jsonResponse(safeOrder(await repairPaymentOrder(order)));
     }
     const orders = await listOrdersForPlayer(playFabId);
-    return jsonResponse({ orders: orders.map(safeOrder) });
+    const verifiedOrders: PaymentOrder[] = [];
+    // Legacy repairs share this player's permanent migration/grant gate. Do not
+    // race them against each other or weaken that gate to assemble history.
+    // Return history only after every required receipt has been checked.
+    for (const order of orders) {
+      verifiedOrders.push(
+        isGameWalletInstalled() || order.coinReceiptVersion === 3
+          ? await repairPaymentOrder(order)
+          : order,
+      );
+    }
+    return jsonResponse({ orders: verifiedOrders.map(safeOrder) });
   } catch (error) {
     const status = error instanceof AdminApiError ? error.status : 503;
     return jsonResponse(

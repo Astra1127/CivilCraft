@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
+import * as coinMaintenance from "../src/lib/payments/coin-maintenance.server.ts";
 
 const SECRET = "whsk_mock_current_webhook_secret";
 const PLAYER = "ABC123";
@@ -42,6 +43,7 @@ function load(path, mocks = {}, environment = {}) {
     URL,
     process: { env: environment },
     require(name) {
+      if (name.endsWith("coin-maintenance.server.ts")) return coinMaintenance;
       if (name === "node:crypto") return crypto;
       if (Object.hasOwn(mocks, name)) return mocks[name];
       throw new Error(`Unexpected isolated dependency: ${name}`);
@@ -122,6 +124,11 @@ function harness(currency = "CO", amount = 500, price = 5000) {
     return { alreadyGranted, balance: amount };
   };
   const api = load("fulfillment.server.ts", {
+    "../game-wallet/index.server.ts": {
+      isGameWalletInstalled: () => false,
+      withLegacyCoinGate: async (_id, task) => task(),
+      recordLegacyCoinGrant: async () => {},
+    },
     "../playfab/admin-client.server.ts": {
       AdminApiError: ApiError,
       object: (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {}),

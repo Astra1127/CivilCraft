@@ -1,0 +1,743 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
+import { createRequire } from "node:module";
+import { test } from "node:test";
+import ts from "typescript";
+import * as coinMaintenance from "../src/lib/payments/coin-maintenance.server.ts";
+import * as catalog from "../src/lib/game-wallet/catalog.server.ts";
+import { AdminApiError } from "../src/lib/playfab/admin-client.server.ts";
+import { GameWalletReadinessError } from "../src/lib/game-wallet/config.server.ts";
+import * as gateContext from "../src/lib/game-wallet/gate-context.server.ts";
+
+const require = createRequire(import.meta.url),
+  PLAYER = "ABCDEF",
+  ENTITY = { Id: "FACE123", Type: "title_player_account" };
+const CONFIG = {
+  storage: "postgres",
+  namespace: "civilcraft_game_wallet_v3",
+  databaseId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+  targetId: "a".repeat(64),
+  protocolVersion: 3,
+};
+const plain = (value) => JSON.parse(JSON.stringify(value));
+function load(file, mocks, env = {}) {
+  const exports = {};
+  const output = ts.transpileModule(
+    readFileSync(new URL(`../src/lib/game-wallet/${file}`, import.meta.url), "utf8"),
+    {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    },
+  ).outputText;
+  vm.runInNewContext(output, {
+    exports,
+    URL,
+    URLSearchParams,
+    Response,
+    Request,
+    Headers,
+    Date,
+    process: { env },
+    Buffer,
+    require(name) {
+      if (name.endsWith("coin-maintenance.server.ts")) return coinMaintenance;
+      if (name in mocks) return mocks[name];
+      if (name.startsWith("node:")) return require(name);
+      throw new Error(`Unexpected import ${name}`);
+    },
+  });
+  return exports;
+}
+function harness() {
+  const state = {
+    enabled: true,
+    installed: true,
+    navigationReady: true,
+    calls: [],
+    entityReads: 0,
+    rows: null,
+    auditFailure: false,
+  };
+  const config = {
+    GameWalletReadinessError,
+    isGameWalletEnabled: () => state.enabled,
+    isGameWalletInstalled: () => state.installed,
+    requireGameWalletReady: () => {
+      if (!state.enabled) throw new GameWalletReadinessError("GAME_WALLET_DISABLED");
+      return CONFIG;
+    },
+    requireGameWalletSettlementReady: () => CONFIG,
+    requireGameShopLinkReady: () => {
+      if (!state.navigationReady) throw new AdminApiError(503, "Navigation unavailable.");
+      return CONFIG;
+    },
+  };
+  const database = {
+    walletUnavailable: () => new AdminApiError(503, "unavailable"),
+    walletInteger: (n) => Number(n),
+    walletIdentity: (_c, player, entity) => [
+      CONFIG.databaseId,
+      "17FA03",
+      player,
+      entity.Id,
+      entity.Type,
+    ],
+    balanceRow: (row) => ({
+      coins: row.ready ? Number(row.coins) : null,
+      ready: row.ready,
+      version: Number(row.version),
+    }),
+    walletCall: async (name, args, settlement) => {
+      state.calls.push({ name, args, settlement });
+      if (state.rows) return state.rows(name, args);
+      if (name === "wallet_balance")
+        return [
+          {
+            coins: 700,
+            ready: true,
+            version: 5,
+            lifetime_gold_earned: 200,
+            lifetime_gold_spent: 100,
+          },
+        ];
+      if (name === "credit") return [{ already_granted: false, covered: false }];
+      if (name === "receipt") return [{ granted: true }];
+      return [];
+    },
+    shopLinkCall: async (name, args) => {
+      assert.ok(name === "link_issue" || name === "link_read");
+      state.calls.push({ name, args, navigation: true });
+      return state.rows ? state.rows(name, args) : [];
+    },
+  };
+  const legacy = {
+    withAccountGate: async (_id, _reason, task) => task("11111111-2222-3333-4444-555555555555"),
+    legacyOpeningSnapshot: async () => ({ classic: 500, covered: [] }),
+    GateBeforeMutationError: class extends Error {
+      constructor(original) {
+        super();
+        this.original = original;
+      }
+    },
+  };
+  const service = load("service.server.ts", {
+    "../playfab/admin-client.server.ts": {
+      AdminApiError,
+      object: (n) => (n && typeof n === "object" ? n : {}),
+    },
+    "../playfab/premium-wallet.server.ts": {
+      resolvePremiumEntity: async () => {
+        state.entityReads++;
+        return ENTITY;
+      },
+      getDiamondBalance: async () => 7,
+    },
+    "../payments/products.ts": {
+      normalizeOrderReward: (o) => ({
+        rewardCurrency: o.rewardCurrency ?? "CO",
+        rewardAmount: o.rewardAmount ?? o.expectedCoins,
+      }),
+    },
+    "../payments/orders.server.ts": {
+      updateOrderStatus: async () => {
+        if (state.auditFailure) throw new Error("private");
+      },
+    },
+    "./config.server.ts": config,
+    "./database.server.ts": database,
+    "./catalog.server.ts": catalog,
+    "./legacy.server.ts": legacy,
+    "./types.ts": { MAX_GAME_COINS: 2147483647 },
+  });
+  return { service, state, config, database, legacy };
+}
+test("default disabled game balance performs no DB or PlayFab lookup", async () => {
+  const { service, state } = harness();
+  state.enabled = false;
+  state.installed = false;
+  assert.deepEqual(plain(await service.gameCoinBalance(PLAYER)), {
+    coins: null,
+    ready: false,
+    version: 0,
+    lifetimeGoldEarned: null,
+    lifetimeGoldSpent: null,
+  });
+  assert.equal(state.calls.length, 0);
+  assert.equal(state.entityReads, 0);
+});
+test("verified wallet still reads and settles immutable v3 orders while new operations are disabled", async () => {
+  const { service, state } = harness();
+  state.enabled = false;
+  const balance = await service.gameCoinBalance(PLAYER);
+  assert.equal(balance.coins, 700);
+  assert.equal(balance.lifetimeGoldEarned, 200);
+  const order = {
+    orderId: "v3-order",
+    playFabId: PLAYER,
+    expectedCoins: 500,
+    rewardCurrency: "CO",
+    rewardAmount: 500,
+    coinReceiptVersion: 3,
+    gameWallet: { ...CONFIG, entity: ENTITY },
+    status: "paid",
+  };
+  assert.equal((await service.grantGameCoins(order)).alreadyGranted, false);
+  assert.equal(state.calls.at(-1).settlement, true);
+  state.auditFailure = true;
+  assert.equal((await service.repairGameCoinOrder(order)).status, "fulfilled");
+  await assert.rejects(
+    service.gameCoinSnapshot(PLAYER),
+    (error) => error.code === "GAME_WALLET_DISABLED",
+  );
+  const before = state.calls.length;
+  await assert.rejects(
+    service.grantGameCoins({
+      ...order,
+      gameWallet: { ...order.gameWallet, targetId: "b".repeat(64) },
+    }),
+    /unavailable/,
+  );
+  assert.equal(state.calls.length, before);
+});
+test("approved import snapshots counters, unknown old IDs cannot grant, second save never reimports", async () => {
+  const { service, state } = harness();
+  let imported = false;
+  state.rows = (name, args) => {
+    if (name === "wallet_balance")
+      return [
+        {
+          ready: imported,
+          coins: imported ? 700 : null,
+          version: imported ? 1 : 0,
+          lifetime_gold_earned: 200,
+          lifetime_gold_spent: 100,
+        },
+      ];
+    if (name === "import_wallet") {
+      imported = true;
+      assert.equal(args.at(-2), 200);
+      assert.equal(args.at(-1), 100);
+      return [{ ready: true, coins: 700, version: 1 }];
+    }
+    throw new Error(name);
+  };
+  const input = {
+    gold: 200,
+    saveHash: "a".repeat(64),
+    lifetimeGoldEarned: 200,
+    lifetimeGoldSpent: 100,
+    completedContracts: ["ShopKeeperContract"],
+    unlockedAchievements: ["ACH_001"],
+  };
+  assert.equal((await service.importGameWallet(PLAYER, input)).ready, true);
+  const mutation = state.calls.find((c) => c.name === "import_wallet");
+  assert.equal(mutation.args[6], 200);
+  assert.equal(mutation.args[7], 500);
+  assert.ok(mutation.args[10].includes("contract:ShopKeeper"));
+  await service.importGameWallet(PLAYER, { ...input, gold: 999 });
+  assert.equal(state.calls.filter((c) => c.name === "import_wallet").length, 1);
+});
+test("catalog purchase always uses server price and exposes locked status words", async () => {
+  const { service, state } = harness();
+  const item = catalog.gameCatalog.items[0],
+    op = "11111111-2222-3333-4444-555555555555";
+  state.rows = (name, args) =>
+    name === "purchase"
+      ? [
+          {
+            result: {
+              operationId: op,
+              status: "fulfilled",
+              coins: 600,
+              version: 6,
+              entitlement: JSON.parse(args.at(-1)),
+            },
+          },
+        ]
+      : [];
+  const result = await service.purchaseGameItem(PLAYER, {
+    operationId: op,
+    targetKind: "cosmetic",
+    targetId: item.itemId,
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(state.calls[0].args.at(-2), item.price);
+  assert.equal(result.entitlement.cosmeticId, item.cosmeticId);
+  state.rows = () => [
+    { result: { operationId: op, status: "already-owned", coins: 600, version: 6 } },
+  ];
+  assert.equal((await service.gamePurchaseStatus(PLAYER, op)).status, "already_owned");
+  state.rows = () => [
+    {
+      result: {
+        operationId: op,
+        status: "rejected",
+        reason: "insufficient-coins",
+        coins: 0,
+        version: 6,
+      },
+    },
+  ];
+  assert.equal((await service.gamePurchaseStatus(PLAYER, op)).status, "insufficient_funds");
+});
+test("unknown catalog purchase writes permanent rejection proof rather than leaving an ambiguous 400", async () => {
+  const { service, state } = harness();
+  const op = "11111111-2222-3333-4444-555555555555";
+  state.rows = (name) => {
+    assert.equal(name, "reject_purchase");
+    return [{ result: { operationId: op, status: "rejected", reason: "invalid-catalog" } }];
+  };
+  await assert.rejects(
+    service.purchaseGameItem(PLAYER, {
+      operationId: op,
+      targetKind: "cosmetic",
+      targetId: "UNKNOWN",
+    }),
+    (error) => error.status === 400 && error.terminal === true && error.operationId === op,
+  );
+});
+test("opaque shop link verification rejects wrong browser account and expired links", async () => {
+  const { service, state } = harness();
+  const token = "a".repeat(43);
+  state.rows = () => [
+    {
+      player_id: PLAYER,
+      currency: "diamonds",
+      expires_at: new Date(Date.now() + 100000).toISOString(),
+    },
+  ];
+  assert.equal((await service.assertGameShopLink(token, PLAYER)).currency, "diamonds");
+  state.rows = () => [
+    {
+      player_id: "AAAA",
+      currency: "diamonds",
+      expires_at: new Date(Date.now() + 100000).toISOString(),
+    },
+  ];
+  await assert.rejects(service.assertGameShopLink(token, PLAYER), (error) => error.status === 409);
+  state.rows = () => [
+    { player_id: PLAYER, currency: "diamonds", expires_at: new Date(Date.now() - 1).toISOString() },
+  ];
+  await assert.rejects(service.assertGameShopLink(token, PLAYER), (error) => error.status === 410);
+  state.rows = () => [];
+  await assert.rejects(service.assertGameShopLink(token, PLAYER), (error) => error.status === 410);
+  state.calls.length = 0;
+  await assert.rejects(service.assertGameShopLink("bad", PLAYER), (error) => error.status === 400);
+  assert.equal(state.calls.length, 0);
+});
+test("opaque navigation is independent of wallet activation and does not expose account credentials", async () => {
+  const { service, state } = harness();
+  state.enabled = false;
+  state.installed = false;
+  state.rows = (name, args) => {
+    if (name === "link_issue") {
+      assert.equal(args[2], PLAYER);
+      assert.match(args[3], /^[a-f0-9]{64}$/);
+      return [{ expires_at: new Date(Date.now() + 60000).toISOString() }];
+    }
+    return [
+      {
+        player_id: PLAYER,
+        currency: "coins",
+        expires_at: new Date(Date.now() + 60000).toISOString(),
+      },
+    ];
+  };
+  const link = await service.issueGameShopLink(PLAYER, "coins");
+  assert.match(link.token, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(link.currency, "coins");
+  assert.equal((await service.assertGameShopLink(link.token, PLAYER)).valid, true);
+  assert.deepEqual(
+    state.calls.map((call) => call.name),
+    ["link_issue", "link_read"],
+  );
+  assert.ok(state.calls.every((call) => call.navigation === true));
+  assert.equal(state.enabled, false);
+  assert.equal(state.installed, false);
+  state.navigationReady = false;
+  state.calls.length = 0;
+  await assert.rejects(service.issueGameShopLink(PLAYER, "coins"), (error) => error.status === 503);
+  await assert.rejects(
+    service.assertGameShopLink(link.token, PLAYER),
+    (error) => error.status === 503,
+  );
+  assert.equal(state.calls.length, 0);
+});
+function apiHarness(env = {}) {
+  const h = harness();
+  const calls = [];
+  let authentications = 0;
+  const methods = {};
+  for (const name of [
+    "gameWallet",
+    "gameEntitlements",
+    "gamePurchaseStatus",
+    "grantGameRewards",
+    "importGameWallet",
+    "purchaseGameItem",
+    "assertGameShopLink",
+  ])
+    methods[name] = async (...args) => {
+      calls.push({ name, args });
+      return { ready: true, coins: 700, diamonds: 7, version: 1 };
+    };
+  methods.GamePurchaseRejected = h.service.GamePurchaseRejected;
+  methods.issueGameShopLink = async (...args) => {
+    calls.push({ name: "issueGameShopLink", args });
+    return { token: "a".repeat(43), currency: args[1], expiresAt: "2026-10-10T12:00:00Z" };
+  };
+  const api = load(
+    "api.server.ts",
+    {
+      "../playfab/admin-client.server.ts": {
+        AdminApiError,
+        object: (n) => (n && typeof n === "object" ? n : {}),
+      },
+      "../payments/player-auth.server.ts": {
+        authenticatePaymentPlayer: async (request) => {
+          authentications++;
+          if (request.headers.get("authorization") !== "Bearer fixture")
+            throw new AdminApiError(401, "Sign in required.");
+          return { playFabId: PLAYER };
+        },
+      },
+      "./config.server.ts": h.config,
+      "./service.server.ts": methods,
+    },
+    { PUBLIC_APP_URL: "https://civil-craft.vercel.app", NODE_ENV: "production", ...env },
+  );
+  const request = (path, method = "GET", input, authorized = true) =>
+    new Request(`https://civil-craft.vercel.app${path}`, {
+      method,
+      headers: {
+        ...(authorized ? { authorization: "Bearer fixture" } : {}),
+        ...(input ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(input ? { body: JSON.stringify(input) } : {}),
+    });
+  return { api, calls, request, state: h.state, methods, authentications: () => authentications };
+}
+test("API disabled guard and unknown/method routes perform no authentication or fallback SSR", async () => {
+  const h = apiHarness();
+  h.state.enabled = false;
+  h.state.installed = false;
+  assert.equal((await h.api.handleGameWalletRequest(h.request("/api/game/wallet"))).status, 503);
+  const disabled = await h.api.handleGameWalletRequest(h.request("/api/game/wallet"));
+  assert.equal((await disabled.json()).code, "GAME_WALLET_DISABLED");
+  assert.equal(h.authentications(), 0);
+  assert.equal((await h.api.handleGameWalletRequest(h.request("/api/game/unknown"))).status, 404);
+  assert.equal(
+    (await h.api.handleGameWalletRequest(h.request("/api/game/import", "POST", {}))).status,
+    404,
+  );
+  assert.equal(
+    (await h.api.handleGameWalletRequest(h.request("/api/game/wallet", "POST", {}))).status,
+    405,
+  );
+  assert.equal(await h.api.handleGameWalletRequest(h.request("/api/other")), null);
+});
+test("API import uses locked wallet/import endpoint and owner identity from session only", async () => {
+  const h = apiHarness();
+  const input = {
+    gold: 200,
+    saveHash: "a".repeat(64),
+    lifetimeGoldEarned: 200,
+    lifetimeGoldSpent: 100,
+  };
+  const response = await h.api.handleGameWalletRequest(
+    h.request("/api/game/wallet/import", "POST", input),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(h.calls[0].name, "importGameWallet");
+  assert.equal(h.calls[0].args[0], PLAYER);
+  for (const [key, value] of Object.entries({
+    "cache-control": "no-store",
+    vary: "Authorization",
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+  }))
+    assert.equal(response.headers.get(key), value);
+  assert.equal(
+    (
+      await h.api.handleGameWalletRequest(
+        h.request("/api/game/wallet/import", "POST", { ...input, playFabId: "OTHER" }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await h.api.handleGameWalletRequest(h.request("/api/game/wallet", "GET", undefined, false)))
+      .status,
+    401,
+  );
+});
+test("shop-link API returns only opaque link and internal post-login destination", async () => {
+  const h = apiHarness();
+  const response = await h.api.handleGameWalletRequest(
+    h.request("/api/game/shop-link", "POST", { currency: "diamonds" }),
+  );
+  const value = await response.json();
+  assert.equal(value.currency, "diamonds");
+  const url = new URL(value.url);
+  assert.equal(url.origin, "https://civil-craft.vercel.app");
+  assert.equal(url.pathname, "/login");
+  assert.equal(
+    url.searchParams.get("redirect"),
+    `/dashboard/shop?currency=diamonds&gameLink=${"a".repeat(43)}`,
+  );
+  assert.ok(!value.url.includes(PLAYER) && !value.url.includes("fixture"));
+});
+test("shop-link API stays authenticated with wallet disabled while monetary endpoints remain closed", async () => {
+  const h = apiHarness();
+  h.state.enabled = false;
+  h.state.installed = false;
+  for (const currency of ["coins", "diamonds"]) {
+    const response = await h.api.handleGameWalletRequest(
+      h.request("/api/game/shop-link", "POST", { currency }),
+    );
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).currency, currency);
+  }
+  const verified = await h.api.handleGameWalletRequest(
+    h.request(`/api/game/shop-link?token=${"a".repeat(43)}`),
+  );
+  assert.equal(verified.status, 200);
+  assert.equal(h.calls.at(-1).args[1], PLAYER);
+  for (const [key, value] of Object.entries({
+    "cache-control": "no-store",
+    "referrer-policy": "no-referrer",
+    vary: "Authorization",
+  }))
+    assert.equal(verified.headers.get(key), value);
+  assert.equal(
+    (
+      await h.api.handleGameWalletRequest(
+        h.request("/api/game/shop-link", "POST", { currency: "coins" }, false),
+      )
+    ).status,
+    401,
+  );
+  for (const authorization of ["Bearer expired", "Bearer admin-session", "Basic fixture"]) {
+    const response = await h.api.handleGameWalletRequest(
+      new Request("https://civil-craft.vercel.app/api/game/shop-link", {
+        method: "POST",
+        headers: { authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({ currency: "coins" }),
+      }),
+    );
+    assert.equal(response.status, 401);
+  }
+  assert.equal(
+    (
+      await h.api.handleGameWalletRequest(
+        h.request("/api/game/shop-link", "POST", { currency: "coins", playFabId: "AAAA" }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await h.api.handleGameWalletRequest(
+        h.request("/api/game/shop-link", "POST", { currency: "other" }),
+      )
+    ).status,
+    400,
+  );
+  const authenticated = h.authentications();
+  for (const path of [
+    "/api/game/wallet",
+    "/api/game/wallet/import",
+    "/api/game/rewards",
+    "/api/game/purchases",
+  ]) {
+    const response = await h.api.handleGameWalletRequest(
+      h.request(
+        path,
+        path === "/api/game/wallet" ? "GET" : "POST",
+        path === "/api/game/wallet" ? undefined : {},
+      ),
+    );
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).code, "GAME_WALLET_DISABLED");
+  }
+  assert.equal(h.authentications(), authenticated);
+  assert.ok(
+    h.calls.every((call) => ["issueGameShopLink", "assertGameShopLink"].includes(call.name)),
+  );
+});
+test("main shop origin defaults safely and rejects every wrong production origin", async () => {
+  const fallback = apiHarness({ PUBLIC_APP_URL: "", PUBLIC_SITE_URL: "" });
+  const value = await (
+    await fallback.api.handleGameWalletRequest(
+      fallback.request("/api/game/shop-link", "POST", { currency: "coins" }),
+    )
+  ).json();
+  assert.equal(new URL(value.url).origin, "https://civil-craft.vercel.app");
+  for (const origin of [
+    "https://civil-craft-website.vercel.app",
+    "https://attacker.invalid",
+    "http://civil-craft.vercel.app",
+    "https://civil-craft.vercel.app/path",
+    "https://civil-craft.vercel.app?x=1",
+    "https://user:password@civil-craft.vercel.app",
+    "http://localhost:3000",
+  ]) {
+    const h = apiHarness({ PUBLIC_APP_URL: origin });
+    const response = await h.api.handleGameWalletRequest(
+      h.request("/api/game/shop-link", "POST", { currency: "coins" }),
+    );
+    assert.equal(response.status, 503, origin);
+    assert.equal(h.calls.length, 0, origin);
+  }
+  const local = apiHarness({ PUBLIC_APP_URL: "http://localhost:3000", NODE_ENV: "development" });
+  const response = await local.api.handleGameWalletRequest(
+    local.request("/api/game/shop-link", "POST", { currency: "diamonds" }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(new URL((await response.json()).url).origin, "http://localhost:3000");
+});
+test("machine codes are emitted only for trusted readiness failures, not lookalike provider errors", async () => {
+  const h = apiHarness();
+  h.methods.gameWallet = async () => {
+    throw new GameWalletReadinessError("GAME_WALLET_NOT_READY");
+  };
+  const response = await h.api.handleGameWalletRequest(h.request("/api/game/wallet"));
+  assert.equal((await response.json()).code, "GAME_WALLET_NOT_READY");
+  h.methods.gameWallet = async () => {
+    const error = new AdminApiError(503, "Game wallet is not enabled.");
+    error.code = "GAME_WALLET_DISABLED";
+    throw error;
+  };
+  assert.equal(
+    Object.hasOwn(
+      await (await h.api.handleGameWalletRequest(h.request("/api/game/wallet"))).json(),
+      "code",
+    ),
+    false,
+  );
+});
+test("purchase API forbids supplied price/credits and returns only durable terminal proof", async () => {
+  const h = apiHarness(),
+    op = "11111111-2222-3333-4444-555555555555";
+  assert.equal(
+    (
+      await h.api.handleGameWalletRequest(
+        h.request("/api/game/purchases", "POST", {
+          operationId: op,
+          targetKind: "cosmetic",
+          targetId: "hat",
+          price: 1,
+        }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(h.calls.length, 0);
+  h.methods.purchaseGameItem = async () => {
+    throw new h.methods.GamePurchaseRejected(op);
+  };
+  const response = await h.api.handleGameWalletRequest(
+    h.request("/api/game/purchases", "POST", {
+      operationId: op,
+      targetKind: "cosmetic",
+      targetId: "UNKNOWN",
+    }),
+  );
+  const result = await response.json();
+  assert.equal(response.status, 400);
+  assert.equal(result.terminal, true);
+  assert.equal(result.operationId, op);
+});
+test("legacy gate safe failures release; uncertain external attempt retains; receipt proof permits release", async () => {
+  for (const mode of ["read", "uncertain", "confirmed"]) {
+    const calls = [];
+    const legacy = load("legacy.server.ts", {
+      "../playfab/admin-client.server.ts": {
+        AdminApiError,
+        object: (n) => n,
+        playFabAdmin: async () => ({}),
+      },
+      "../playfab/premium-wallet.server.ts": { resolvePremiumEntity: async () => ENTITY },
+      "../payments/coin-receipts.server.ts": {
+        getCoinReceiptStatus: async () => (mode === "confirmed" ? "granted" : "pending"),
+      },
+      "../payments/products.ts": {
+        normalizeOrderReward: () => ({ rewardCurrency: "CO", rewardAmount: 100 }),
+      },
+      "./config.server.ts": {
+        isLegacyCoinGateRequired: () => true,
+        requireGameWalletSettlementReady: () => CONFIG,
+      },
+      "./database.server.ts": {
+        walletIdentity: () => [CONFIG.databaseId, "17FA03", PLAYER, ENTITY.Id, ENTITY.Type],
+        walletInteger: Number,
+        walletUnavailable: () => new AdminApiError(503, "Unavailable"),
+        walletCall: async (name) => {
+          calls.push(name);
+          return [{ acquired: true, released: true }];
+        },
+      },
+      "./catalog.server.ts": catalog,
+      "./gate-context.server.ts": gateContext,
+      "./receipt-authority.server.ts": {},
+    });
+    await assert.rejects(
+      legacy.withLegacyCoinGate(PLAYER, async () => {
+        if (mode !== "read")
+          gateContext.markLegacyCoinMutationAttempted({
+            orderId: "order",
+            playFabId: PLAYER,
+            currencyCode: "CO",
+            rewardAmount: 100,
+          });
+        throw new AdminApiError(503, "Safe service failure");
+      }),
+      /Safe service failure/,
+    );
+    assert.equal(calls.includes("gate_release"), mode !== "uncertain");
+  }
+});
+
+test("lost atomic import response releases only with imported marker proof", async () => {
+  for (const committed of [true, false]) {
+    const calls = [];
+    const legacy = load("legacy.server.ts", {
+      "../playfab/admin-client.server.ts": {
+        AdminApiError,
+        object: (n) => n,
+        playFabAdmin: async () => ({}),
+      },
+      "../playfab/premium-wallet.server.ts": { resolvePremiumEntity: async () => ENTITY },
+      "../payments/coin-receipts.server.ts": { getCoinReceiptStatus: async () => "absent" },
+      "../payments/products.ts": {
+        normalizeOrderReward: () => ({ rewardCurrency: "CO", rewardAmount: 100 }),
+      },
+      "./config.server.ts": {
+        isLegacyCoinGateRequired: () => true,
+        requireGameWalletSettlementReady: () => CONFIG,
+      },
+      "./database.server.ts": {
+        walletIdentity: () => [CONFIG.databaseId, "17FA03", PLAYER, ENTITY.Id, ENTITY.Type],
+        walletInteger: Number,
+        walletUnavailable: () => new AdminApiError(503, "Unavailable"),
+        walletCall: async (name) => {
+          calls.push(name);
+          return name === "wallet_balance"
+            ? [{ ready: committed }]
+            : [{ acquired: true, released: true }];
+        },
+      },
+      "./catalog.server.ts": catalog,
+      "./gate-context.server.ts": gateContext,
+      "./receipt-authority.server.ts": {},
+    });
+    await assert.rejects(
+      legacy.withAccountGate(PLAYER, "import", async () => {
+        gateContext.markGameWalletImportAttempted();
+        throw new AdminApiError(503, "Lost response");
+      }),
+      /Lost response/,
+    );
+    assert.equal(calls.includes("gate_release"), committed);
+  }
+});

@@ -6,10 +6,21 @@ import { getOrder, markEventProcessed, updateOrderStatus } from "./orders.server
 import { retrievePayMongoCheckout, verifyPayMongoSignature } from "./paymongo.server.ts";
 import type { PaymentOrder } from "./types.ts";
 import {
+  assertCoinFulfillmentAvailable,
+  CoinFulfillmentMaintenance,
+} from "./coin-maintenance.server.ts";
+import {
   CoinGrantReviewRequired,
   getCoinReceiptStatus,
   grantCoinsOnce,
 } from "./coin-receipts.server.ts";
+import {
+  grantGameCoins,
+  isGameWalletInstalled,
+  recordLegacyCoinGrant,
+  repairGameCoinOrder,
+  withLegacyCoinGate,
+} from "../game-wallet/index.server.ts";
 
 export function getCoinsCurrencyCode(): string {
   const code = (process.env["PLAYFAB_COINS_CURRENCY_CODE"] || "CO").trim().toUpperCase();
@@ -96,6 +107,7 @@ export function coinGrantInput(order: PaymentOrder) {
   const reward = normalizeOrderReward(order);
   if (
     reward.rewardCurrency !== "CO" ||
+    order.gameWallet !== undefined ||
     ![1, 2].includes(order.coinReceiptVersion ?? 0) ||
     (order.coinReceiptVersion === 1 && order.coinReceipt !== undefined) ||
     (order.coinReceiptVersion === 2 && order.coinReceipt?.storage !== "postgres")
@@ -112,14 +124,22 @@ export function coinGrantInput(order: PaymentOrder) {
 
 export async function repairPaymentOrder(order: PaymentOrder): Promise<PaymentOrder> {
   if (normalizeOrderReward(order).rewardCurrency === "DI") return repairDiamondOrder(order);
+  assertCoinFulfillmentAvailable();
+  // Provider selection belongs to the immutable order, including after feature rollback.
+  if (order.coinReceiptVersion === 3) return repairGameCoinOrder(order);
   if (![1, 2].includes(order.coinReceiptVersion ?? 0)) {
     // Historic fulfilled orders/history remain unchanged. Unfulfilled legacy orders
     // may already have been credited by the old code and cannot be granted safely.
-    return order.status === "fulfilled" || order.status === "pending"
+    return (!isGameWalletInstalled() && order.status === "fulfilled") || order.status === "pending"
       ? order
       : { ...order, fulfillmentReviewRequired: true };
   }
-  const status = await getCoinReceiptStatus(coinGrantInput(order));
+  const readReceipt = async () => {
+    const status = await getCoinReceiptStatus(coinGrantInput(order));
+    if (status === "granted") await recordLegacyCoinGrant(order);
+    return status;
+  };
+  const status = await withLegacyCoinGate(order.playFabId, readReceipt);
   if (status === "granted") {
     const fulfilledAt = order.fulfilledAt || new Date().toISOString();
     const updates = {
@@ -303,12 +323,15 @@ export async function processPayMongoWebhook(
     }
     verifiedPayment = true;
     const reward = normalizeOrderReward(order);
+    if (reward.rewardCurrency === "CO") assertCoinFulfillmentAvailable();
     order = await repairPaymentOrder(order);
+    if (reward.rewardCurrency === "CO" && order.fulfillmentReviewRequired)
+      throw new CoinGrantReviewRequired();
     if (order.status === "fulfilled") {
       await markEventProcessed(event.id, order.orderId);
       return { status: 200, body: { success: true, idempotent: true, orderId: order.orderId } };
     }
-    if (reward.rewardCurrency === "CO" && ![1, 2].includes(order.coinReceiptVersion ?? 0))
+    if (reward.rewardCurrency === "CO" && ![1, 2, 3].includes(order.coinReceiptVersion ?? 0))
       throw new CoinGrantReviewRequired();
     const paidAt = order.paidAt || new Date().toISOString();
     await updateOrderStatus(order.orderId, {
@@ -321,8 +344,17 @@ export async function processPayMongoWebhook(
     if (reward.rewardCurrency === "DI") {
       const result = await grantDiamonds(diamondGrantInput(order));
       alreadyGranted = result.alreadyGranted;
+    } else if (order.coinReceiptVersion === 3) {
+      const result = await grantGameCoins(order);
+      alreadyGranted = result.alreadyGranted;
     } else {
-      const result = await grantCoinsOnce(coinGrantInput(order));
+      const confirmedOrder = order;
+      const grantLegacy = async () => {
+        const result = await grantCoinsOnce(coinGrantInput(confirmedOrder));
+        await recordLegacyCoinGrant(confirmedOrder);
+        return result;
+      };
+      const result = await withLegacyCoinGate(order.playFabId, grantLegacy);
       alreadyGranted = result.alreadyGranted;
     }
     await updateOrderStatus(order.orderId, {
@@ -348,6 +380,8 @@ export async function processPayMongoWebhook(
       },
     };
   } catch (error) {
+    // Retryable fence: do not acknowledge the event or mutate even audit order status.
+    if (error instanceof CoinFulfillmentMaintenance) return fail(503, error.message);
     const status = error instanceof AdminApiError ? error.status : 503;
     const reviewRequired = error instanceof CoinGrantReviewRequired;
     if (order && (verifiedPayment || status === 400)) {

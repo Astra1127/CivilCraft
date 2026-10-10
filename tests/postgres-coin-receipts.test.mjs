@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
+import * as coinMaintenance from "../src/lib/payments/coin-maintenance.server.ts";
 
 const MAX_COINS = 2_147_483_647;
 const PLAYER = "ABC123";
@@ -179,7 +180,10 @@ function fixture(options = {}) {
     Buffer,
     setTimeout: (callback) => setTimeout(callback, 0),
     require(id) {
+      if (id.endsWith("coin-maintenance.server.ts")) return coinMaintenance;
       if (id === "node:crypto") return crypto;
+      if (id.endsWith("gate-context.server.ts"))
+        return { markLegacyCoinMutationAttempted: () => {} };
       if (id.endsWith("admin-client.server.ts")) return admin;
       if (id.endsWith("premium-wallet.server.ts")) return entity;
       if (id.endsWith("currency-database.server.ts")) return database;
@@ -278,6 +282,23 @@ test("legacy receipt-absent grants and status checks never dispatch into Postgre
   assert.equal(f.claimed, 0);
   assert.equal(f.entityObjectCalls, 0);
   assert.equal(f.increments, 0);
+});
+
+test("a bound version2 database receipt settles after new Coin checkout is disabled or points elsewhere", async () => {
+  const f = fixture();
+  f.env.COIN_CHECKOUT_ENABLED = "false";
+  f.env.COIN_RECEIPTS_STORAGE = "entity-objects";
+  assert.equal((await f.api.grantCoinsOnce(input())).alreadyGranted, false);
+  assert.equal(await f.api.getCoinReceiptStatus(input()), "granted");
+  assert.equal((await f.api.grantCoinsOnce(input())).alreadyGranted, true);
+  assert.equal(f.increments, 1);
+  assert.equal(f.entityObjectCalls, 0);
+  assert.equal(f.claimed, 1);
+  await assert.rejects(
+    f.api.assertCoinCheckoutReady(input("new-order")),
+    (error) => error.status === 503,
+  );
+  assert.equal(f.increments, 1);
 });
 
 for (const receipt of [

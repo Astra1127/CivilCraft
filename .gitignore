@@ -8,6 +8,9 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+
+# Privileged unapproved wallet review snapshots: never commit player receipt data.
+.private-wallet-review/
 dist
 dist-ssr
 .output
@@ -39,6 +42,14 @@ dist-ssr
 .vercel
 .env*
 !.env.example
+.vercel
+.env*
+!.env.example
+
 # Private credential handoffs, including copies under docs/
 env.production-handoff.md
+
+# Local game builds are uploaded to object storage, never committed to Git.
+Apk/
+*.apk
 node_modules
