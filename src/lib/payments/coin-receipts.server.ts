@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { assertCoinFulfillmentAvailable } from "./coin-maintenance.server.ts";
 import { markLegacyCoinMutationAttempted } from "../game-wallet/gate-context.server.ts";
 import {
   AdminApiError,
@@ -111,6 +112,7 @@ export function coinReceiptVerificationFingerprint(): string {
 
 /** Coins stay in classic CO; only permanent server-only claims change storage. */
 export function requireCoinCheckoutReady(): void {
+  assertCoinFulfillmentAvailable();
   if (coinReceiptStorage() === "postgres") {
     if (!enabled("COIN_CHECKOUT_ENABLED"))
       throw new AdminApiError(503, "Coin checkout requires verified purchase-receipt setup.");
@@ -406,6 +408,7 @@ export async function assertClassicCurrencyConfigured(): Promise<void> {
 }
 
 export async function assertCoinCheckoutReady(input: CoinGrantInput): Promise<void> {
+  assertCoinFulfillmentAvailable();
   validate(input, true);
   const entity = await resolvePremiumEntity(input.playFabId);
   if (input.receipt) {
@@ -433,6 +436,7 @@ export async function getCoinReceiptStatus(
 }
 
 async function creditClassicCoins(input: CoinGrantInput): Promise<void> {
+  assertCoinFulfillmentAvailable();
   // Durable account gates keep uncertain external credits fenced, but ordinary
   // receipt/preflight read failures must remain safely retryable.
   markLegacyCoinMutationAttempted(input);
@@ -524,6 +528,7 @@ async function grantDatabaseCoins(
 
 /** Classic AddUserVirtualCurrency is NOT idempotent. An uncertain grant is never repeated. */
 export async function grantCoinsOnce(input: CoinGrantInput): Promise<{ alreadyGranted: boolean }> {
+  assertCoinFulfillmentAvailable();
   validate(input);
   const entity = await resolvePremiumEntity(input.playFabId);
   if (input.receipt) return grantDatabaseCoins(input, entity);

@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import vm from "node:vm";
 import { test } from "node:test";
 import ts from "typescript";
+import * as coinMaintenance from "../src/lib/payments/coin-maintenance.server.ts";
 
 const require = createRequire(import.meta.url);
 const ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
@@ -50,6 +51,7 @@ function load(path, mocks, environment = {}) {
       process: { env: environment },
       require(name) {
         if (name in mocks) return mocks[name];
+        if (name.endsWith("coin-maintenance.server.ts")) return coinMaintenance;
         if (name === "node:crypto") return require(name);
         throw new Error(`Unexpected import ${name}`);
       },
@@ -78,6 +80,8 @@ function harness() {
     receiptReads: [],
     gateEvents: [],
     legacyRecords: new Set(),
+    auditWrites: 0,
+    eventsProcessed: 0,
   };
   const admin = {
     AdminApiError: ApiError,
@@ -89,12 +93,15 @@ function harness() {
     getOrder: async (id) => state.orders.get(id) ?? null,
     saveOrder: async (order) => state.orders.set(order.orderId, plain(order)),
     updateOrderStatus: async (id, updates) => {
+      state.auditWrites++;
       if (state.failure) throw new ApiError(503, "Audit unavailable");
       const next = { ...state.orders.get(id), ...updates };
       state.orders.set(id, next);
       return next;
     },
-    markEventProcessed: async () => {},
+    markEventProcessed: async () => {
+      state.eventsProcessed++;
+    },
     listOrdersForPlayer: async (id) =>
       [...state.orders.values()]
         .filter((order) => order.playFabId.toUpperCase() === id.toUpperCase())
@@ -863,4 +870,100 @@ test("order projection updates cannot overwrite database identities or reward sn
   assert.equal(stored.premiumWallet.databaseId, ID);
   assert.deepEqual(stored.gameWallet, GAME_WALLET);
   assert.equal(stored.rewardAmount, 500);
+});
+
+async function duringCoinMaintenance(task) {
+  const previous = process.env.COIN_FULFILLMENT_MAINTENANCE;
+  process.env.COIN_FULFILLMENT_MAINTENANCE = "true";
+  try {
+    return await task();
+  } finally {
+    if (previous === undefined) delete process.env.COIN_FULFILLMENT_MAINTENANCE;
+    else process.env.COIN_FULFILLMENT_MAINTENANCE = previous;
+  }
+}
+
+test("Coin maintenance fences new legacy/v3 checkout without affecting Diamond checkout", async () => {
+  await duringCoinMaintenance(async () => {
+    for (const enabled of [false, true]) {
+      const h = harness();
+      h.setCurrency("CO");
+      h.state.gameEnabled = enabled;
+      assert.equal((await h.checkout()).status, 503);
+      assert.equal(h.state.checkouts, 0);
+      assert.equal(h.state.orders.size, 0);
+    }
+    const diamond = harness();
+    assert.equal((await diamond.checkout()).status, 200);
+    assert.equal(diamond.state.checkouts, 1);
+  });
+});
+
+test("paid v1/v2/v3 Coin webhooks retry with 503 and no grant, gate, receipt, audit or event acknowledgement", async () => {
+  for (const version of [1, 2, 3]) {
+    const h = harness();
+    h.state.gameEnabled = version === 3;
+    h.state.gameInstalled = version !== 3;
+    const order = {
+      ...historyOrder("CC-DATABASE-ORDER", version, "2026-10-01T00:00:00.000Z"),
+      productId: "package",
+      PayMongoCheckoutSessionId: "cs_test",
+      PayMongoReferenceNumber: "CC-DATABASE-ORDER",
+      status: "pending",
+    };
+    h.state.orders.set(order.orderId, order);
+    await duringCoinMaintenance(async () => {
+      const result = await h.webhook();
+      assert.equal(result.status, 503);
+      assert.equal(result.body.success, false);
+      assert.equal(h.state.grants, 0);
+      assert.equal(h.state.gameGrants, 0);
+      assert.equal(h.state.gateEntries, 0);
+      assert.equal(h.state.coinReads, 0);
+      assert.equal(h.state.receiptReads.length, 0);
+      assert.equal(h.state.auditWrites, 0);
+      assert.equal(h.state.eventsProcessed, 0);
+      assert.deepEqual(h.state.orders.get(order.orderId), order);
+    });
+    assert.equal((await h.webhook()).status, 200);
+    assert.equal((await h.webhook()).status, 200);
+    assert.equal(h.state.grants + h.state.gameGrants, 1);
+  }
+});
+
+test("Coin order/history repair is nonmutating during maintenance, including fulfilled missing overlays", async () => {
+  await duringCoinMaintenance(async () => {
+    for (const version of [1, 2, 3]) {
+      const h = harness();
+      h.state.gameInstalled = true;
+      const order = {
+        ...historyOrder("CC-REPAIR", version, "2026-10-01T00:00:00.000Z"),
+        status: "fulfilled",
+      };
+      h.state.orders.set(order.orderId, order);
+      const single = await h.api.handlePaymentsRequest(
+        new Request("https://civilcraft.example/api/payments/paymongo/order?id=CC-REPAIR"),
+      );
+      assert.equal(single.status, 503);
+      assert.equal((await historyRequest(h)).status, 503);
+      assert.equal(h.state.gateEntries, 0);
+      assert.equal(h.state.coinReads, 0);
+      assert.equal(h.state.receiptReads.length, 0);
+      assert.equal(h.state.auditWrites, 0);
+      assert.equal(h.state.legacyRecords.size, 0);
+      assert.deepEqual(h.state.orders.get(order.orderId), order);
+    }
+  });
+});
+
+test("Diamond verified payments continue during Coin-only maintenance", async () => {
+  const h = harness();
+  await h.checkout();
+  await duringCoinMaintenance(async () => {
+    assert.equal((await h.webhook()).status, 200);
+    assert.equal((await h.webhook()).status, 200);
+    assert.equal(h.state.grants, 1);
+    assert.equal(h.state.orders.get("CC-DATABASE-ORDER").status, "fulfilled");
+    assert.equal(h.state.eventsProcessed, 2);
+  });
 });

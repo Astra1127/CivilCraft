@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import vm from "node:vm";
 import ts from "typescript";
+import * as coinMaintenance from "../src/lib/payments/coin-maintenance.server.ts";
 
 const MAX_COINS = 2_147_483_647;
 const PLAYER = "ABC123";
@@ -179,6 +180,7 @@ function fixture(options = {}) {
     Buffer,
     setTimeout: (callback) => setTimeout(callback, 0),
     require(id) {
+      if (id.endsWith("coin-maintenance.server.ts")) return coinMaintenance;
       if (id === "node:crypto") return crypto;
       if (id.endsWith("gate-context.server.ts"))
         return { markLegacyCoinMutationAttempted: () => {} };

@@ -200,6 +200,79 @@ separate deliberate administrator write, which this implementation task did not
 perform. If completeness cannot be established, do not approve or invent receipt
 coverage to make a balance available.
 
+### Private, unapproved Entity snapshot collection
+
+`scripts/collect-game-wallet-entity-review.mjs` fills the collection step only.
+It verifies the existing restricted v1 runtime health, resolves the account's Entity
+with `Admin/GetUserAccountInfo`, and reads `Object/GetObjects`. It does not call
+wallet/import/gate/credit routines, set flags, generate approval SQL, or approve an
+absent, empty, or nonempty snapshot. Only the original Coin receipt set is exported;
+unrelated Entity Objects and credentials never enter the candidate or console output.
+
+With privately supplied credentials, keep the wallet disabled and create the
+Git-ignored `.private-wallet-review` directory in this checkout. Pass the selected
+account's PlayFab ID and an **absolute** JSON path inside that existing directory:
+
+```sh
+node --env-file=.env scripts/collect-game-wallet-entity-review.mjs --player <PlayFabId> --output <absolute-path-to-.private-wallet-review/candidate.unapproved.json>
+```
+
+The private path is validated and reserved exclusively **before** privileged reads;
+existing files are never replaced. A failed collection can leave an empty reserved
+file, which is not a candidate or an approval; use a new output filename on retry.
+Restrict the
+directory's Windows ACL to the authorized operators, and do not paste or attach
+the financial/account snapshot to public tickets. Every candidate says
+`UNAPPROVED`, `historicalCompleteness: NOT_ESTABLISHED`, and
+`deploymentBinding: NOT_ATTESTED`. Local v1 health/config is not proof that the live
+main Vercel deployment uses that physical target. An operator must separately
+verify the deployed target and review archives/retired consumers; pending or
+uncertain receipts remain blocked. Recollect after any source change and compare
+the exact canonical hash before a separately approved immutable manifest write.
+
+### Maintenance inventory before additive installation
+
+Record the deployed main and fork projects, active webhook URLs, cron/retry jobs,
+and other PlayFab classic `CO` writers. Both enabled test webhooks must be accounted
+for: disabling only new checkout does not stop paid webhook settlement or retries.
+The server-only `COIN_FULFILLMENT_MAINTENANCE` flag defaults to `false`. Deploy this
+compatibility code to every active consumer first, then deliberately set the flag
+to `true` and redeploy those consumers during the approved maintenance window.
+Unlike `COIN_CHECKOUT_ENABLED=false`, this fence blocks new Coin checkout **and**
+Coin webhook settlement, permanent receipt/overlay repair, and authenticated
+order/history repair. Verified paid Coin events return retryable503 without writing
+order/audit status or acknowledging the event. Diamond checkout and fulfillment
+continue through the unchanged original protocol. Do not delete or cancel pending
+payments; release the fence only after reviewed setup/cutover. Verify that provider
+retry delivery remains available; its retry window can expire during maintenance.
+Review failed/expired retries and use only separately validated original signed
+payment evidence for any deliberate replay. Never infer payment or credit from a
+success-page URL, cached order status, current balance, or a timestamp. Original
+immutable order bindings and permanent receipts still govern exactly-once credit.
+
+An environment redeploy cannot stop an already running old worker, an old immutable
+deployment URL, a different service, or an administrative writer. Drain those
+workers, retire/upgrade the consumers and verify provider retry routing before
+claiming quiescence. This flag never writes a quiescence attestation or permits an
+import. Keep `GAME_WALLET_ENABLED=false` throughout installation and approval.
+
+An old fork must be upgraded with the reviewed compatibility/gate code or its
+handlers deliberately retired and outstanding immutable orders drained/reviewed.
+Do not merely set `GAME_WALLET_LEGACY_HANDLERS_QUIESCED=true` on main while an old
+consumer remains active. Keep Diamonds' original storage and receipts intact.
+
+Do not use authenticated `GET /api/payments/paymongo/order` or
+`GET /api/payments/paymongo/player-orders` as read-only readiness probes: they can
+repair fulfillment/audit state and, after cutover, missing Coin overlays. Use the
+read-only SQL/capability verifier and payment-provider webhook inventory instead.
+For the confirmed `v1 exists / v3 absent` target, the additive installation is
+`database/game-wallet-v3.sql`, **not** the upgrade and never `currency-schema.sql`.
+Apply it only in the coordinated owner-approved maintenance window. A separate
+reviewed existing restricted runtime login may receive membership in the new
+NOLOGIN group; do not use `neondb_owner`, schema owners, or Neon superuser logins.
+Then verify both original v1 and exact v3 restricted capabilities before setting
+any attestations. DDL alone does not establish manifests, quiescence or game QA.
+
 Capability fingerprint revision `permanent-receipt-coverage-v1` invalidates earlier
 v3 setup attestations. Health now checks the exact 16 function signatures and rejects
 even extra executable overloads of an otherwise allowed name. The verifier confirms
@@ -218,7 +291,7 @@ money. Handler maintenance/quiescence is still required before any DDL approval.
 ## Local verification (no external services)
 
 ```sh
-node --test tests/game-wallet-catalog.test.ts tests/game-wallet-backend.test.mjs tests/game-wallet-sql.test.mjs tests/game-wallet-verifier.test.mjs tests/game-wallet-receipt-authority.test.mjs tests/game-wallet-coverage-upgrade.test.mjs
+node --test tests/game-wallet-catalog.test.ts tests/game-wallet-backend.test.mjs tests/game-wallet-sql.test.mjs tests/game-wallet-verifier.test.mjs tests/game-wallet-receipt-authority.test.mjs tests/game-wallet-coverage-upgrade.test.mjs tests/game-wallet-entity-review-collector.test.mjs
 npx tsc --noEmit
 ```
 
