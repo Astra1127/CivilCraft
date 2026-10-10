@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { assertCoinFulfillmentAvailable } from "./coin-maintenance.server.ts";
+import { markLegacyCoinMutationAttempted } from "../game-wallet/gate-context.server.ts";
 import {
   AdminApiError,
   adminGameConfig,
@@ -110,13 +112,25 @@ export function coinReceiptVerificationFingerprint(): string {
 
 /** Coins stay in classic CO; only permanent server-only claims change storage. */
 export function requireCoinCheckoutReady(): void {
-  const { titleId, secret } = adminGameConfig();
+  assertCoinFulfillmentAvailable();
   if (coinReceiptStorage() === "postgres") {
-    if (!secret || !enabled("COIN_CHECKOUT_ENABLED"))
+    if (!enabled("COIN_CHECKOUT_ENABLED"))
       throw new AdminApiError(503, "Coin checkout requires verified purchase-receipt setup.");
-    requireCurrencyDatabaseReady();
+    requirePostgresCoinSettlementReady();
     return;
   }
+  requireEntityCoinSettlementReady();
+}
+
+function requirePostgresCoinSettlementReady(): void {
+  if (!adminGameConfig().secret)
+    throw new AdminApiError(503, "Coin purchase receipts are temporarily unavailable.");
+  requireCurrencyDatabaseReady();
+}
+
+/** Historic Entity orders retain this verified provider, never the new-checkout default. */
+function requireEntityCoinSettlementReady(): void {
+  const { titleId, secret } = adminGameConfig();
   if (
     !secret ||
     premiumWalletConfig().storage !== "entity-objects" ||
@@ -136,8 +150,8 @@ export function requireCoinCheckoutReady(): void {
     throw new AdminApiError(503, "Coin checkout requires verified purchase-receipt setup.");
 }
 
-function validate(input: CoinGrantInput): void {
-  requireCoinCheckoutReady();
+function validate(input: CoinGrantInput, newCheckout = false): void {
+  if (newCheckout) requireCoinCheckoutReady();
   if (
     !/^[a-z0-9_-]{1,128}$/i.test(input.orderId) ||
     !/^[a-f0-9]{1,32}$/i.test(input.playFabId) ||
@@ -147,11 +161,11 @@ function validate(input: CoinGrantInput): void {
     input.rewardAmount > MAX_COINS
   )
     throw new AdminApiError(503, "Coin order configuration requires review.");
-  const storage = coinReceiptStorage();
   if (input.receipt !== undefined) {
+    requirePostgresCoinSettlementReady();
     const config = requireCurrencyDatabaseReady();
     if (
-      storage !== "postgres" ||
+      (newCheckout && coinReceiptStorage() !== "postgres") ||
       !input.receipt ||
       Object.keys(input.receipt).length !== 4 ||
       input.receipt.storage !== "postgres" ||
@@ -161,9 +175,14 @@ function validate(input: CoinGrantInput): void {
       input.currencyCode !== "CO"
     )
       throw new CoinGrantReviewRequired();
-  } else if (storage === "postgres") {
-    // A version-1 Entity receipt is never reinterpreted as a new database claim.
-    throw new CoinGrantReviewRequired();
+  } else {
+    if (newCheckout && coinReceiptStorage() === "postgres") throw new CoinGrantReviewRequired();
+    try {
+      requireEntityCoinSettlementReady();
+    } catch {
+      // An unavailable historic provider requires review, never a replacement claim.
+      throw new CoinGrantReviewRequired();
+    }
   }
 }
 
@@ -389,7 +408,8 @@ export async function assertClassicCurrencyConfigured(): Promise<void> {
 }
 
 export async function assertCoinCheckoutReady(input: CoinGrantInput): Promise<void> {
-  validate(input);
+  assertCoinFulfillmentAvailable();
+  validate(input, true);
   const entity = await resolvePremiumEntity(input.playFabId);
   if (input.receipt) {
     const grant = databaseInput(input, entity);
@@ -416,6 +436,10 @@ export async function getCoinReceiptStatus(
 }
 
 async function creditClassicCoins(input: CoinGrantInput): Promise<void> {
+  assertCoinFulfillmentAvailable();
+  // Durable account gates keep uncertain external credits fenced, but ordinary
+  // receipt/preflight read failures must remain safely retryable.
+  markLegacyCoinMutationAttempted(input);
   const result = await playFabAdmin("Server/AddUserVirtualCurrency", {
     PlayFabId: input.playFabId,
     VirtualCurrency: input.currencyCode,
@@ -504,6 +528,7 @@ async function grantDatabaseCoins(
 
 /** Classic AddUserVirtualCurrency is NOT idempotent. An uncertain grant is never repeated. */
 export async function grantCoinsOnce(input: CoinGrantInput): Promise<{ alreadyGranted: boolean }> {
+  assertCoinFulfillmentAvailable();
   validate(input);
   const entity = await resolvePremiumEntity(input.playFabId);
   if (input.receipt) return grantDatabaseCoins(input, entity);

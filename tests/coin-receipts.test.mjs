@@ -10,6 +10,7 @@ import {
   requireCoinCheckoutReady,
 } from "../src/lib/payments/coin-receipts.server.ts";
 import { premiumWalletVerificationFingerprint } from "../src/lib/playfab/premium-wallet.server.ts";
+import { walletGateContext } from "../src/lib/game-wallet/gate-context.server.ts";
 
 const PLAYER = "ABC123";
 const ENTITY = { Id: "FACE123", Type: "title_player_account" };
@@ -30,6 +31,7 @@ const environment = {
   PLAYFAB_COINS_RECEIPTS_VERIFIED: "true",
   PLAYFAB_COINS_VERIFIED_TITLE_ID: "17FA03",
   PLAYFAB_COINS_VERIFIED_CONFIG_SHA256: "",
+  COIN_RECEIPTS_STORAGE: "entity-objects",
 };
 const previous = Object.fromEntries(Object.keys(environment).map((key) => [key, process.env[key]]));
 const originalFetch = globalThis.fetch;
@@ -92,6 +94,14 @@ beforeEach(() => {
       return ok(options.inventory ?? { VirtualCurrency: { CO: balance, ZZ: 7 } });
     }
     if (path === "/Server/AddUserVirtualCurrency") {
+      if (options.expectedGatePhase) {
+        assert.equal(
+          options.expectedGatePhase.monetaryAttempted,
+          true,
+          "Mark the durable gate before dispatching money",
+        );
+        assert.equal(options.expectedGatePhase.legacyInput.orderId, body.CustomTags.orderId);
+      }
       assert.equal(headers.get("X-SecretKey"), process.env.PLAYFAB_SECRET_KEY);
       assert.deepEqual(body, {
         PlayFabId: PLAYER,
@@ -532,4 +542,56 @@ test("invalid server order values are rejected before reads or money writes", as
   ])
     await assert.rejects(grantCoinsOnce({ ...input(), ...value }), /configuration.*review/i);
   assert.equal(calls.length, 0);
+});
+
+test("a verified v1 receipt remains the original Entity authority after the new-checkout default changes", async () => {
+  await grantCoinsOnce(input());
+  process.env.COIN_RECEIPTS_STORAGE = "postgres";
+  assert.equal(await getCoinReceiptStatus(input()), "granted");
+  assert.deepEqual(await grantCoinsOnce(input()), { alreadyGranted: true });
+  assert.equal(grantCalls, 1);
+  // New checkout uses its new default; it cannot opportunistically choose this old provider.
+  await assert.rejects(
+    assertCoinCheckoutReady(input("new-order")),
+    (error) => error.status === 503,
+  );
+  assert.equal(grantCalls, 1);
+});
+
+test("legacy gate phases distinguish receipt-only reads from an attempted external credit", async () => {
+  const phase = { monetaryAttempted: false, importAttempted: false };
+  options.expectedGatePhase = phase;
+  await walletGateContext.run(phase, () => grantCoinsOnce(input()));
+  assert.equal(phase.monetaryAttempted, true);
+  assert.equal(phase.legacyInput.orderId, "coin-order-1");
+  const readOnly = { monetaryAttempted: false, importAttempted: false };
+  await walletGateContext.run(readOnly, () => getCoinReceiptStatus(input()));
+  await walletGateContext.run(readOnly, () => grantCoinsOnce(input()));
+  assert.equal(readOnly.monetaryAttempted, false);
+  assert.equal(grantCalls, 1);
+});
+
+test("a lost classic credit response leaves its gate phase marked as monetarily uncertain", async () => {
+  const phase = { monetaryAttempted: false, importAttempted: false };
+  options.expectedGatePhase = phase;
+  options.grantTimeoutAfterCredit = true;
+  await assert.rejects(
+    walletGateContext.run(phase, () => grantCoinsOnce(input())),
+    reviewed,
+  );
+  assert.equal(phase.monetaryAttempted, true);
+  assert.equal(phase.legacyInput.orderId, "coin-order-1");
+  assert.equal(receipt().state, "pending");
+  assert.equal(grantCalls, 1);
+});
+
+test("an unavailable original v1 verification is held for review, never converted into a database grant", async () => {
+  await grantCoinsOnce(input());
+  process.env.COIN_RECEIPTS_STORAGE = "postgres";
+  process.env.PLAYFAB_COINS_VERIFIED_CONFIG_SHA256 = "not-verified";
+  const before = calls.length;
+  await assert.rejects(getCoinReceiptStatus(input()), reviewed);
+  await assert.rejects(grantCoinsOnce(input()), reviewed);
+  assert.equal(calls.length, before);
+  assert.equal(grantCalls, 1);
 });

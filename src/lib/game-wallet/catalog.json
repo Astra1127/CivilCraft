@@ -1,0 +1,237 @@
+{
+  "version": 1,
+  "goldPenaltyPerFail": 50,
+  "items": [
+    {
+      "itemId": "shop_cosmetic_Accessory_LargeCap",
+      "cosmeticId": "Accessory_LargeCap",
+      "price": 100,
+      "name": "Large Cap"
+    },
+    {
+      "itemId": "shop_cosmetic_Accessory_SafetyVest",
+      "cosmeticId": "Accessory_SafetyVest",
+      "price": 100,
+      "name": "Safety Vest"
+    },
+    {
+      "itemId": "shop_cosmetic_Accessory_SmallCap",
+      "cosmeticId": "Accessory_SmallCap",
+      "price": 100,
+      "name": "Small Cap"
+    },
+    {
+      "itemId": "shop_cosmetic_EngineeringHardHat",
+      "cosmeticId": "EngineeringHardHat",
+      "price": 100,
+      "name": "Engineering Hard Hat"
+    },
+    {
+      "itemId": "shop_cosmetic_Hair_1",
+      "cosmeticId": "Hair_1",
+      "price": 100,
+      "name": "Side Sweep"
+    },
+    {
+      "itemId": "shop_cosmetic_Hair_2",
+      "cosmeticId": "Hair_2",
+      "price": 100,
+      "name": "Short Layers"
+    },
+    { "itemId": "shop_cosmetic_Hair_4", "cosmeticId": "Hair_4", "price": 100, "name": "Bob Cut" },
+    { "itemId": "shop_cosmetic_Hair_5", "cosmeticId": "Hair_5", "price": 100, "name": "Wavy Hair" },
+    { "itemId": "shop_cosmetic_Hair_6", "cosmeticId": "Hair_6", "price": 100, "name": "Crew Cut" },
+    {
+      "itemId": "shop_cosmetic_Hair_8",
+      "cosmeticId": "Hair_8",
+      "price": 100,
+      "name": "Curly Hair"
+    },
+    {
+      "itemId": "shop_cosmetic_Pants_Cargo",
+      "cosmeticId": "Pants_Cargo",
+      "price": 100,
+      "name": "Cargo Pants"
+    },
+    {
+      "itemId": "shop_cosmetic_Pants_Rolled",
+      "cosmeticId": "Pants_Rolled",
+      "price": 100,
+      "name": "Rolled Pants"
+    },
+    {
+      "itemId": "shop_cosmetic_Pants_Skirt",
+      "cosmeticId": "Pants_Skirt",
+      "price": 100,
+      "name": "Work Skirt"
+    },
+    {
+      "itemId": "shop_cosmetic_Pants_Straight",
+      "cosmeticId": "Pants_Straight",
+      "price": 100,
+      "name": "Straight Pants"
+    },
+    {
+      "itemId": "shop_cosmetic_Shirt_Blouse",
+      "cosmeticId": "Shirt_Blouse",
+      "price": 100,
+      "name": "Blouse"
+    },
+    {
+      "itemId": "shop_cosmetic_Shirt_Polo",
+      "cosmeticId": "Shirt_Polo",
+      "price": 100,
+      "name": "Polo"
+    },
+    {
+      "itemId": "shop_cosmetic_Shirt_Tee1",
+      "cosmeticId": "Shirt_Tee1",
+      "price": 100,
+      "name": "Work Tee"
+    },
+    {
+      "itemId": "shop_cosmetic_Shirt_Tee2",
+      "cosmeticId": "Shirt_Tee2",
+      "price": 100,
+      "name": "Pocket Tee"
+    },
+    {
+      "itemId": "shop_cosmetic_Shoes_Black",
+      "cosmeticId": "Shoes_Black",
+      "price": 100,
+      "name": "Black Shoes"
+    },
+    {
+      "itemId": "shop_cosmetic_Shoes_Boots1",
+      "cosmeticId": "Shoes_Boots1",
+      "price": 100,
+      "name": "Work Boots"
+    },
+    {
+      "itemId": "shop_cosmetic_Shoes_Boots2",
+      "cosmeticId": "Shoes_Boots2",
+      "price": 100,
+      "name": "Heavy Boots"
+    },
+    {
+      "itemId": "shop_cosmetic_Shoes_Sandals",
+      "cosmeticId": "Shoes_Sandals",
+      "price": 100,
+      "name": "Sandals"
+    }
+  ],
+  "contracts": [
+    {
+      "id": "TUT_CONTRACT1",
+      "aliases": ["Bhan Tutorial 1"],
+      "budget": 75000,
+      "baseGold": 500,
+      "isTutorial": true,
+      "allowedMaterialIds": ["Wood Road", "Pier"]
+    },
+    {
+      "id": "TUT_CONTRACT2",
+      "aliases": ["Bhan Tutorial 2"],
+      "budget": 75000,
+      "baseGold": 500,
+      "isTutorial": true,
+      "allowedMaterialIds": ["Wood Road", "Beam"]
+    },
+    {
+      "id": "ShopKeeper",
+      "aliases": ["ShopKeeperContract"],
+      "budget": 75000,
+      "baseGold": 500,
+      "isTutorial": true,
+      "allowedMaterialIds": ["Wood Road", "Beam", "Pier"]
+    },
+    {
+      "id": "ReedSideInspection",
+      "aliases": ["Reed Side Inspection"],
+      "budget": 100000,
+      "baseGold": 250,
+      "isTutorial": false,
+      "allowedMaterialIds": []
+    },
+    {
+      "id": "ReedsContract",
+      "aliases": ["Reed's Contract"],
+      "budget": 100000,
+      "baseGold": 500,
+      "isTutorial": false,
+      "allowedMaterialIds": []
+    },
+    {
+      "id": "MainContractSilas",
+      "aliases": [],
+      "budget": 200000,
+      "baseGold": 500,
+      "isTutorial": false,
+      "allowedMaterialIds": []
+    },
+    {
+      "id": "SilasMainContract",
+      "aliases": ["SilasContract"],
+      "budget": 200000,
+      "baseGold": 500,
+      "isTutorial": false,
+      "allowedMaterialIds": []
+    },
+    {
+      "id": "VanceSideRealignment",
+      "aliases": ["Vance Side Realignment"],
+      "budget": 75000,
+      "baseGold": 250,
+      "isTutorial": false,
+      "allowedMaterialIds": []
+    },
+    {
+      "id": "VancesContract",
+      "aliases": ["Vance's Contract"],
+      "budget": 150000,
+      "baseGold": 500,
+      "isTutorial": false,
+      "allowedMaterialIds": []
+    }
+  ],
+  "materials": [
+    { "id": "Beam", "name": "Beam", "price": 500 },
+    { "id": "Concrete Road", "name": "Concrete Road", "price": 500 },
+    { "id": "ConcreteBeam", "name": "ConcreteBeam", "price": 1000 },
+    { "id": "Pier", "name": "Pier", "price": 500 },
+    { "id": "RopeMaterial", "name": "RopeMaterial", "price": 500 },
+    { "id": "Wood Road", "name": "Wood Road", "price": 500 }
+  ],
+  "achievements": [
+    { "id": "ACH_001", "bonusGold": 150 },
+    { "id": "ACH_002", "bonusGold": 150 },
+    { "id": "ACH_003", "bonusGold": 1200 },
+    { "id": "ACH_004", "bonusGold": 2000 },
+    { "id": "ACH_005", "bonusGold": 5000 },
+    { "id": "ACH_006", "bonusGold": 100 },
+    { "id": "ACH_007", "bonusGold": 250 },
+    { "id": "ACH_008", "bonusGold": 500 },
+    { "id": "ACH_009", "bonusGold": 900 },
+    { "id": "ACH_010", "bonusGold": 1500 },
+    { "id": "ACH_011", "bonusGold": 300 },
+    { "id": "ACH_012", "bonusGold": 600 },
+    { "id": "ACH_013", "bonusGold": 1000 },
+    { "id": "ACH_014", "bonusGold": 0 },
+    { "id": "ACH_015", "bonusGold": 500 },
+    { "id": "ACH_016", "bonusGold": 1000 },
+    { "id": "ACH_017", "bonusGold": 700 },
+    { "id": "ACH_018", "bonusGold": 200 },
+    { "id": "ACH_019", "bonusGold": 600 },
+    { "id": "ACH_020", "bonusGold": 2500 },
+    { "id": "ACH_021", "bonusGold": 2500 },
+    { "id": "ACH_022", "bonusGold": 1000 },
+    { "id": "ACH_023", "bonusGold": 1000 },
+    { "id": "ACH_024", "bonusGold": 500 },
+    { "id": "ACH_025", "bonusGold": 400 },
+    { "id": "ACH_026", "bonusGold": 400 },
+    { "id": "ACH_027", "bonusGold": 350 },
+    { "id": "ACH_028", "bonusGold": 400 },
+    { "id": "ACH_029", "bonusGold": 500 },
+    { "id": "ACH_030", "bonusGold": 5000 }
+  ]
+}

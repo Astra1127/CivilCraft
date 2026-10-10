@@ -152,3 +152,23 @@ test("Vite development respects disabled PostgreSQL checkout and existing runtim
   assert.match(env.CURRENCY_DATABASE_URL, /existing-private-secret/);
   assert.doesNotMatch(JSON.stringify(config.define), /CURRENCY_DATABASE|private-secret/);
 });
+
+test("Coin maintenance loads only into the dev server and preserves explicit shell overrides", () => {
+  for (const value of ["true", "false"]) {
+    const { env, config } = configuration({ fileEnv: { COIN_FULFILLMENT_MAINTENANCE: value } });
+    assert.equal(env.COIN_FULFILLMENT_MAINTENANCE, value);
+    assert.doesNotMatch(JSON.stringify(config.define), /COIN_FULFILLMENT_MAINTENANCE/);
+  }
+  const { env } = configuration({
+    fileEnv: { COIN_FULFILLMENT_MAINTENANCE: "true" },
+    shellEnv: { COIN_FULFILLMENT_MAINTENANCE: "false" },
+  });
+  assert.equal(env.COIN_FULFILLMENT_MAINTENANCE, "false");
+  assert.equal(configuration().env.COIN_FULFILLMENT_MAINTENANCE, undefined);
+  const production = configuration({
+    command: "build",
+    fileEnv: { COIN_FULFILLMENT_MAINTENANCE: "true" },
+  });
+  assert.equal(production.env.COIN_FULFILLMENT_MAINTENANCE, undefined);
+  assert.doesNotMatch(JSON.stringify(production.config.define), /COIN_FULFILLMENT_MAINTENANCE/);
+});
