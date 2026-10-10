@@ -488,6 +488,7 @@ test("legacy gate safe failures release; uncertain external attempt retains; rec
       },
       "./catalog.server.ts": catalog,
       "./gate-context.server.ts": gateContext,
+      "./receipt-authority.server.ts": {},
     });
     await assert.rejects(
       legacy.withLegacyCoinGate(PLAYER, async () => {
@@ -537,6 +538,7 @@ test("lost atomic import response releases only with imported marker proof", asy
       },
       "./catalog.server.ts": catalog,
       "./gate-context.server.ts": gateContext,
+      "./receipt-authority.server.ts": {},
     });
     await assert.rejects(
       legacy.withAccountGate(PLAYER, "import", async () => {

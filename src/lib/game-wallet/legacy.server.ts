@@ -5,9 +5,15 @@ import { getCoinReceiptStatus, type CoinGrantInput } from "../payments/coin-rece
 import { normalizeOrderReward } from "../payments/products.ts";
 import { isLegacyCoinGateRequired, requireGameWalletSettlementReady } from "./config.server.ts";
 import { walletCall, walletIdentity, walletInteger, walletUnavailable } from "./database.server.ts";
-import { digest } from "./catalog.server.ts";
 import type { GameCoinOrder } from "./types.ts";
 import { walletGateContext, type WalletGatePhase } from "./gate-context.server.ts";
+import {
+  originalEntityCoinReceipts,
+  permanentReceiptForOrder,
+  postgresCoinReceipts,
+  sourceCoverage,
+  type CoveredCoinReceipt,
+} from "./receipt-authority.server.ts";
 
 /** Used only when the caller proves no monetary statement/external mutation was dispatched. */
 export class GateBeforeMutationError extends Error {
@@ -35,19 +41,6 @@ export function legacyCoinInput(order: GameCoinOrder): CoinGrantInput {
     rewardAmount: reward.rewardAmount,
     ...(order.coinReceiptVersion === 2 ? { receipt: order.coinReceipt! } : {}),
   };
-}
-export function legacyFingerprint(order: GameCoinOrder): string {
-  const input = legacyCoinInput(order);
-  return digest({
-    protocol: "legacy-overlay-v3",
-    titleId: requireGameWalletSettlementReady().databaseId,
-    orderId: input.orderId,
-    player: input.playFabId.toUpperCase(),
-    amount: input.rewardAmount,
-    code: input.currencyCode,
-    version: order.coinReceiptVersion,
-    receipt: input.receipt ?? null,
-  });
 }
 export async function withAccountGate<T>(
   playFabId: string,
@@ -122,14 +115,17 @@ export async function recordLegacyCoinGrant(
     );
   const config = requireGameWalletSettlementReady();
   const entity = await resolvePremiumEntity(order.playFabId);
+  const source = await permanentReceiptForOrder(order, entity);
+  const coverage = sourceCoverage(config, order.playFabId, entity, source);
   const rows = await walletCall(
     "credit",
     [
       ...walletIdentity(config, order.playFabId, entity),
       order.orderId,
       input.rewardAmount,
-      legacyFingerprint(order),
+      coverage.fingerprint,
       "legacy",
+      coverage.orderId,
     ],
     true,
   );
@@ -144,39 +140,23 @@ export async function recordLegacyCoinGrant(
 /** Invoked while holding the durable migration gate. Never treats audit status as grant proof. */
 export async function legacyOpeningSnapshot(
   playFabId: string,
-): Promise<{ classic: number; covered: Array<{ orderId: string; fingerprint: string }> }> {
-  const title = await playFabAdmin("Admin/GetTitleInternalData");
-  const covered: Array<{ orderId: string; fingerprint: string }> = [];
-  for (const [key, value] of Object.entries(object(title["Data"]))) {
-    if (!key.startsWith("civilcraft.website.v1.payment-orders.")) continue;
-    let order: GameCoinOrder;
-    try {
-      if (typeof value !== "string") throw new Error();
-      order = JSON.parse(value) as GameCoinOrder;
-      if (!order || typeof order.playFabId !== "string") throw new Error();
-    } catch {
-      throw new AdminApiError(
-        503,
-        "Legacy order audit contains an invalid record; migration requires review.",
-      );
-    }
-    if (order.playFabId.toUpperCase() !== playFabId.toUpperCase()) continue;
-    const reward = normalizeOrderReward(order);
-    if (reward.rewardCurrency !== "CO" || order.coinReceiptVersion === 3) continue;
-    if (![1, 2].includes(order.coinReceiptVersion ?? 0)) {
-      if (order.status !== "pending" && order.status !== "cancelled" && order.status !== "failed")
-        throw new AdminApiError(503, "Historic Coin grant requires review before wallet import.");
-      continue;
-    }
-    const status = await getCoinReceiptStatus(legacyCoinInput(order));
-    if (status === "pending" || (status === "absent" && order.status === "fulfilled"))
-      throw new AdminApiError(
-        503,
-        "Uncertain legacy Coin grant blocks wallet import; contact support.",
-      );
-    if (status === "granted")
-      covered.push({ orderId: order.orderId, fingerprint: legacyFingerprint(order) });
-  }
+): Promise<{ classic: number; covered: CoveredCoinReceipt[] }> {
+  const config = requireGameWalletSettlementReady();
+  const entity = await resolvePremiumEntity(playFabId);
+  const pg = await postgresCoinReceipts(playFabId, entity);
+  // Orphan PG pending claims block before any inventory lookup or Entity fallback.
+  if (pg.some((row) => row.state === "pending"))
+    throw new AdminApiError(
+      503,
+      "Uncertain permanent Coin claim blocks wallet import; contact support.",
+    );
+  const original = await originalEntityCoinReceipts(playFabId, entity);
+  if (original.some((row) => row.state === "pending"))
+    throw new AdminApiError(
+      503,
+      "Uncertain original Entity Coin claim blocks wallet import; contact support.",
+    );
+  const covered = [...pg, ...original].map((row) => sourceCoverage(config, playFabId, entity, row));
   const inventory = await playFabAdmin("Server/GetUserInventory", { PlayFabId: playFabId });
   const currencies = inventory["VirtualCurrency"];
   if (!currencies || typeof currencies !== "object" || Array.isArray(currencies))

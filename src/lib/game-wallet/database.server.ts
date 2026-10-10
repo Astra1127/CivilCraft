@@ -24,6 +24,8 @@ const operations = new Set([
   "entitlements",
   "link_issue",
   "link_read",
+  "legacy_receipts",
+  "entity_manifest",
 ]);
 export function walletUnavailable(): AdminApiError {
   return new AdminApiError(503, MESSAGE);

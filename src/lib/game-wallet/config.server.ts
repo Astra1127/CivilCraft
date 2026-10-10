@@ -33,6 +33,7 @@ export function gameWalletVerificationFingerprint(): string {
         titleId: adminGameConfig().titleId.toUpperCase(),
         ...gameWalletConfig(),
         protocol: "unified-game-coins-atomic-ledger-v3",
+        capabilityRevision: "permanent-receipt-coverage-v1",
       }),
     )
     .digest("hex");

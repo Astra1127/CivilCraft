@@ -116,7 +116,7 @@ export async function grantGameCoins(order: GameCoinOrder): Promise<{ alreadyGra
   const input = orderInput(order);
   const rows = await walletCall(
     "credit",
-    [...input.identity, order.orderId, input.amount, input.fingerprint, "payment"],
+    [...input.identity, order.orderId, input.amount, input.fingerprint, "payment", null],
     true,
   );
   if (rows.length !== 1 || typeof rows[0]?.["already_granted"] !== "boolean")
