@@ -7,6 +7,16 @@ export interface CurrencyReward {
   rewardAmount: number;
 }
 
+/** Immutable version-3 destination; never selected again while fulfilling an order. */
+export interface GameWalletSnapshot {
+  storage: "postgres";
+  namespace: "civilcraft_game_wallet_v3";
+  databaseId: string;
+  targetId: string;
+  protocolVersion: 3;
+  entity: { Id: string; Type: "title_player_account" };
+}
+
 export type PremiumWalletSnapshot = { entity: { Id: string; Type: "title_player_account" } } & (
   | {
       storage: "entity-objects";
@@ -40,10 +50,11 @@ export interface PaymentOrder {
   rewardCurrency?: RewardCurrency | undefined;
   rewardAmount?: number | undefined;
   premiumWallet?: PremiumWalletSnapshot | undefined;
+  gameWallet?: GameWalletSnapshot | undefined;
   /** Snapshots the configured classic Coin code so later config changes cannot reroute it. */
   coinCurrencyCode?: string | undefined;
   /** Missing on historic orders: their unconfirmed grants must be reviewed, never replayed. */
-  coinReceiptVersion?: 1 | 2 | undefined;
+  coinReceiptVersion?: 1 | 2 | 3 | undefined;
   coinReceipt?:
     { storage: "postgres"; databaseId: string; targetId: string; schemaVersion: 1 } | undefined;
   fulfillmentReviewRequired?: boolean | undefined;

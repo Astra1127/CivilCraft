@@ -200,8 +200,8 @@ function PaymentSuccessPage() {
                 <p className="mt-2 text-sm text-muted-foreground">
                   Your {rewardLabel.toLowerCase()} have been added to your game account.
                   {reward?.rewardCurrency === "DI"
-                    ? " Unity’s Diamond display will be connected in the next phase."
-                    : " They are ready to use in-game."}
+                    ? " Return to Civil Craft to refresh your Diamond display. Diamonds cannot be spent in this update."
+                    : " Return to Civil Craft to refresh your Coins balance before spending."}
                 </p>
               </>
             ) : isFailed ? (
