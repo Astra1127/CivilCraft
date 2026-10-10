@@ -155,10 +155,70 @@ overlay. After definitive no-attempt, release only that known gate owner through
 `gate_release`; do not recycle/delete pending classic claims. Unknown outcomes stay
 held. Never broadly clear every gate, reset receipts, rerun Add, or refund on timeout.
 
+## Permanent-receipt coverage correction
+
+Migration discovery does **not** enumerate Title Internal Data order projections.
+The narrow v3 `legacy_receipts` SECURITY DEFINER function enumerates every permanent
+v2 CO receipt for the bound account/entity from the original v1 database, including
+orphaned granted and pending claims. Runtime receives EXECUTE only, never direct
+SELECT/CRUD on the original receipt tables. Original stored fingerprints are
+reconstructed with the original ordered JSON algorithm and current frozen
+installation/target/title/entity binding; a changed target or identity fails closed.
+Pending claims block **before** reading classic inventory.
+
+Original Entity v1 receipts are read from `civilcraft.coin-purchases.v1`, not found
+through order records. Discovery includes hashed orphan keys and is independent of
+today's Diamond provider, obsolete shared write-capacity assumptions, or free object
+slots. Coverage uses provider-qualified permanent keys (`postgres:<orderId>` or
+`entity-objects:<entityId>:order-<hash>`), source fingerprint, amount and entity.
+The historical SQL `legacy_coverage.order_id` column now stores that qualified key;
+it is not an order-projection identifier. Restoring a missing audit order and replaying
+its already-INCLUDED source cannot add the classic amount again.
+
+Every original Entity snapshot requires a separately approved immutable manifest,
+including **absent, empty and nonempty** snapshots. A current API policy denial
+proves current protection, not that historical receipts were never deleted or
+replaced. It cannot authorize completeness. The pure policy audit helper follows the
+strict existing unconditional deny interpretation but is not a runtime approval
+bypass, and migration does not perform an unnecessary policy request.
+
+The owner-only `entity_manifests` table binds title/player/entity, physical target,
+canonical full snapshot hash, normalized receipt set, approving identity and
+historical completeness evidence. Its data and approvals cannot be updated/deleted.
+There is no runtime INSERT privilege, approval function, API approval endpoint, or
+Boolean "assume no Entity history" flag. Migration requires the current privileged
+GetObjects snapshot to match the approved full receipt set/hash exactly. A mismatch,
+missing approval, malformed ledger, or pending claim leaves the account held.
+
+An authorized operator may privately collect source data using the original
+authenticated Entity service and the exported `parseOriginalEntityReceipts` /
+`entityAuthoritySnapshotHash` helpers. Approve only after reviewing historical
+server-only provenance, archives and all retired consumers. Merely observing an
+empty object today or a deny policy today is **not** sufficient evidence for an
+EMPTY manifest. Record the evidence and approver privately; approval requires a
+separate deliberate administrator write, which this implementation task did not
+perform. If completeness cannot be established, do not approve or invent receipt
+coverage to make a balance available.
+
+Capability fingerprint revision `permanent-receipt-coverage-v1` invalidates earlier
+v3 setup attestations. Health now checks the exact 16 function signatures and rejects
+even extra executable overloads of an otherwise allowed name. The verifier confirms
+schema/role/identity readiness, **not** player manifest approval or handler quiescence.
+
+For an already installed but unused older v3 capability, review
+`database/game-wallet-v3-receipt-coverage-upgrade.sql` instead of rerunning initial DDL.
+It holds exclusive locks on accounts, ledger, coverage, operations and entitlements
+before the unused-state check, retains all original v1/v3 history, and revokes the
+obsolete nine-argument credit overload. Imported accounts, any monetary/history
+records, or a held/uncertain gate abort the entire upgrade without changing data.
+Those installations need a separately reviewed permanent-authority backfill;
+this script deliberately does not reinterpret old audit-derived coverage or erase
+money. Handler maintenance/quiescence is still required before any DDL approval.
+
 ## Local verification (no external services)
 
 ```sh
-node --test tests/game-wallet-catalog.test.ts tests/game-wallet-backend.test.mjs tests/game-wallet-sql.test.mjs
+node --test tests/game-wallet-catalog.test.ts tests/game-wallet-backend.test.mjs tests/game-wallet-sql.test.mjs tests/game-wallet-verifier.test.mjs tests/game-wallet-receipt-authority.test.mjs tests/game-wallet-coverage-upgrade.test.mjs
 npx tsc --noEmit
 ```
 

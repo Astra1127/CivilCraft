@@ -270,13 +270,17 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       return jsonResponse(safeOrder(await repairPaymentOrder(order)));
     }
     const orders = await listOrdersForPlayer(playFabId);
-    const verifiedOrders = await Promise.all(
-      orders.map((order) =>
+    const verifiedOrders: PaymentOrder[] = [];
+    // Legacy repairs share this player's permanent migration/grant gate. Do not
+    // race them against each other or weaken that gate to assemble history.
+    // Return history only after every required receipt has been checked.
+    for (const order of orders) {
+      verifiedOrders.push(
         isGameWalletInstalled() || order.coinReceiptVersion === 3
-          ? repairPaymentOrder(order)
+          ? await repairPaymentOrder(order)
           : order,
-      ),
-    );
+      );
+    }
     return jsonResponse({ orders: verifiedOrders.map(safeOrder) });
   } catch (error) {
     const status = error instanceof AdminApiError ? error.status : 503;
