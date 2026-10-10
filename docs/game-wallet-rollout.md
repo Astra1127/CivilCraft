@@ -54,7 +54,35 @@ secrets, session tickets, or signed file URLs in browser code or command output.
 Turning ENABLED off after rollout is maintenance, **not migration rollback**:
 verified PG reads, old v3 settlement and legacy overlays remain bound to PG.
 Do not clear verification/identity flags to make new operations fall back to classic
-CO. Default all-false new paths perform no DB/PlayFab lookup; legacy helpers are no-ops.
+CO. Default all-false monetary wallet paths perform no DB/PlayFab lookup; legacy
+helpers are no-ops. Nonmonetary shop navigation has a separate capability described
+below; it must not set these wallet flags merely to open a browser.
+
+### Main-site shop navigation during wallet maintenance
+
+Account-bound shop links do not require activating account Coins, importing a save,
+or attesting legacy-handler quiescence. They require the existing verified v1
+currency-database configuration, configured PlayFab server authentication, and the
+actual installed v3 restricted-role/installation health check. The separate
+database caller allows only `link_issue` and `link_read`; it cannot call import,
+credit, reward, purchase, receipt, or account-gate functions. No SQL migration or
+new privilege is needed for this separation.
+
+Production game links target `https://civil-craft.vercel.app` only. Missing origin
+configuration uses that canonical public URL; a different configured production
+origin fails closed. Browser login and matching-account verification still apply,
+and checkout verifies the opaque expiring link again server-side. Links grant no
+login session or purchase authority. Coin checkout, settlement maintenance,
+imports, rewards, and signed-in spending retain their original guards.
+
+The game recognizes explicit disabled/not-ready wallet responses using fixed
+diagnostic messages, not arbitrary backend error text. During those known failures
+it may read `/api/player/currencies` to display the independently verified Diamond
+balance only. It ignores that endpoint's classic Coins and checkout-availability
+fields: they cannot populate game Coins, authorize spending, import a save, or mint
+an opening credit. A missing/failed Diamond read remains unavailable, not zero;
+account/session/title changes invalidate both displays. This read-only display
+does not allow Diamond spending.
 
 ## Cutover and one-time import
 
