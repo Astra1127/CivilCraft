@@ -73,6 +73,10 @@ function harness() {
     gameGrants: 0,
     gameReceipts: new Set(),
     gateDepth: 0,
+    gateEntries: 0,
+    maxGateDepth: 0,
+    receiptReads: [],
+    gateEvents: [],
     legacyRecords: new Set(),
   };
   const admin = {
@@ -91,7 +95,10 @@ function harness() {
       return next;
     },
     markEventProcessed: async () => {},
-    listOrdersForPlayer: async () => [],
+    listOrdersForPlayer: async (id) =>
+      [...state.orders.values()]
+        .filter((order) => order.playFabId.toUpperCase() === id.toUpperCase())
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
   };
   const coin = {
     assertClassicCurrencyConfigured: async () => {
@@ -108,7 +115,9 @@ function harness() {
     },
     getCoinReceiptStatus: async (input) => {
       state.coinReads++;
-      assert.deepEqual(plain(input.receipt), RECEIPT);
+      state.receiptReads.push(plain(input));
+      if (input.receipt !== undefined) assert.deepEqual(plain(input.receipt), RECEIPT);
+      if (state.receiptReadHook) await state.receiptReadHook(input);
       return state.receipts.has(input.orderId) ? "granted" : "absent";
     },
     grantCoinsOnce: async (input) => {
@@ -132,6 +141,7 @@ function harness() {
     },
     getDiamondBalance: async () => 0,
     hasDiamondReceipt: async (input) => {
+      state.receiptReads.push(plain(input));
       assert.deepEqual(plain(input.wallet), WALLET);
       return state.receipts.has(input.orderId);
     },
@@ -199,6 +209,9 @@ function harness() {
       return { alreadyGranted };
     },
     repairGameCoinOrder: async (order) => {
+      assert.equal(order.coinReceiptVersion, 3);
+      assert.deepEqual(plain(order.gameWallet), GAME_WALLET);
+      state.receiptReads.push({ orderId: order.orderId, gameWallet: plain(order.gameWallet) });
       if (state.gameReceipts.has(order.orderId))
         return { ...order, status: "fulfilled", fulfillmentReviewRequired: false };
       if (order.status === "fulfilled") throw new ApiError(503, "No permanent receipt");
@@ -206,10 +219,16 @@ function harness() {
     },
     withLegacyCoinGate: async (id, task) => {
       assert.equal(id, "ABC123");
+      if (state.gateDepth !== 0)
+        throw new ApiError(409, "This account has a pending wallet migration or legacy purchase.");
+      state.gateEntries++;
       state.gateDepth++;
+      state.maxGateDepth = Math.max(state.maxGateDepth, state.gateDepth);
+      state.gateEvents.push("acquire");
       try {
         return await task();
       } finally {
+        state.gateEvents.push("release");
         state.gateDepth--;
       }
     },
@@ -251,7 +270,11 @@ function harness() {
         listActiveProducts: async () => [],
       },
       "./player-auth.server.ts": {
-        authenticatePaymentPlayer: async () => ({ playFabId: "ABC123" }),
+        authenticatePaymentPlayer: async (request) => {
+          if (state.requireAuth && request.headers.get("Authorization") !== "Bearer owner-session")
+            throw new ApiError(401, "Player sign-in is required.");
+          return { playFabId: "ABC123" };
+        },
       },
     },
     { COIN_RECEIPTS_STORAGE: "postgres" },
@@ -300,6 +323,7 @@ function harness() {
   return {
     state,
     wallet,
+    gameWallet,
     orders,
     api,
     fulfillment,
@@ -310,6 +334,178 @@ function harness() {
     },
   };
 }
+
+function historyOrder(orderId, version, createdAt, currency = "CO") {
+  return {
+    orderId,
+    playFabId: "ABC123",
+    productId: `${currency.toLowerCase()}_500`,
+    expectedAmount: 5000,
+    expectedCoins: currency === "CO" ? 500 : 0,
+    rewardCurrency: currency,
+    rewardAmount: 500,
+    currency: "PHP",
+    status: "paid",
+    createdAt,
+    paidAt: createdAt,
+    fulfilledAt: null,
+    ...(currency === "DI"
+      ? { premiumWallet: { ...WALLET, entity: ENTITY } }
+      : version === 3
+        ? { coinReceiptVersion: 3, gameWallet: GAME_WALLET }
+        : {
+            coinReceiptVersion: version,
+            coinCurrencyCode: "CO",
+            ...(version === 2 ? { coinReceipt: RECEIPT } : {}),
+          }),
+  };
+}
+
+const historyRequest = (h, authorized = true) =>
+  h.api.handlePaymentsRequest(
+    new Request("https://civilcraft.example/api/payments/paymongo/player-orders", {
+      headers: authorized ? { Authorization: "Bearer owner-session" } : {},
+    }),
+  );
+
+test("installed history repairs multiple legacy Coin receipts sequentially under the exclusive account gate", async () => {
+  const h = harness();
+  h.state.gameInstalled = true;
+  h.state.gameEnabled = false; // Repair remains available during wallet maintenance.
+  h.state.receiptReadHook = async () => {
+    assert.equal(h.state.gateDepth, 1, "Receipt verification must remain inside the account gate");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(h.state.gateDepth, 1, "Keep the gate while waiting for its receipt provider");
+  };
+  for (const [id, version, date] of [
+    ["legacy-older", 1, "2026-10-01T00:00:00Z"],
+    ["legacy-newer", 2, "2026-10-02T00:00:00Z"],
+    ["legacy-newest", 2, "2026-10-03T00:00:00Z"],
+  ]) {
+    h.state.orders.set(id, historyOrder(id, version, date));
+    h.state.receipts.add(id);
+  }
+  const response = await historyRequest(h);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(
+    body.orders.map((order) => order.orderId),
+    ["legacy-newest", "legacy-newer", "legacy-older"],
+  );
+  assert.ok(body.orders.every((order) => order.status === "fulfilled"));
+  assert.equal(h.state.maxGateDepth, 1);
+  assert.equal(h.state.gateDepth, 0);
+  assert.equal(h.state.gateEntries, 3);
+  assert.deepEqual(h.state.gateEvents, [
+    "acquire",
+    "release",
+    "acquire",
+    "release",
+    "acquire",
+    "release",
+  ]);
+  assert.equal(h.state.legacyRecords.size, 3);
+  assert.equal(h.state.grants, 0, "History must not repeat any classic Coin grant");
+  assert.deepEqual(
+    h.state.receiptReads.find((input) => input.orderId === "legacy-newer").receipt,
+    RECEIPT,
+  );
+  assert.equal(
+    h.state.receiptReads.find((input) => input.orderId === "legacy-older").receipt,
+    undefined,
+  );
+});
+
+test("mixed v1/v2/v3 Coin and Diamond history retains date order and verified-owner-only data", async () => {
+  const h = harness();
+  h.state.requireAuth = true;
+  h.state.gameInstalled = true;
+  for (const [id, version, date, currency] of [
+    ["legacy-v1", 1, "2026-10-02T00:00:00Z", "CO"],
+    ["new-v3", 3, "2026-10-04T00:00:00Z", "CO"],
+    ["diamonds", 0, "2026-10-01T00:00:00Z", "DI"],
+    ["legacy-v2", 2, "2026-10-03T00:00:00Z", "CO"],
+  ]) {
+    h.state.orders.set(id, historyOrder(id, version, date, currency));
+    if (version === 3) h.state.gameReceipts.add(id);
+    else h.state.receipts.add(id);
+  }
+  h.state.orders.set("other-account", {
+    ...historyOrder("other-account", 2, "2026-10-05T00:00:00Z"),
+    playFabId: "BAD999",
+  });
+  const unauthenticated = await historyRequest(h, false);
+  assert.equal(unauthenticated.status, 401);
+  assert.equal(h.state.receiptReads.length, 0);
+  const response = await historyRequest(h);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(
+    body.orders.map((order) => order.orderId),
+    ["new-v3", "legacy-v2", "legacy-v1", "diamonds"],
+  );
+  assert.ok(body.orders.every((order) => order.status === "fulfilled"));
+  assert.equal(h.state.gateEntries, 2);
+  assert.equal(body.orders.find((order) => order.orderId === "diamonds").rewardCurrency, "DI");
+  for (const order of body.orders) {
+    for (const privateField of [
+      "playFabId",
+      "premiumWallet",
+      "gameWallet",
+      "coinReceipt",
+      "coinReceiptVersion",
+    ])
+      assert.equal(Object.hasOwn(order, privateField), false);
+  }
+});
+
+test("history does not bypass a gate held by another workflow and can retry after its safe release", async () => {
+  const h = harness();
+  h.state.gameInstalled = true;
+  h.state.orders.set("legacy-order", historyOrder("legacy-order", 2, "2026-10-01T00:00:00Z"));
+  h.state.receipts.add("legacy-order");
+  let release;
+  const reserved = new Promise((resolve) => {
+    release = resolve;
+  });
+  const workflow = h.gameWallet.withLegacyCoinGate("ABC123", async () => reserved);
+  assert.equal(h.state.gateDepth, 1);
+  const blocked = await historyRequest(h);
+  assert.equal(blocked.status, 409);
+  assert.equal(Object.hasOwn(await blocked.json(), "orders"), false);
+  assert.equal(h.state.receiptReads.length, 0);
+  assert.equal(h.state.legacyRecords.size, 0);
+  assert.equal(h.state.gateDepth, 1, "History cannot release another workflow's gate");
+  release();
+  await workflow;
+  const retry = await historyRequest(h);
+  assert.equal(retry.status, 200);
+  assert.equal((await retry.json()).orders[0].status, "fulfilled");
+  assert.equal(h.state.gateDepth, 0);
+});
+
+test("a failed receipt check returns an error, never partial or falsely verified history", async () => {
+  const h = harness();
+  h.state.gameInstalled = true;
+  for (const [id, date] of [
+    ["newer-good", "2026-10-02T00:00:00Z"],
+    ["older-unavailable", "2026-10-01T00:00:00Z"],
+  ]) {
+    h.state.orders.set(id, historyOrder(id, 2, date));
+    h.state.receipts.add(id);
+  }
+  h.state.receiptReadHook = async (input) => {
+    if (input.orderId === "older-unavailable")
+      throw new ApiError(503, "Receipt provider unavailable");
+  };
+  const response = await historyRequest(h);
+  assert.equal(response.status, 503);
+  const body = await response.json();
+  assert.equal(Object.hasOwn(body, "orders"), false);
+  assert.equal(h.state.orders.get("older-unavailable").status, "paid");
+  assert.equal(h.state.grants, 0);
+  assert.equal(h.state.gateDepth, 0);
+});
 
 test("Postgres Diamond checkout snapshots server account, database identity and reward; ignores browser monetary fields", async () => {
   const h = harness();

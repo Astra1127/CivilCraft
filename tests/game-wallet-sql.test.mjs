@@ -28,13 +28,18 @@ const identity = (player = "ABC123", entity = "FACE123") => [
   entity,
   "title_player_account",
 ];
-const call = async (name, args) =>
-  (
+const call = async (name, args) => {
+  const parameters =
+    name === "credit" && args.length === 9
+      ? [...args, args[8] === "legacy" ? `postgres:${args[5]}` : null]
+      : args;
+  return (
     await db.query(
-      `SELECT * FROM civilcraft_game_wallet_v3.${name}(${args.map((_, i) => `$${i + 1}`).join(",")})`,
-      args,
+      `SELECT * FROM civilcraft_game_wallet_v3.${name}(${parameters.map((_, i) => `$${i + 1}`).join(",")})`,
+      parameters,
     )
   ).rows;
+};
 const one = async (name, args) => (await call(name, args))[0];
 async function admin(sql) {
   await db.exec("SET SESSION AUTHORIZATION postgres");
@@ -157,7 +162,16 @@ test("v3 payment atomically credits once; identity/amount changes cannot reuse r
 test("included legacy receipt never recredits; confirmed late legacy receipt overlays once", async () => {
   await opening("A006", 10, {
     classic: 500,
-    covered: [{ orderId: "included", fingerprint: hash("included") }],
+    covered: [
+      {
+        orderId: "postgres:included",
+        fingerprint: hash("included"),
+        provider: "postgres",
+        entityId: "FACE123",
+        amount: 500,
+        originalFingerprint: hash("original-included"),
+      },
+    ],
   });
   const included = await one("credit", [
     ...identity("A006"),
@@ -363,4 +377,98 @@ test("health fails when restricted runtime gains forbidden CRUD, and v1 migratio
   await db.exec("SET SESSION AUTHORIZATION postgres");
   await assert.rejects(db.exec(v3), /already exists/);
   await db.exec("ROLLBACK; SET SESSION AUTHORIZATION game_fixture");
+});
+
+test("narrow permanent discovery includes orphan pending/granted v2 receipts without granting runtime SELECT", async () => {
+  const args = [
+    id,
+    "17FA03",
+    1,
+    "unindexed-original",
+    "C001",
+    "FACE123",
+    "title_player_account",
+    "CO",
+    500,
+    hash("original"),
+  ];
+  const owner = crypto.randomUUID();
+  const oldCall = async (name, values) =>
+    (
+      await db.query(
+        `SELECT * FROM civilcraft_currency.${name}(${values.map((_, i) => `$${i + 1}`).join(",")})`,
+        values,
+      )
+    ).rows[0];
+  await oldCall("claim_coins", [...args, owner]);
+  let rows = await call("legacy_receipts", identity("C001"));
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].state, "pending");
+  assert.equal(rows[0].original_fingerprint, hash("original"));
+  await assert.rejects(db.query("SELECT * FROM civilcraft_currency.receipts"), /permission denied/);
+  await assert.rejects(call("legacy_receipts", identity("C001", "AAAA")), /entity mismatch/);
+  await oldCall("complete_coins", [...args, owner]);
+  rows = await call("legacy_receipts", identity("C001"));
+  assert.equal(rows[0].state, "granted");
+  await opening("C001", 0, {
+    classic: 500,
+    covered: [
+      {
+        orderId: "postgres:unindexed-original",
+        provider: "postgres",
+        entityId: "FACE123",
+        amount: 500,
+        originalFingerprint: hash("original"),
+        fingerprint: hash("source-coverage"),
+      },
+    ],
+  });
+  const replay = await one("credit", [
+    ...identity("C001"),
+    "unindexed-original",
+    500,
+    hash("source-coverage"),
+    "legacy",
+    "postgres:unindexed-original",
+  ]);
+  assert.equal(replay.covered, true);
+  assert.equal(Number((await one("wallet_balance", identity("C001"))).coins), 500);
+});
+test("manifest approval is immutable owner-only and exact title/entity/target/hash scoped", async () => {
+  await assert.rejects(
+    db.query(
+      "INSERT INTO civilcraft_game_wallet_v3.entity_manifests(title_id,player_id,entity_id,target_id,ledger_hash,receipt_set,approved_by,completeness_evidence) VALUES('17FA03','C002','FACE123',$1,$2,'{}','test-owner','confirmed complete historical receipt authority')",
+      [hash("target"), hash("empty")],
+    ),
+    /permission denied/,
+  );
+  await admin(
+    `INSERT INTO civilcraft_game_wallet_v3.entity_manifests(title_id,player_id,entity_id,target_id,ledger_hash,receipt_set,approved_by,completeness_evidence) VALUES('17FA03','C002','FACE123','${hash("target")}','${hash("empty")}', '{"exists":false,"receipts":[]}', 'test-owner','confirmed complete historical receipt authority')`,
+  );
+  assert.equal(
+    (await call("entity_manifest", [...identity("C002"), hash("target"), hash("empty")])).length,
+    1,
+  );
+  assert.equal(
+    (await call("entity_manifest", [...identity("C002"), hash("other-target"), hash("empty")]))
+      .length,
+    0,
+  );
+  assert.equal(
+    (await call("entity_manifest", [...identity("C002", "AAAA"), hash("target"), hash("empty")]))
+      .length,
+    0,
+  );
+  await assert.rejects(
+    admin("DELETE FROM civilcraft_game_wallet_v3.entity_manifests WHERE player_id='C002'"),
+    /permanent/,
+  );
+});
+test("health rejects an executable overload even when it reuses an allowed function name", async () => {
+  await admin(
+    "CREATE FUNCTION civilcraft_game_wallet_v3.credit(text) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path=pg_catalog,civilcraft_game_wallet_v3,pg_temp AS 'SELECT true'; REVOKE ALL ON FUNCTION civilcraft_game_wallet_v3.credit(text) FROM PUBLIC; GRANT EXECUTE ON FUNCTION civilcraft_game_wallet_v3.credit(text) TO civilcraft_game_wallet_app",
+  );
+  assert.equal((await one("health", [id, "17FA03", 3])).healthy, false);
+  await admin("DROP FUNCTION civilcraft_game_wallet_v3.credit(text)");
+  assert.equal((await one("health", [id, "17FA03", 3])).healthy, true);
 });
