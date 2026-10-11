@@ -52,7 +52,9 @@ function exactObject(value: unknown, keys: string[]): value is Record<string, un
   );
 }
 
-function scope(phase: "checkout" | "delivery") {
+type ScopeSelection = { playerId: string } | { scopeId: string };
+
+function scope(phase: "checkout" | "delivery", selection: ScopeSelection) {
   if (
     !enabled("COIN_BETA_DELIVERY_ENABLED") ||
     (phase === "checkout" && !enabled("COIN_BETA_CHECKOUT_ENABLED"))
@@ -108,7 +110,50 @@ function scope(phase: "checkout" | "delivery") {
     !/^[a-f0-9]{64}$/.test(wallet.targetId)
   )
     paused();
-  return { scopeId, titleId, playerId, entityId, wallet };
+  const matches = (candidate: { scopeId: string; playerId: string }) =>
+    "playerId" in selection
+      ? typeof selection.playerId === "string" &&
+        /^[a-f0-9]{1,32}$/i.test(selection.playerId) &&
+        candidate.playerId === selection.playerId.toUpperCase()
+      : typeof selection.scopeId === "string" && candidate.scopeId === selection.scopeId;
+  const primary = { scopeId, titleId, playerId, entityId, wallet };
+  // Preserve the original v1 beta binding and its accepted-order delivery even
+  // when the optional second account is absent, disabled or misconfigured.
+  if (matches(primary)) return primary;
+  if (
+    !enabled("COIN_BETA_SECOND_DELIVERY_ENABLED") ||
+    (phase === "checkout" && !enabled("COIN_BETA_SECOND_CHECKOUT_ENABLED"))
+  )
+    paused();
+  const secondScopeId = process.env["COIN_BETA_SECOND_SCOPE_ID"]?.trim() || "";
+  const secondPlayerId = process.env["COIN_BETA_SECOND_PLAYER_ID"]?.trim().toUpperCase() || "";
+  const secondEntityId = process.env["COIN_BETA_SECOND_ENTITY_ID"]?.trim().toUpperCase() || "";
+  if (
+    secondScopeId.length > 64 ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(secondScopeId) ||
+    !/^[A-F0-9]{1,32}$/.test(secondPlayerId) ||
+    !/^[A-F0-9]{1,64}$/.test(secondEntityId) ||
+    secondScopeId === scopeId ||
+    secondPlayerId === playerId ||
+    secondEntityId === entityId
+  )
+    paused();
+  const second = {
+    scopeId: secondScopeId,
+    titleId,
+    playerId: secondPlayerId,
+    entityId: secondEntityId,
+    wallet,
+  };
+  if (!matches(second)) paused();
+  return second;
+}
+
+function boundScope(phase: "checkout" | "delivery", beta: unknown) {
+  if (!exactObject(beta, bindingKeys) || typeof beta["scopeId"] !== "string") return paused();
+  // Stored server-authored scope chooses a candidate, never authorizes a grant:
+  // assertBinding and assertSnapshot still validate every immutable field below.
+  return scope(phase, { scopeId: beta["scopeId"] });
 }
 
 function assertBinding(
@@ -157,7 +202,7 @@ function assertSnapshot(
 export function isCoinBetaCheckoutCandidate(playFabId: string): boolean {
   if (!isCoinFulfillmentMaintenance()) return false;
   try {
-    return scope("checkout").playerId === playFabId.toUpperCase();
+    return scope("checkout", { playerId: playFabId }).playerId === playFabId.toUpperCase();
   } catch {
     return false;
   }
@@ -170,7 +215,7 @@ export function createCoinBetaCheckoutBinding(
 ): CoinBetaBinding | undefined {
   if (!isCoinFulfillmentMaintenance()) return undefined;
   try {
-    const current = scope("checkout");
+    const current = scope("checkout", { playerId: playFabId });
     const reward = normalizeProductReward(product);
     if (
       typeof playFabId !== "string" ||
@@ -209,7 +254,7 @@ export function createCoinBetaCheckoutBinding(
 export function assertCoinCheckoutSnapshotAllowed(playFabId: string, beta?: CoinBetaBinding): void {
   if (beta === undefined) return assertCoinFulfillmentAvailable();
   try {
-    const current = scope("checkout");
+    const current = boundScope("checkout", beta);
     assertBinding(beta, current);
     if (
       typeof playFabId !== "string" ||
@@ -227,7 +272,7 @@ export function assertCoinBetaWalletBinding(
   snapshot: GameWalletSnapshot,
 ): void {
   try {
-    const current = scope("delivery");
+    const current = boundScope("delivery", beta);
     assertBinding(beta, current);
     assertSnapshot(beta, snapshot, current);
   } catch {
@@ -239,7 +284,7 @@ export function assertCoinBetaWalletBinding(
 export function assertCoinOrderDeliveryAllowed(order: GameCoinOrder | PaymentOrder): void {
   if (order.coinBeta === undefined) return assertCoinFulfillmentAvailable();
   try {
-    const current = scope("delivery");
+    const current = boundScope("delivery", order.coinBeta);
     assertBinding(order.coinBeta, current);
     if (
       order.coinReceiptVersion !== 3 ||

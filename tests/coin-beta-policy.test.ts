@@ -30,6 +30,11 @@ const envKeys = [
   "COIN_BETA_TITLE_ID",
   "COIN_BETA_PLAYER_ID",
   "COIN_BETA_ENTITY_ID",
+  "COIN_BETA_SECOND_CHECKOUT_ENABLED",
+  "COIN_BETA_SECOND_DELIVERY_ENABLED",
+  "COIN_BETA_SECOND_SCOPE_ID",
+  "COIN_BETA_SECOND_PLAYER_ID",
+  "COIN_BETA_SECOND_ENTITY_ID",
   "VITE_PLAYFAB_TITLE_ID",
   "PLAYFAB_SECRET_KEY",
   "PAYMONGO_SECRET_KEY",
@@ -339,4 +344,247 @@ test("unverified wallet configuration, changed database target, or changed scope
     paused(() => assertCoinOrderDeliveryAllowed(good));
     process.env["GAME_WALLET_VERIFIED_CONFIG_SHA256"] = gameWalletVerificationFingerprint();
     paused(() => assertCoinOrderDeliveryAllowed(good));
+  }));
+
+const SECOND_PLAYER = "BEE123";
+const SECOND_ENTITY = { Id: "B0B1234", Type: "title_player_account" as const };
+function enableSecond() {
+  Object.assign(process.env, {
+    COIN_BETA_SECOND_CHECKOUT_ENABLED: "true",
+    COIN_BETA_SECOND_DELIVERY_ENABLED: "true",
+    COIN_BETA_SECOND_SCOPE_ID: "coin-beta-second-fixture",
+    COIN_BETA_SECOND_PLAYER_ID: SECOND_PLAYER,
+    COIN_BETA_SECOND_ENTITY_ID: SECOND_ENTITY.Id,
+  });
+}
+const secondBinding = () => createCoinBetaCheckoutBinding(SECOND_PLAYER, product())!;
+const secondSnapshot = (): GameWalletSnapshot => ({
+  ...gameWalletConfig(),
+  entity: { ...SECOND_ENTITY },
+});
+const secondOrder = (): GameCoinOrder => ({
+  ...order(),
+  orderId: "fixture-second-beta-order",
+  playFabId: SECOND_PLAYER,
+  coinBeta: secondBinding(),
+  gameWallet: secondSnapshot(),
+});
+
+test("optional second account defaults closed and does not change the original binding", () =>
+  fixture(() => {
+    const original = binding();
+    assert.equal(isCoinBetaCheckoutCandidate(SECOND_PLAYER), false);
+    paused(() => secondBinding());
+    enableSecond();
+    assert.deepEqual(binding(), original);
+    assert.equal(isCoinBetaCheckoutCandidate(PLAYER), true);
+    assert.equal(isCoinBetaCheckoutCandidate(SECOND_PLAYER.toLowerCase()), true);
+    const second = secondBinding();
+    assert.deepEqual(second, {
+      ...original,
+      scopeId: "coin-beta-second-fixture",
+      playerId: SECOND_PLAYER,
+      entity: SECOND_ENTITY,
+    });
+    assert.ok(Object.isFrozen(second) && Object.isFrozen(second.entity));
+    assert.doesNotThrow(() => assertCoinCheckoutSnapshotAllowed(SECOND_PLAYER, second));
+    assert.doesNotThrow(() => assertCoinBetaWalletBinding(second, secondSnapshot()));
+    assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(secondOrder()));
+    assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(order(original)));
+    assert.equal(isCoinBetaCheckoutCandidate("BAD999"), false);
+    paused(() => createCoinBetaCheckoutBinding("BAD999", product()));
+  }));
+
+test("secondary/global checkout closure preserves original and second accepted delivery", () =>
+  fixture(() => {
+    enableSecond();
+    const first = order();
+    const second = secondOrder();
+    process.env["COIN_BETA_SECOND_CHECKOUT_ENABLED"] = "false";
+    assert.equal(isCoinBetaCheckoutCandidate(PLAYER), true);
+    assert.equal(isCoinBetaCheckoutCandidate(SECOND_PLAYER), false);
+    paused(() => secondBinding());
+    paused(() => assertCoinCheckoutSnapshotAllowed(SECOND_PLAYER, second.coinBeta));
+    assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(second));
+    assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(first));
+    process.env["COIN_BETA_SECOND_CHECKOUT_ENABLED"] = "true";
+    process.env["COIN_BETA_CHECKOUT_ENABLED"] = "false";
+    for (const candidate of [PLAYER, SECOND_PLAYER]) {
+      assert.equal(isCoinBetaCheckoutCandidate(candidate), false);
+      paused(() => createCoinBetaCheckoutBinding(candidate, product()));
+    }
+    for (const accepted of [first, second]) {
+      paused(() => assertCoinCheckoutSnapshotAllowed(accepted.playFabId, accepted.coinBeta));
+      assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(accepted));
+    }
+    process.env["GAME_WALLET_ENABLED"] = "false";
+    for (const accepted of [first, second])
+      assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(accepted));
+  }));
+
+test("second delivery is separately gated and cannot bypass the global delivery gate", () =>
+  fixture(() => {
+    enableSecond();
+    const first = order();
+    const second = secondOrder();
+    for (const value of [undefined, "false", "1", "yes"]) {
+      if (value === undefined) delete process.env["COIN_BETA_SECOND_DELIVERY_ENABLED"];
+      else process.env["COIN_BETA_SECOND_DELIVERY_ENABLED"] = value;
+      assert.equal(isCoinBetaCheckoutCandidate(SECOND_PLAYER), false);
+      paused(() => secondBinding());
+      paused(() => assertCoinOrderDeliveryAllowed(second));
+      assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(first));
+    }
+    process.env["COIN_BETA_SECOND_DELIVERY_ENABLED"] = "true";
+    process.env["COIN_BETA_DELIVERY_ENABLED"] = "false";
+    for (const accepted of [first, second]) {
+      assert.equal(isCoinBetaCheckoutCandidate(accepted.playFabId), false);
+      paused(() => assertCoinOrderDeliveryAllowed(accepted));
+    }
+  }));
+
+test("missing, malformed or overlapping second settings fail closed without stranding primary delivery", () =>
+  fixture(() => {
+    const first = order();
+    enableSecond();
+    const accepted = secondOrder();
+    for (const [key, values] of [
+      [
+        "COIN_BETA_SECOND_SCOPE_ID",
+        [
+          undefined,
+          "",
+          "BAD",
+          "bad_scope",
+          "-bad",
+          "bad--scope",
+          "x".repeat(65),
+          "coin-beta-fixture",
+        ],
+      ],
+      [
+        "COIN_BETA_SECOND_PLAYER_ID",
+        [undefined, "", "BEE123,ABC", '["BEE123"]', "x".repeat(33), PLAYER],
+      ],
+      [
+        "COIN_BETA_SECOND_ENTITY_ID",
+        [undefined, "", "B0B1234,ABC", '["B0B1234"]', "x".repeat(65), ENTITY.Id],
+      ],
+    ] as const) {
+      const original = process.env[key];
+      for (const value of values) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+        assert.equal(isCoinBetaCheckoutCandidate(SECOND_PLAYER), false);
+        paused(() => secondBinding());
+        paused(() => assertCoinOrderDeliveryAllowed(accepted));
+        assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(first));
+        assert.deepEqual(binding(), first.coinBeta);
+      }
+      process.env[key] = original;
+    }
+  }));
+
+test("crossed account, entity and scope fields cannot reroute either immutable order", () =>
+  fixture(() => {
+    enableSecond();
+    const first = order();
+    const second = secondOrder();
+    for (const [own, other] of [
+      [first, second],
+      [second, first],
+    ] as const) {
+      paused(() => assertCoinCheckoutSnapshotAllowed(other.playFabId, own.coinBeta));
+      paused(() => assertCoinBetaWalletBinding(own.coinBeta!, other.gameWallet!));
+      for (const change of [
+        { coinBeta: other.coinBeta },
+        { playFabId: other.playFabId },
+        { gameWallet: other.gameWallet },
+        { coinBeta: { ...own.coinBeta, scopeId: other.coinBeta!.scopeId } },
+        { coinBeta: { ...own.coinBeta, playerId: other.playFabId } },
+        { coinBeta: { ...own.coinBeta, entity: other.coinBeta!.entity } },
+        { coinBeta: { ...own.coinBeta, extra: true } },
+        { coinBeta: { ...own.coinBeta, entity: { ...own.coinBeta!.entity, extra: true } } },
+      ])
+        paused(() => assertCoinOrderDeliveryAllowed({ ...own, ...change } as GameCoinOrder));
+    }
+  }));
+
+test("second account shares TEST provider, main origin, verified title and immutable wallet target guards", () =>
+  fixture(() => {
+    enableSecond();
+    const second = secondOrder();
+    for (const [key, bad] of [
+      ["COIN_BETA_TITLE_ID", "FFFF"],
+      ["PAYMONGO_SECRET_KEY", "sk_live_fixture_unused"],
+      ["PAYMONGO_WEBHOOK_SECRET", ""],
+      ["PUBLIC_APP_URL", "https://civil-craft-website.vercel.app"],
+      ["GAME_WALLET_VERIFIED", "false"],
+      ["GAME_WALLET_LEGACY_HANDLERS_QUIESCED", "false"],
+    ] as const) {
+      const original = process.env[key];
+      process.env[key] = bad;
+      assert.equal(isCoinBetaCheckoutCandidate(SECOND_PLAYER), false);
+      paused(() => secondBinding());
+      paused(() => assertCoinOrderDeliveryAllowed(second));
+      process.env[key] = original;
+    }
+    for (const change of [
+      { databaseId: "ffffffff-ffff-ffff-ffff-ffffffffffff" },
+      { targetId: "0".repeat(64) },
+      { protocolVersion: 2 },
+      { entity: ENTITY },
+      { extra: true },
+    ])
+      paused(() =>
+        assertCoinOrderDeliveryAllowed({
+          ...second,
+          gameWallet: { ...second.gameWallet, ...change },
+        } as GameCoinOrder),
+      );
+  }));
+
+test("second account cannot purchase another package or mutate TEST mode, price or reward", () =>
+  fixture(() => {
+    enableSecond();
+    const second = secondOrder();
+    for (const change of [
+      { id: "coins_1000" },
+      { active: false },
+      { amount: 1 },
+      { currency: "USD" },
+      { rewardCurrency: "DI" },
+      { rewardAmount: 501, rewardCoins: 501 },
+    ])
+      paused(() =>
+        createCoinBetaCheckoutBinding(SECOND_PLAYER, { ...product(), ...change } as PaymentProduct),
+      );
+    for (const change of [
+      { mode: "live" },
+      { protocolVersion: 2 },
+      { productId: "coins_1000" },
+      { expectedAmount: 1 },
+      { rewardAmount: 501 },
+      { titleId: "FFFF" },
+    ])
+      paused(() =>
+        assertCoinOrderDeliveryAllowed({
+          ...second,
+          coinBeta: { ...second.coinBeta, ...change },
+        } as GameCoinOrder),
+      );
+  }));
+
+test("secondary checkout has no implicit permission from a configured tuple or delivery alone", () =>
+  fixture(() => {
+    enableSecond();
+    const second = secondOrder();
+    for (const value of [undefined, "false", "1", "yes"]) {
+      if (value === undefined) delete process.env["COIN_BETA_SECOND_CHECKOUT_ENABLED"];
+      else process.env["COIN_BETA_SECOND_CHECKOUT_ENABLED"] = value;
+      assert.equal(isCoinBetaCheckoutCandidate(SECOND_PLAYER), false);
+      paused(() => secondBinding());
+      assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(second));
+      assert.equal(isCoinBetaCheckoutCandidate(PLAYER), true);
+    }
   }));
