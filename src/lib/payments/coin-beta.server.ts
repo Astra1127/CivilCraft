@@ -41,6 +41,29 @@ const paused = (): never => {
   throw new CoinFulfillmentMaintenance();
 };
 
+/** Absolute, server-only window; no restart or request can extend its deadline. */
+function assertCheckoutWindow(): void {
+  const parse = (key: string) => {
+    const value = process.env[key] || "";
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return NaN;
+    const stamp = Date.parse(value);
+    return Number.isFinite(stamp) && new Date(stamp).toISOString() === value ? stamp : NaN;
+  };
+  const start = parse("COIN_BETA_CHECKOUT_STARTS_AT");
+  const end = parse("COIN_BETA_CHECKOUT_ENDS_AT");
+  const now = Date.now();
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    !Number.isSafeInteger(now) ||
+    end <= start ||
+    end - start > 30 * 60 * 1000 ||
+    now < start ||
+    now >= end
+  )
+    paused();
+}
+
 function exactObject(value: unknown, keys: string[]): value is Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const prototype = Object.getPrototypeOf(value);
@@ -60,6 +83,9 @@ function scope(phase: "checkout" | "delivery", selection: ScopeSelection) {
     (phase === "checkout" && !enabled("COIN_BETA_CHECKOUT_ENABLED"))
   )
     paused();
+  // Delivery deliberately ignores time limits: already accepted orders retain
+  // their immutable settlement authority after checkout expires or is closed.
+  if (phase === "checkout") assertCheckoutWindow();
   const scopeId = process.env["COIN_BETA_SCOPE_ID"]?.trim() || "";
   const titleId = process.env["COIN_BETA_TITLE_ID"]?.trim().toUpperCase() || "";
   const playerId = process.env["COIN_BETA_PLAYER_ID"]?.trim().toUpperCase() || "";

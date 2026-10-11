@@ -145,6 +145,8 @@ function harness(existingOrders = new Map()) {
   const environment = {
     COIN_FULFILLMENT_MAINTENANCE: "true",
     COIN_BETA_CHECKOUT_ENABLED: "true",
+    COIN_BETA_CHECKOUT_STARTS_AT: new Date(Date.now() - 60_000).toISOString(),
+    COIN_BETA_CHECKOUT_ENDS_AT: new Date(Date.now() + 29 * 60_000).toISOString(),
     COIN_BETA_DELIVERY_ENABLED: "true",
     COIN_BETA_SCOPE_ID: "fixture-original-test-scope",
     COIN_BETA_TITLE_ID: TITLE,
@@ -170,6 +172,7 @@ function harness(existingOrders = new Map()) {
     providerReads: [],
     providerSession: null,
     failFulfilledOnce: false,
+    expireWindowDuringSave: false,
     gameEnabled: true,
   };
   const admin = {
@@ -221,7 +224,11 @@ function harness(existingOrders = new Map()) {
   const orders = {
     generateOrderId: () => `CC-COINS-FIXTURE-${crypto.randomUUID()}`,
     getOrder: async (id) => (state.orders.has(id) ? plain(state.orders.get(id)) : null),
-    saveOrder: async (order) => state.orders.set(order.orderId, plain(order)),
+    saveOrder: async (order) => {
+      state.orders.set(order.orderId, plain(order));
+      if (state.expireWindowDuringSave)
+        environment.COIN_BETA_CHECKOUT_ENDS_AT = new Date(Date.now()).toISOString();
+    },
     updateOrderStatus: async (id, updates) => {
       if (updates.status === "fulfilled" && state.failFulfilledOnce) {
         state.failFulfilledOnce = false;
@@ -399,6 +406,53 @@ test("two-account checkout stays closed while verified balances remain readable"
   }
   assert.equal(h.state.orders.size, 0);
   assert.equal(h.state.checkouts, 0);
+  assert.deepEqual(await balances(), before);
+});
+
+test("deadline closes both account APIs while accepted signed payments still settle once", async () => {
+  const h = harness();
+  enableSecond(h.environment);
+  const before = await balances();
+  const accepted = [];
+  for (const player of [A, B]) {
+    const response = await h.checkout(player);
+    assert.equal(response.status, 200);
+    accepted.push([player, (await response.json()).orderId]);
+  }
+  h.environment.COIN_BETA_CHECKOUT_ENDS_AT = new Date(Date.now() - 1).toISOString();
+  for (const player of [A, B]) {
+    assert.equal((await h.checkout(player)).status, 503);
+    const data = await (await h.request(player, "/api/player/currencies")).json();
+    assert.equal(data.coins, before[player]);
+    assert.equal(data.coinsAvailable, false);
+    assert.equal(data.coinTestCheckout, undefined);
+  }
+  assert.equal(h.state.checkouts, 2);
+  for (const [player, id] of accepted) {
+    const paid = h.event(id);
+    assert.equal((await h.webhook(paid)).status, 200);
+    assert.equal((await h.webhook(paid)).status, 200);
+    const rows = await paymentRows(id);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].player_id, player);
+    assert.equal(Number(rows[0].amount), 500);
+  }
+  assert.deepEqual(await balances(), { [A]: before[A] + 500, [B]: before[B] + 500 });
+});
+
+test("expiry during awaited order storage prevents any provider checkout or currency credit", async () => {
+  const h = harness();
+  enableSecond(h.environment);
+  const before = await balances();
+  h.state.expireWindowDuringSave = true;
+  assert.equal((await h.checkout(B)).status, 503);
+  assert.equal(h.state.checkouts, 0);
+  assert.equal(h.state.orders.size, 1);
+  for (const order of h.state.orders.values()) {
+    assert.equal(order.status, "pending");
+    assert.equal(order.PayMongoCheckoutSessionId, null);
+    assert.equal((await paymentRows(order.orderId)).length, 0);
+  }
   assert.deepEqual(await balances(), before);
 });
 

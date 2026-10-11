@@ -28,6 +28,7 @@ import {
 } from "./coin-maintenance.server.ts";
 import {
   COIN_BETA_PRODUCT_ID,
+  assertCoinCheckoutSnapshotAllowed,
   createCoinBetaCheckoutBinding,
   isCoinBetaCheckoutCandidate,
 } from "./coin-beta.server.ts";
@@ -294,6 +295,10 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         webhookEventId: null,
       };
       await saveOrder(order);
+      // Account/database/storage awaits may cross the window boundary. Recheck
+      // immediately before starting provider checkout; an unpaid audit row is
+      // not payment authority and cannot itself credit currency.
+      if (coinBeta) assertCoinCheckoutSnapshotAllowed(playFabId, coinBeta);
       const checkout = await createPayMongoCheckout({
         orderId,
         product,
