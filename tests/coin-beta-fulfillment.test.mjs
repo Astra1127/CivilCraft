@@ -31,6 +31,23 @@ const BINDING = {
   expectedAmount: 5000,
   currency: "PHP",
 };
+const SECOND_ENTITY = { Id: "FACE456", Type: "title_player_account" };
+const SECOND_BINDING = {
+  ...BINDING,
+  scopeId: "fixture-second-account-test",
+  playerId: "ABC456",
+  entity: SECOND_ENTITY,
+};
+const SECOND_SNAPSHOT = { ...CONFIG, entity: SECOND_ENTITY };
+function enableSecond(environment) {
+  Object.assign(environment, {
+    COIN_BETA_SECOND_CHECKOUT_ENABLED: "true",
+    COIN_BETA_SECOND_DELIVERY_ENABLED: "true",
+    COIN_BETA_SECOND_SCOPE_ID: SECOND_BINDING.scopeId,
+    COIN_BETA_SECOND_PLAYER_ID: SECOND_BINDING.playerId,
+    COIN_BETA_SECOND_ENTITY_ID: SECOND_ENTITY.Id,
+  });
+}
 const plain = (value) => JSON.parse(JSON.stringify(value));
 class ApiError extends Error {
   constructor(status, message) {
@@ -75,10 +92,10 @@ function sign(body) {
   return `t=${timestamp},te=${digest}`;
 }
 
-function fixtureOrder() {
+function fixtureOrder(binding = BINDING, snapshot = SNAPSHOT) {
   return {
     orderId: "CC-COINS-FIXTURE-BETA",
-    playFabId: PLAYER,
+    playFabId: binding.playerId,
     productId: "coins_500",
     expectedAmount: 5000,
     currency: "PHP",
@@ -87,8 +104,8 @@ function fixtureOrder() {
     rewardAmount: 500,
     coinCurrencyCode: "CO",
     coinReceiptVersion: 3,
-    coinBeta: plain(BINDING),
-    gameWallet: plain(SNAPSHOT),
+    coinBeta: plain(binding),
+    gameWallet: plain(snapshot),
     PayMongoCheckoutSessionId: "cs_fixture_beta",
     PayMongoReferenceNumber: "CC-COINS-FIXTURE-BETA",
     status: "pending",
@@ -99,7 +116,9 @@ function fixtureOrder() {
   };
 }
 
-function harness() {
+function harness({ second = false } = {}) {
+  const binding = second ? SECOND_BINDING : BINDING;
+  const snapshot = second ? SECOND_SNAPSHOT : SNAPSHOT;
   const environment = {
     COIN_FULFILLMENT_MAINTENANCE: "true",
     COIN_BETA_CHECKOUT_ENABLED: "true",
@@ -113,6 +132,7 @@ function harness() {
     PUBLIC_APP_URL: "https://civil-craft.vercel.app",
     NODE_ENV: "production",
   };
+  if (second) enableSecond(environment);
   const products = load("payments/products.ts");
   const maintenance = load(
     "payments/coin-maintenance.server.ts",
@@ -135,7 +155,7 @@ function harness() {
     environment,
   );
   const state = {
-    order: fixtureOrder(),
+    order: fixtureOrder(binding, snapshot),
     receipt: false,
     credits: [],
     auditWrites: [],
@@ -153,10 +173,10 @@ function harness() {
   };
   const assertDestination = (order) => {
     assert.equal(order.orderId, state.order.orderId);
-    assert.equal(order.playFabId, PLAYER);
+    assert.equal(order.playFabId, binding.playerId);
     assert.equal(order.expectedCoins, 500);
-    assert.deepEqual(plain(order.gameWallet), SNAPSHOT);
-    assert.deepEqual(plain(order.coinBeta), BINDING);
+    assert.deepEqual(plain(order.gameWallet), snapshot);
+    assert.deepEqual(plain(order.coinBeta), binding);
   };
   const update = async (id, updates) => {
     assert.equal(id, state.order.orderId);
@@ -223,7 +243,11 @@ function harness() {
           const alreadyGranted = state.receipt;
           if (!alreadyGranted) {
             state.receipt = true;
-            state.credits.push({ amount: 500, player: PLAYER, databaseId: CONFIG.databaseId });
+            state.credits.push({
+              amount: 500,
+              player: binding.playerId,
+              databaseId: CONFIG.databaseId,
+            });
           }
           return { alreadyGranted };
         },
@@ -562,6 +586,76 @@ test("a beta marker attached to a Diamond order is rejected without Diamond deli
   noDelivery(h);
   assert.equal(h.state.auditWrites.length, 0);
 });
+
+test("adding the second scope preserves an already-bound original signed paid order and retry", async () => {
+  const h = harness();
+  const originalBinding = plain(h.state.order.coinBeta);
+  enableSecond(h.environment);
+  h.environment.COIN_BETA_CHECKOUT_ENABLED = "false";
+  assert.equal((await h.process(h.event())).status, 200);
+  assert.equal((await h.process(h.event())).body.idempotent, true);
+  assert.deepEqual(h.state.order.coinBeta, originalBinding);
+  assert.deepEqual(h.state.credits, [
+    { amount: 500, player: PLAYER, databaseId: CONFIG.databaseId },
+  ]);
+  assert.equal(h.state.legacyGrants, 0);
+});
+
+test("signed second-account TEST order retains its own destination through closure and audit retry", async () => {
+  const h = harness({ second: true });
+  h.environment.COIN_BETA_SECOND_CHECKOUT_ENABLED = "false";
+  h.environment.COIN_BETA_CHECKOUT_ENABLED = "false";
+  h.state.failFulfilledOnce = true;
+  assert.equal((await h.process(h.event())).status, 500);
+  assert.equal(h.state.receipt, true);
+  assert.equal((await h.process(h.event())).body.idempotent, true);
+  assert.equal((await h.process(h.event())).body.idempotent, true);
+  assert.equal(h.state.order.status, "fulfilled");
+  assert.deepEqual(h.state.credits, [
+    { amount: 500, player: SECOND_BINDING.playerId, databaseId: CONFIG.databaseId },
+  ]);
+  assert.equal(h.state.legacyGrants, 0);
+  assert.equal(h.state.diamondGrants, 0);
+});
+
+for (const status of ["pending", "failed", "cancelled"]) {
+  test(`second-account ${status} payment is not a paid confirmation`, async () => {
+    const h = harness({ second: true });
+    const event = h.event();
+    event.data.data.attributes.payments[0].attributes.status = status;
+    h.state.verifiedCheckout = plain(event.data.data);
+    assert.equal((await h.process(event)).status, 400);
+    noDelivery(h);
+  });
+}
+
+for (const variant of [
+  "primary-metadata",
+  "primary-entity",
+  "primary-scope",
+  "live",
+  "unsigned",
+  "delivery-off",
+]) {
+  test(`second-account delivery rejects ${variant} without a credit`, async () => {
+    const h = harness({ second: true });
+    const event = h.event();
+    if (variant === "primary-metadata") event.data.data.attributes.metadata.playFabId = PLAYER;
+    if (variant === "primary-entity") h.state.order.gameWallet.entity = plain(ENTITY);
+    if (variant === "primary-scope") h.state.order.coinBeta.scopeId = BINDING.scopeId;
+    if (variant === "live") event.data.data.attributes.payments[0].attributes.livemode = true;
+    if (variant === "delivery-off") h.environment.COIN_BETA_SECOND_DELIVERY_ENABLED = "false";
+    assert.notEqual(
+      (await h.process(event, variant === "unsigned" ? null : undefined)).status,
+      200,
+    );
+    noDelivery(h);
+    // Invalid signed payment evidence may record a failed audit, never paid or
+    // fulfilled. Scope/signature fences still return before any audit mutation.
+    assert.ok(h.state.auditWrites.every((update) => update.status === "failed"));
+    assert.equal(h.state.legacyGrants, 0);
+  });
+}
 
 test("normal Diamond evidence retains existing missing-inner-mode compatibility during Coin maintenance", async () => {
   const h = harness();
