@@ -194,9 +194,10 @@ export async function importGameWallet(
       gold,
       opening.classic,
       saveHash.toLowerCase(),
-      JSON.stringify(opening.covered),
-      JSON.stringify(state.rewards),
-      JSON.stringify(state.entitlements),
+      // postgres-js serializes JSONB parameters; pre-stringifying would encode JSON strings.
+      opening.covered,
+      state.rewards,
+      state.entitlements,
       earned,
       spent,
     ]);
@@ -217,7 +218,7 @@ export async function grantGameRewards(
       reward.key,
       reward.amount,
       reward.fingerprint,
-      JSON.stringify(reward.payload),
+      reward.payload,
     ]);
   return gameWallet(playFabId);
 }
@@ -262,7 +263,7 @@ export async function purchaseGameItem(
     target.kind,
     target.targetKey,
     target.price,
-    JSON.stringify(target.payload),
+    target.payload,
   ]);
   if (rows.length !== 1 || !rows[0]?.["result"] || typeof rows[0]["result"] !== "object")
     throw walletUnavailable();

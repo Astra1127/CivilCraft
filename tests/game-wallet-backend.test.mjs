@@ -57,6 +57,7 @@ function harness() {
     entityReads: 0,
     rows: null,
     auditFailure: false,
+    legacyOpening: { classic: 500, covered: [] },
   };
   const config = {
     GameWalletReadinessError,
@@ -112,7 +113,7 @@ function harness() {
   };
   const legacy = {
     withAccountGate: async (_id, _reason, task) => task("11111111-2222-3333-4444-555555555555"),
-    legacyOpeningSnapshot: async () => ({ classic: 500, covered: [] }),
+    legacyOpeningSnapshot: async () => state.legacyOpening,
     GateBeforeMutationError: class extends Error {
       constructor(original) {
         super();
@@ -201,6 +202,16 @@ test("verified wallet still reads and settles immutable v3 orders while new oper
 });
 test("approved import snapshots counters, unknown old IDs cannot grant, second save never reimports", async () => {
   const { service, state } = harness();
+  state.legacyOpening.covered = [
+    {
+      orderId: "postgres:fixture-legacy-order",
+      fingerprint: "b".repeat(64),
+      provider: "postgres",
+      entityId: ENTITY.Id,
+      amount: 500,
+      originalFingerprint: "c".repeat(64),
+    },
+  ];
   let imported = false;
   state.rows = (name, args) => {
     if (name === "wallet_balance")
@@ -226,16 +237,119 @@ test("approved import snapshots counters, unknown old IDs cannot grant, second s
     saveHash: "a".repeat(64),
     lifetimeGoldEarned: 200,
     lifetimeGoldSpent: 100,
-    completedContracts: ["ShopKeeperContract"],
-    unlockedAchievements: ["ACH_001"],
+    completedContracts: ["ShopKeeperContract", "unknown-old-contract"],
+    unlockedAchievements: ["ACH_001", "unknown-old-achievement"],
+    purchasedShopItemIds: ["unknown-old-item"],
+    unlockedCosmeticIDs: ["unknown-old-cosmetic"],
   };
   assert.equal((await service.importGameWallet(PLAYER, input)).ready, true);
   const mutation = state.calls.find((c) => c.name === "import_wallet");
   assert.equal(mutation.args[6], 200);
   assert.equal(mutation.args[7], 500);
-  assert.ok(mutation.args[10].includes("contract:ShopKeeper"));
+  for (const index of [9, 10, 11]) assert.ok(Array.isArray(mutation.args[index]));
+  assert.equal(mutation.args[9], state.legacyOpening.covered);
+  assert.deepEqual(plain(mutation.args[9]), state.legacyOpening.covered);
+  const importedState = catalog.importCatalogState(input);
+  assert.deepEqual(plain(mutation.args[10]), importedState.rewards);
+  assert.deepEqual(plain(mutation.args[11]), importedState.entitlements);
+  assert.ok(mutation.args[10].some((reward) => reward.key === "contract:ShopKeeper"));
+  assert.equal(
+    mutation.args[10].some((reward) => reward.key.includes("unknown-old")),
+    false,
+  );
   await service.importGameWallet(PLAYER, { ...input, gold: 999 });
   assert.equal(state.calls.filter((c) => c.name === "import_wallet").length, 1);
+});
+test("zero import keeps empty JSONB arrays and existing hard-hat ownership as native values", async () => {
+  const { service, state } = harness();
+  state.legacyOpening = { classic: 0, covered: [] };
+  const hardHat = catalog.gameCatalog.items.find(
+    (item) => item.cosmeticId === "EngineeringHardHat",
+  );
+  assert.ok(hardHat);
+  let imported = false;
+  state.rows = (name, args) => {
+    if (name === "wallet_balance")
+      return [
+        {
+          ready: imported,
+          coins: imported ? 0 : null,
+          version: imported ? 1 : 0,
+          lifetime_gold_earned: 0,
+          lifetime_gold_spent: 0,
+        },
+      ];
+    if (name === "import_wallet") {
+      assert.equal(args.length, 14);
+      for (const index of [9, 10, 11]) assert.ok(Array.isArray(args[index]));
+      assert.deepEqual(plain(args[9]), []);
+      assert.deepEqual(plain(args[10]), []);
+      assert.deepEqual(plain(args[11]), [
+        {
+          kind: "cosmetic",
+          targetKey: hardHat.itemId,
+          payload: { itemId: hardHat.itemId, cosmeticId: hardHat.cosmeticId },
+        },
+      ]);
+      assert.equal(args[6], 0);
+      assert.equal(args[7], 0);
+      assert.equal(args[12], 0);
+      assert.equal(args[13], 0);
+      imported = true;
+      return [{ ready: true, coins: 0, version: 1 }];
+    }
+    throw new Error(name);
+  };
+  const input = {
+    gold: 0,
+    saveHash: "a".repeat(64),
+    lifetimeGoldEarned: 0,
+    lifetimeGoldSpent: 0,
+    completedContracts: [],
+    unlockedAchievements: [],
+    purchasedShopItemIds: [],
+    unlockedCosmeticIDs: [hardHat.cosmeticId],
+    unlockedContractMaterials: [],
+  };
+  const result = await service.importGameWallet(PLAYER, input);
+  assert.equal(result.ready, true);
+  assert.equal(result.coins, 0);
+  assert.equal(result.lifetimeGoldEarned, 0);
+  assert.equal(result.lifetimeGoldSpent, 0);
+  assert.equal(state.calls.filter((call) => call.name === "purchase").length, 0);
+  await service.importGameWallet(PLAYER, { ...input, gold: hardHat.price });
+  assert.equal(state.calls.filter((call) => call.name === "import_wallet").length, 1);
+});
+test("contract and achievement rewards pass native JSONB payload objects without changing fingerprints", async () => {
+  const { service, state } = harness();
+  const contract = catalog.gameCatalog.contracts[0];
+  const achievement = catalog.gameCatalog.achievements[0];
+  const events = [
+    {
+      kind: "contract",
+      sourceId: contract.id,
+      eventId: `contract:${contract.id}`,
+      evidence: { finalCost: contract.budget, failureCount: 0 },
+    },
+    {
+      kind: "achievement",
+      sourceId: achievement.id,
+      eventId: `achievement:${achievement.id}`,
+    },
+  ];
+  await service.grantGameRewards(PLAYER, events);
+  const calls = state.calls.filter((call) => call.name === "reward");
+  assert.equal(calls.length, 2);
+  for (const [index, call] of calls.entries()) {
+    const expected = catalog.rewardEvent(events[index]);
+    assert.equal(call.args[5], expected.key);
+    assert.equal(call.args[6], expected.amount);
+    assert.equal(call.args[7], expected.fingerprint);
+    assert.equal(typeof call.args[8], "object");
+    assert.notEqual(call.args[8], null);
+    assert.equal(Array.isArray(call.args[8]), false);
+    assert.deepEqual(plain(call.args[8]), expected.payload);
+  }
 });
 test("catalog purchase always uses server price and exposes locked status words", async () => {
   const { service, state } = harness();
@@ -250,7 +364,7 @@ test("catalog purchase always uses server price and exposes locked status words"
               status: "fulfilled",
               coins: 600,
               version: 6,
-              entitlement: JSON.parse(args.at(-1)),
+              entitlement: plain(args.at(-1)),
             },
           },
         ]
@@ -262,6 +376,22 @@ test("catalog purchase always uses server price and exposes locked status words"
   });
   assert.equal(result.status, "completed");
   assert.equal(state.calls[0].args.at(-2), item.price);
+  assert.equal(typeof state.calls[0].args.at(-1), "object");
+  assert.notEqual(state.calls[0].args.at(-1), null);
+  assert.equal(Array.isArray(state.calls[0].args.at(-1)), false);
+  assert.deepEqual(plain(state.calls[0].args.at(-1)), {
+    itemId: item.itemId,
+    cosmeticId: item.cosmeticId,
+  });
+  assert.equal(
+    state.calls[0].args[6],
+    catalog.digest({
+      operation: op,
+      player: PLAYER,
+      target: catalog.purchaseTarget("cosmetic", item.itemId),
+      catalogFingerprint: catalog.catalogFingerprint,
+    }),
+  );
   assert.equal(result.entitlement.cosmeticId, item.cosmeticId);
   state.rows = () => [
     { result: { operationId: op, status: "already-owned", coins: 600, version: 6 } },
@@ -279,6 +409,46 @@ test("catalog purchase always uses server price and exposes locked status words"
     },
   ];
   assert.equal((await service.gamePurchaseStatus(PLAYER, op)).status, "insufficient_funds");
+});
+test("material purchases pass native contract-bound JSONB payloads with the existing fingerprint", async () => {
+  const { service, state } = harness();
+  const material = catalog.gameCatalog.materials[0];
+  const contract = catalog.gameCatalog.contracts.find(
+    (entry) =>
+      entry.allowedMaterialIds.length === 0 || entry.allowedMaterialIds.includes(material.id),
+  );
+  assert.ok(contract);
+  const op = "11111111-2222-3333-4444-666666666666";
+  const target = catalog.purchaseTarget("material", material.id, contract.id);
+  state.rows = (name, args) => {
+    assert.equal(name, "purchase");
+    assert.equal(typeof args[10], "object");
+    assert.notEqual(args[10], null);
+    assert.equal(Array.isArray(args[10]), false);
+    assert.deepEqual(plain(args[10]), target.payload);
+    return [{ result: { operationId: op, status: "fulfilled", coins: 600, version: 6 } }];
+  };
+  assert.equal(
+    (
+      await service.purchaseGameItem(PLAYER, {
+        operationId: op,
+        targetKind: "material",
+        targetId: material.id,
+        contractId: contract.id,
+      })
+    ).status,
+    "completed",
+  );
+  assert.equal(state.calls[0].args[9], target.price);
+  assert.equal(
+    state.calls[0].args[6],
+    catalog.digest({
+      operation: op,
+      player: PLAYER,
+      target,
+      catalogFingerprint: catalog.catalogFingerprint,
+    }),
+  );
 });
 test("unknown catalog purchase writes permanent rejection proof rather than leaving an ambiguous 400", async () => {
   const { service, state } = harness();
