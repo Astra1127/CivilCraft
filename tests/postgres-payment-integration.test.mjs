@@ -406,6 +406,8 @@ function harness() {
       state.productId = "coins_500";
       currency = "CO";
       betaEnvironment.COIN_BETA_CHECKOUT_ENABLED = "true";
+      betaEnvironment.COIN_BETA_CHECKOUT_STARTS_AT = new Date(Date.now() - 60_000).toISOString();
+      betaEnvironment.COIN_BETA_CHECKOUT_ENDS_AT = new Date(Date.now() + 29 * 60_000).toISOString();
       betaEnvironment.COIN_BETA_DELIVERY_ENABLED = "true";
     },
     setCurrency(value) {

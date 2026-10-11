@@ -25,6 +25,11 @@ The original globals remain mandatory for both accounts:
 - `COIN_BETA_CHECKOUT_ENABLED`: new-checkout gate for both accounts.
 - `COIN_BETA_DELIVERY_ENABLED`: accepted-order delivery gate for both accounts.
 - Original scope/title/player/Entity settings: unchanged first-account identity.
+- `COIN_BETA_CHECKOUT_STARTS_AT` and `COIN_BETA_CHECKOUT_ENDS_AT`: canonical UTC
+  timestamps (`YYYY-MM-DDTHH:mm:ss.sssZ`) for an absolute, at-most-30-minute window.
+  Both are required, even for the first account. Missing, malformed, not-yet-started,
+  expired, reversed or longer windows reject new checkout. Start is inclusive; end
+  is exclusive. New requests/process restarts do not renew the deadline.
 
 The optional second account additionally requires:
 
@@ -53,6 +58,11 @@ All legacy/non-beta Coin orders stay behind global Coin maintenance.
 
 - Global checkout false closes both accounts, including the second when its own
   checkout flag is true. This must not disable accepted-order delivery.
+- The absolute window independently closes both accounts at its deadline, even if
+  checkout flags are still true. The API rechecks immediately after awaited order
+  storage and before starting provider checkout. A request already started at the
+  provider before the deadline can finish later; accepted orders remain eligible
+  for verified settlement. Time limits do not cancel existing provider sessions.
 - Second checkout false closes only new second-account checkout; original checkout
   and both accepted deliveries remain independently protected.
 - Accepted TEST deliveries can still complete during game-feature rollback if the
@@ -75,8 +85,13 @@ multi-worker Neon or Android payment observations.
 
 Before any separately approved checkout window, verify both migrations, current
 owned balances, deployment/target and retained accepted-order bindings. Agree the
-duration/test budget and how checkout closes, including any required enforceable
-quota/expiry controls. This change does **not** implement quotas or an expiry timer.
+duration/test budget and how checkout closes. An absolute server-side deadline now
+enforces an at-most-30-minute creation window without a background timer. Verify
+expiry regressions before deployment and use the exact deployed deadline when
+giving the tester local start/end times. Close the checkout flags afterward as
+well; retain accepted-order scopes/delivery. This change does **not** implement a
+durable per-account purchase quota: one planned paid test purchase each is a tester
+procedure, not a technical restriction against additional intentional orders.
 
 The proposed device run covers unpaid/cancelled checkout, one approved paid TEST
 purchase per account, exact +500/other-account unchanged, repeated order reads,

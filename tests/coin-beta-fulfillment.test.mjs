@@ -122,6 +122,8 @@ function harness({ second = false } = {}) {
   const environment = {
     COIN_FULFILLMENT_MAINTENANCE: "true",
     COIN_BETA_CHECKOUT_ENABLED: "true",
+    COIN_BETA_CHECKOUT_STARTS_AT: new Date(Date.now() - 60_000).toISOString(),
+    COIN_BETA_CHECKOUT_ENDS_AT: new Date(Date.now() + 29 * 60_000).toISOString(),
     COIN_BETA_DELIVERY_ENABLED: "true",
     COIN_BETA_SCOPE_ID: BINDING.scopeId,
     COIN_BETA_TITLE_ID: TITLE,

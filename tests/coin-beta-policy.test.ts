@@ -25,6 +25,8 @@ const TITLE = "AB12";
 const envKeys = [
   "COIN_FULFILLMENT_MAINTENANCE",
   "COIN_BETA_CHECKOUT_ENABLED",
+  "COIN_BETA_CHECKOUT_STARTS_AT",
+  "COIN_BETA_CHECKOUT_ENDS_AT",
   "COIN_BETA_DELIVERY_ENABLED",
   "COIN_BETA_SCOPE_ID",
   "COIN_BETA_TITLE_ID",
@@ -57,6 +59,8 @@ function fixture(run: () => void) {
   Object.assign(process.env, {
     COIN_FULFILLMENT_MAINTENANCE: "true",
     COIN_BETA_CHECKOUT_ENABLED: "true",
+    COIN_BETA_CHECKOUT_STARTS_AT: new Date(Date.now() - 60_000).toISOString(),
+    COIN_BETA_CHECKOUT_ENDS_AT: new Date(Date.now() + 29 * 60_000).toISOString(),
     COIN_BETA_DELIVERY_ENABLED: "true",
     COIN_BETA_SCOPE_ID: "coin-beta-fixture",
     COIN_BETA_TITLE_ID: TITLE,
@@ -369,6 +373,70 @@ const secondOrder = (): GameCoinOrder => ({
   coinBeta: secondBinding(),
   gameWallet: secondSnapshot(),
 });
+
+test("absolute checkout window is start-inclusive, end-exclusive and cannot renew on a fresh call", (t) =>
+  fixture(() => {
+    enableSecond();
+    const start = Date.parse("2026-10-12T00:00:00.000Z");
+    const end = start + 30 * 60_000;
+    process.env["COIN_BETA_CHECKOUT_STARTS_AT"] = new Date(start).toISOString();
+    process.env["COIN_BETA_CHECKOUT_ENDS_AT"] = new Date(end).toISOString();
+    let now = start;
+    t.mock.method(Date, "now", () => now);
+    const accepted = [order(), secondOrder()];
+    for (const [at, open] of [
+      [start - 1, false],
+      [start, true],
+      [end - 1, true],
+      [end, false],
+      [end + 60_000, false],
+    ] as const) {
+      now = at;
+      for (const player of [PLAYER, SECOND_PLAYER]) {
+        assert.equal(isCoinBetaCheckoutCandidate(player), open);
+        if (open) assert.ok(createCoinBetaCheckoutBinding(player, product()));
+        else paused(() => createCoinBetaCheckoutBinding(player, product()));
+      }
+      for (const old of accepted) {
+        if (!open) paused(() => assertCoinCheckoutSnapshotAllowed(old.playFabId, old.coinBeta));
+        assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(old));
+      }
+    }
+  }));
+
+test("missing/malformed/overlong checkout windows fail closed without holding accepted delivery", (t) =>
+  fixture(() => {
+    enableSecond();
+    const start = "2026-10-12T00:00:00.000Z";
+    const end = "2026-10-12T00:30:00.000Z";
+    process.env["COIN_BETA_CHECKOUT_STARTS_AT"] = start;
+    process.env["COIN_BETA_CHECKOUT_ENDS_AT"] = end;
+    t.mock.method(Date, "now", () => Date.parse("2026-10-12T00:05:00.000Z"));
+    const accepted = [order(), secondOrder()];
+    for (const [badStart, badEnd] of [
+      [undefined, end],
+      [start, undefined],
+      ["", end],
+      [start, "not-a-date"],
+      [start, "2026-10-12T00:30:00Z"],
+      [start, "2026-10-12T00:30:00.000+00:00"],
+      ["2026-02-30T00:00:00.000Z", end],
+      [start, start],
+      [end, start],
+      [start, "2026-10-12T00:30:00.001Z"],
+      ["2026-10-11T00:00:00.000Z", end],
+    ]) {
+      if (badStart === undefined) delete process.env["COIN_BETA_CHECKOUT_STARTS_AT"];
+      else process.env["COIN_BETA_CHECKOUT_STARTS_AT"] = badStart;
+      if (badEnd === undefined) delete process.env["COIN_BETA_CHECKOUT_ENDS_AT"];
+      else process.env["COIN_BETA_CHECKOUT_ENDS_AT"] = badEnd;
+      for (const player of [PLAYER, SECOND_PLAYER]) {
+        assert.equal(isCoinBetaCheckoutCandidate(player), false);
+        paused(() => createCoinBetaCheckoutBinding(player, product()));
+      }
+      for (const old of accepted) assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(old));
+    }
+  }));
 
 test("optional second account defaults closed and does not change the original binding", () =>
   fixture(() => {
