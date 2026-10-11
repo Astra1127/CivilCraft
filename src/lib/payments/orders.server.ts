@@ -60,6 +60,7 @@ export async function updateOrderStatus(
     rewardAmount: existing.rewardAmount,
     premiumWallet: existing.premiumWallet,
     gameWallet: existing.gameWallet,
+    coinBeta: existing.coinBeta,
     coinCurrencyCode: existing.coinCurrencyCode,
     coinReceiptVersion: existing.coinReceiptVersion,
     coinReceipt: existing.coinReceipt,

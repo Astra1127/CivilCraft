@@ -82,9 +82,22 @@ function harness() {
     legacyRecords: new Set(),
     auditWrites: 0,
     eventsProcessed: 0,
+    betaConfigured: false,
+    productId: "package",
+    authPlayer: "ABC123",
+  };
+  const betaEnvironment = {
+    COIN_BETA_CHECKOUT_ENABLED: "false",
+    COIN_BETA_DELIVERY_ENABLED: "false",
+    COIN_BETA_SCOPE_ID: "fixture-account-only-test",
+    COIN_BETA_TITLE_ID: "17FA03",
+    COIN_BETA_PLAYER_ID: "ABC123",
+    COIN_BETA_ENTITY_ID: ENTITY.Id,
+    PUBLIC_APP_URL: "https://civil-craft.vercel.app",
   };
   const admin = {
     AdminApiError: ApiError,
+    adminGameConfig: () => ({ titleId: "17FA03" }),
     object: (value) => (value && typeof value === "object" ? value : {}),
     playFabAdmin: async () => ({ VirtualCurrency: { CO: 7 } }),
   };
@@ -173,7 +186,13 @@ function harness() {
     }),
   };
   const paymongo = {
-    requirePayMongoCheckoutReady: () => ({ appUrl: "https://civilcraft.example" }),
+    requirePayMongoCheckoutReady: () => ({
+      appUrl: state.betaConfigured
+        ? "https://civil-craft.vercel.app"
+        : "https://civilcraft.example",
+      secretKey: "sk_test_fixture_not_a_real_key",
+      webhookSecret: "fixture_webhook_secret",
+    }),
     createPayMongoCheckout: async () => {
       state.checkouts++;
       return {
@@ -194,7 +213,13 @@ function harness() {
       if (state.gameUnavailable) throw new ApiError(503, "Unified wallet unavailable");
       return GAME_WALLET;
     },
-    gameCoinSnapshot: async () => GAME_WALLET,
+    gameCoinSnapshot: async (player, beta) => {
+      betaPolicy.assertCoinCheckoutSnapshotAllowed(player, beta);
+      if (beta && !state.gameMigrated) throw new ApiError(409, "Wallet import required");
+      const snapshot = state.gameSnapshot ?? GAME_WALLET;
+      if (beta) betaPolicy.assertCoinBetaWalletBinding(beta, snapshot);
+      return snapshot;
+    },
     gameCoinBalance: async () => ({
       coins: state.gameMigrated ? state.gameBalance : null,
       ready: state.gameMigrated,
@@ -206,6 +231,7 @@ function harness() {
       return { valid: true, currency: "coins" };
     },
     grantGameCoins: async (order) => {
+      betaPolicy.assertCoinOrderDeliveryAllowed(order);
       assert.equal(order.coinReceiptVersion, 3);
       assert.deepEqual(plain(order.gameWallet), GAME_WALLET);
       const alreadyGranted = state.gameReceipts.has(order.orderId);
@@ -216,6 +242,7 @@ function harness() {
       return { alreadyGranted };
     },
     repairGameCoinOrder: async (order) => {
+      betaPolicy.assertCoinOrderDeliveryAllowed(order);
       assert.equal(order.coinReceiptVersion, 3);
       assert.deepEqual(plain(order.gameWallet), GAME_WALLET);
       state.receiptReads.push({ orderId: order.orderId, gameWallet: plain(order.gameWallet) });
@@ -249,6 +276,24 @@ function harness() {
       state.legacyRecords.add(order.orderId);
     },
   };
+  const betaPolicy = load(
+    "payments/coin-beta.server.ts",
+    {
+      "../playfab/admin-client.server.ts": admin,
+      "../game-wallet/config.server.ts": {
+        requireGameWalletReady: () => {
+          if (!state.gameEnabled || state.gameUnavailable)
+            throw new ApiError(503, "Wallet disabled");
+          return GAME_WALLET;
+        },
+        requireGameWalletSettlementReady: () => GAME_WALLET,
+      },
+      "./coin-maintenance.server.ts": coinMaintenance,
+      "./paymongo.server.ts": paymongo,
+      "./products.ts": products,
+    },
+    betaEnvironment,
+  );
   const mocks = {
     "../playfab/admin-client.server.ts": admin,
     "../playfab/premium-wallet.server.ts": wallet,
@@ -257,6 +302,7 @@ function harness() {
     "./paymongo.server.ts": paymongo,
     "./coin-receipts.server.ts": coin,
     "../game-wallet/index.server.ts": gameWallet,
+    "./coin-beta.server.ts": betaPolicy,
   };
   const fulfillment = load("payments/fulfillment.server.ts", mocks);
   let currency = "DI";
@@ -267,12 +313,15 @@ function harness() {
       "./fulfillment.server.ts": fulfillment,
       "./products.server.ts": {
         getProductById: async () => ({
-          id: "package",
+          id: state.productId,
           active: true,
+          category: "currency",
           amount: 5000,
           currency: "PHP",
           rewardCurrency: currency,
           rewardAmount: 500,
+          rewardCoins: currency === "CO" ? 500 : 0,
+          ...state.productOverrides,
         }),
         listActiveProducts: async () => [],
       },
@@ -280,7 +329,7 @@ function harness() {
         authenticatePaymentPlayer: async (request) => {
           if (state.requireAuth && request.headers.get("Authorization") !== "Bearer owner-session")
             throw new ApiError(401, "Player sign-in is required.");
-          return { playFabId: "ABC123" };
+          return { playFabId: state.authPlayer };
         },
       },
     },
@@ -291,7 +340,7 @@ function harness() {
       new Request("https://civilcraft.example/api/payments/paymongo/create-checkout", {
         method: "POST",
         body: JSON.stringify({
-          productId: "package",
+          productId: state.productId,
           playFabId: "BAD",
           rewardAmount: 999999,
           rewardCurrency: "CO",
@@ -301,7 +350,7 @@ function harness() {
         }),
       }),
     );
-  const webhook = () =>
+  const webhook = (evidence = {}) =>
     fulfillment.processPayMongoWebhook(
       JSON.stringify({
         data: {
@@ -313,13 +362,25 @@ function harness() {
               id: "cs_test",
               type: "checkout_session",
               attributes: {
+                ...(state.betaConfigured ? { livemode: false } : {}),
                 reference_number: "CC-DATABASE-ORDER",
                 metadata: {
                   orderId: "CC-DATABASE-ORDER",
-                  productId: "package",
+                  productId: state.productId,
                   playFabId: "ABC123",
                 },
-                payments: [{ attributes: { status: "paid", amount: 5000, currency: "PHP" } }],
+                payments: [
+                  {
+                    attributes: {
+                      status: "paid",
+                      amount: 5000,
+                      currency: "PHP",
+                      ...(state.betaConfigured ? { livemode: false } : {}),
+                      ...evidence.payment,
+                    },
+                  },
+                ],
+                ...evidence.session,
               },
             },
           },
@@ -336,6 +397,17 @@ function harness() {
     fulfillment,
     checkout,
     webhook,
+    betaEnvironment,
+    betaPolicy,
+    enableBeta() {
+      state.betaConfigured = true;
+      state.gameEnabled = true;
+      state.gameBalance = 0;
+      state.productId = "coins_500";
+      currency = "CO";
+      betaEnvironment.COIN_BETA_CHECKOUT_ENABLED = "true";
+      betaEnvironment.COIN_BETA_DELIVERY_ENABLED = "true";
+    },
     setCurrency(value) {
       currency = value;
     },
@@ -965,5 +1037,189 @@ test("Diamond verified payments continue during Coin-only maintenance", async ()
     assert.equal(h.state.grants, 1);
     assert.equal(h.state.orders.get("CC-DATABASE-ORDER").status, "fulfilled");
     assert.equal(h.state.eventsProcessed, 2);
+  });
+});
+
+test("real checkout API creates a policy-valid beta v3 order and duplicate TEST webhooks credit it once", async () => {
+  await duringCoinMaintenance(async () => {
+    const h = harness();
+    h.enableBeta();
+    const balances = await (
+      await h.api.handlePaymentsRequest(
+        new Request("https://civil-craft.vercel.app/api/player/currencies"),
+      )
+    ).json();
+    assert.equal(balances.coins, 0);
+    assert.equal(balances.coinsAvailable, true);
+    assert.equal(balances.coinTestCheckout, true);
+    assert.deepEqual(balances.coinTestProductIds, ["coins_500"]);
+    assert.equal(balances.diamondsAvailable, true);
+    assert.equal(
+      (await h.checkout({ gameLink: "correct-game-token", gameWallet: { databaseId: "forged" } }))
+        .status,
+      200,
+    );
+    const order = h.state.orders.get("CC-DATABASE-ORDER");
+    assert.equal(order.coinReceiptVersion, 3);
+    assert.equal(order.coinCurrencyCode, "CO");
+    assert.equal(order.coinReceipt, undefined);
+    assert.equal(order.playFabId, "ABC123");
+    assert.equal(order.expectedAmount, 5000);
+    assert.equal(order.expectedCoins, 500);
+    assert.deepEqual(order.gameWallet, GAME_WALLET);
+    assert.deepEqual(order.coinBeta, {
+      protocolVersion: 1,
+      mode: "test",
+      scopeId: "fixture-account-only-test",
+      titleId: "17FA03",
+      playerId: "ABC123",
+      entity: ENTITY,
+      productId: "coins_500",
+      rewardCurrency: "CO",
+      rewardAmount: 500,
+      expectedAmount: 5000,
+      currency: "PHP",
+    });
+    assert.doesNotThrow(() => h.betaPolicy.assertCoinOrderDeliveryAllowed(order));
+    const beforePayment = await h.api.handlePaymentsRequest(
+      new Request(
+        "https://civil-craft.vercel.app/api/payments/paymongo/order?id=CC-DATABASE-ORDER",
+      ),
+    );
+    assert.equal((await beforePayment.json()).status, "pending");
+    assert.equal(h.state.gameGrants, 0);
+    assert.equal((await h.webhook()).status, 200);
+    for (const result of await Promise.all([h.webhook(), h.webhook()]))
+      assert.equal(result.status, 200);
+    assert.equal(h.state.gameGrants, 1);
+    assert.equal(h.state.gameReceipts.size, 1);
+    assert.equal(h.state.grants, 0);
+    assert.equal(h.state.gateEntries, 0);
+    assert.equal(h.state.orders.get(order.orderId).status, "fulfilled");
+  });
+});
+
+test("API beta rejects unapproved account/entity/package/product changes before creating an order or checkout", async () => {
+  await duringCoinMaintenance(async () => {
+    for (const change of [
+      (h) => {
+        h.state.authPlayer = "BAD123";
+      },
+      (h) => {
+        h.betaEnvironment.COIN_BETA_ENTITY_ID = "BAD123";
+      },
+      (h) => {
+        h.betaEnvironment.COIN_BETA_TITLE_ID = "BAD123";
+      },
+      (h) => {
+        h.state.productId = "coins_1000";
+      },
+      (h) => {
+        h.state.productOverrides = { amount: 1 };
+      },
+      (h) => {
+        h.state.productOverrides = { rewardAmount: 999, rewardCoins: 999 };
+      },
+      (h) => {
+        h.state.productOverrides = { active: false };
+      },
+      (h) => {
+        h.state.gameMigrated = false;
+      },
+      (h) => {
+        h.state.gameEnabled = false;
+      },
+      (h) => {
+        h.state.gameUnavailable = true;
+      },
+      (h) => {
+        h.state.gameSnapshot = { ...GAME_WALLET, targetId: "c".repeat(64) };
+      },
+    ]) {
+      const h = harness();
+      h.enableBeta();
+      change(h);
+      assert.notEqual((await h.checkout()).status, 200);
+      assert.equal(h.state.checkouts, 0);
+      assert.equal(h.state.orders.size, 0);
+      assert.equal(h.state.gameGrants, 0);
+      const response = await h.api.handlePaymentsRequest(
+        new Request("https://civil-craft.vercel.app/api/player/currencies"),
+      );
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).coinsAvailable, false);
+    }
+  });
+});
+
+test("API beta ignores browser prices but refuses a supplied beta marker and admin-only sessions", async () => {
+  await duringCoinMaintenance(async () => {
+    const h = harness();
+    h.enableBeta();
+    assert.equal((await h.checkout({ coinBeta: { mode: "test" } })).status, 400);
+    assert.equal(h.state.orders.size, 0);
+    h.state.requireAuth = true;
+    const rejected = await h.api.handlePaymentsRequest(
+      new Request("https://civil-craft.vercel.app/api/payments/paymongo/create-checkout", {
+        method: "POST",
+        headers: { Authorization: "Basic admin-session" },
+        body: JSON.stringify({ productId: "coins_500" }),
+      }),
+    );
+    assert.equal(rejected.status, 401);
+    assert.equal(h.state.orders.size, 0);
+    assert.equal(h.state.checkouts, 0);
+  });
+});
+
+test("closing beta checkout preserves exact paid v3 delivery but never opens legacy Coin orders", async () => {
+  await duringCoinMaintenance(async () => {
+    const h = harness();
+    h.enableBeta();
+    assert.equal((await h.checkout()).status, 200);
+    h.betaEnvironment.COIN_BETA_CHECKOUT_ENABLED = "false";
+    h.state.gameEnabled = false;
+    h.state.gameInstalled = true;
+    const response = await h.api.handlePaymentsRequest(
+      new Request("https://civil-craft.vercel.app/api/player/currencies"),
+    );
+    assert.equal((await response.json()).coinsAvailable, false);
+    assert.equal((await h.checkout()).status, 503);
+    assert.equal(h.state.checkouts, 1);
+    assert.equal((await h.webhook()).status, 200);
+    assert.equal((await h.webhook()).status, 200);
+    assert.equal(h.state.gameGrants, 1);
+    assert.equal(h.state.grants, 0);
+    const legacy = {
+      ...h.state.orders.get("CC-DATABASE-ORDER"),
+      coinReceiptVersion: 2,
+      coinBeta: undefined,
+      gameWallet: undefined,
+      coinReceipt: RECEIPT,
+    };
+    await assert.rejects(h.fulfillment.repairPaymentOrder(legacy), (error) => error.status === 503);
+    assert.equal(h.state.grants, 0);
+    assert.equal(h.state.gateEntries, 0);
+  });
+});
+
+test("unpaid/failed beta checkout and owner polling cannot grant; true verified late payment can still deliver", async () => {
+  await duringCoinMaintenance(async () => {
+    const h = harness();
+    h.enableBeta();
+    await h.checkout();
+    assert.notEqual((await h.webhook({ payment: { status: "failed" } })).status, 200);
+    assert.equal(h.state.gameGrants, 0);
+    assert.equal(h.state.gameReceipts.size, 0);
+    h.state.orders.get("CC-DATABASE-ORDER").status = "cancelled";
+    const pending = await h.api.handlePaymentsRequest(
+      new Request(
+        "https://civil-craft.vercel.app/api/payments/paymongo/order?id=CC-DATABASE-ORDER",
+      ),
+    );
+    assert.equal((await pending.json()).status, "cancelled");
+    assert.equal(h.state.gameGrants, 0);
+    assert.equal((await h.webhook()).status, 200);
+    assert.equal(h.state.gameGrants, 1);
   });
 });

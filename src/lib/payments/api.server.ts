@@ -27,6 +27,11 @@ import {
   isCoinFulfillmentMaintenance,
 } from "./coin-maintenance.server.ts";
 import {
+  COIN_BETA_PRODUCT_ID,
+  createCoinBetaCheckoutBinding,
+  isCoinBetaCheckoutCandidate,
+} from "./coin-beta.server.ts";
+import {
   assertClassicCurrencyConfigured,
   assertCoinCheckoutReady,
   coinReceiptSnapshot,
@@ -147,6 +152,32 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       } catch {
         /* Disable checkout, not an existing balance. */
       }
+      let coinMaintenanceAllowsCheckout = !isCoinFulfillmentMaintenance();
+      let coinTestProductIds: string[] | undefined;
+      if (
+        !coinMaintenanceAllowsCheckout &&
+        unifiedCoins &&
+        coins.status === "fulfilled" &&
+        coinsReady &&
+        paymentReady &&
+        isGameWalletEnabled() &&
+        isCoinBetaCheckoutCandidate(playFabId)
+      ) {
+        try {
+          const product = await getProductById(COIN_BETA_PRODUCT_ID);
+          if (product) {
+            const beta = createCoinBetaCheckoutBinding(playFabId, product);
+            if (beta) {
+              // Availability also verifies the actual server-resolved entity and ready wallet.
+              await gameCoinSnapshot(playFabId, beta);
+              coinTestProductIds = [beta.productId];
+              coinMaintenanceAllowsCheckout = true;
+            }
+          }
+        } catch {
+          /* A failed beta guard disables checkout, never a healthy balance or Diamonds. */
+        }
+      }
       return jsonResponse({
         coins: coins.status === "fulfilled" ? coins.value : null,
         diamonds: diamonds.status === "fulfilled" ? diamonds.value : null,
@@ -155,9 +186,10 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
           coins.status === "fulfilled" &&
           coinsReady &&
           paymentReady &&
-          !isCoinFulfillmentMaintenance() &&
+          coinMaintenanceAllowsCheckout &&
           (!unifiedCoins || isGameWalletEnabled()),
         coinsMigrationRequired: unifiedCoins && coins.status === "fulfilled" && !coinsReady,
+        ...(coinTestProductIds ? { coinTestCheckout: true, coinTestProductIds } : {}),
       });
     }
     if (path === "/api/payments/paymongo/create-checkout") {
@@ -167,6 +199,8 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       } catch {
         return jsonResponse({ error: "Invalid JSON body" }, 400);
       }
+      if (Object.hasOwn(body, "coinBeta"))
+        throw new AdminApiError(400, "Coin test settings are controlled by the server.");
       const id = typeof body["productId"] === "string" ? body["productId"] : "";
       if (Object.hasOwn(body, "gameLink")) {
         if (typeof body["gameLink"] !== "string")
@@ -177,7 +211,11 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       if (!product || product.active === false)
         return jsonResponse({ error: "Unknown or unavailable product." }, 400);
       const reward = normalizeProductReward(product);
-      if (reward.rewardCurrency === "CO") assertCoinFulfillmentAvailable();
+      const coinBeta =
+        reward.rewardCurrency === "CO"
+          ? createCoinBetaCheckoutBinding(playFabId, product)
+          : undefined;
+      if (reward.rewardCurrency === "CO" && !coinBeta) assertCoinFulfillmentAvailable();
       const returnOrigin = configuredReturnOrigin();
       const orderId = generateOrderId(reward.rewardCurrency);
       if (await getOrder(orderId))
@@ -199,7 +237,7 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         premiumWallet = { ...wallet, entity };
       } else if (isGameWalletEnabled()) {
         requireGameWalletReady();
-        gameWallet = await gameCoinSnapshot(playFabId);
+        gameWallet = await gameCoinSnapshot(playFabId, coinBeta);
         const balance = await gameCoinBalance(playFabId);
         if (!balance.ready || balance.coins === null)
           throw new AdminApiError(
@@ -236,7 +274,11 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         expectedCoins: reward.rewardCurrency === "CO" ? reward.rewardAmount : 0,
         ...(reward.rewardCurrency === "CO"
           ? gameWallet
-            ? { coinReceiptVersion: 3 as const, gameWallet }
+            ? {
+                coinReceiptVersion: 3 as const,
+                gameWallet,
+                ...(coinBeta ? { coinBeta, coinCurrencyCode: "CO" } : {}),
+              }
             : {
                 coinCurrencyCode: getCoinsCurrencyCode(),
                 coinReceiptVersion: coinReceipt ? 2 : 1,

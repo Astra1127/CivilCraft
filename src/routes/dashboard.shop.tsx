@@ -42,6 +42,8 @@ interface PlayerCurrencies {
   diamondsAvailable: boolean;
   coinsAvailable?: boolean;
   coinsMigrationRequired?: boolean;
+  coinTestCheckout?: boolean;
+  coinTestProductIds?: string[];
 }
 
 interface GameLinkStatus {
@@ -158,6 +160,11 @@ function AuthenticatedShopPage() {
     !balanceQuery.isError &&
     balanceQuery.data?.coinsAvailable === true &&
     balanceQuery.data?.coinsMigrationRequired !== true;
+  const coinProductAvailable = (product: PaymentProduct) =>
+    coinCheckoutAvailable &&
+    (balanceQuery.data?.coinTestCheckout !== true ||
+      (Array.isArray(balanceQuery.data.coinTestProductIds) &&
+        balanceQuery.data.coinTestProductIds.includes(product.id)));
   const gameAccountVerified =
     !gameLink ||
     (gameLinkQuery.data?.valid === true && !gameLinkQuery.isPending && !gameLinkQuery.isError);
@@ -200,7 +207,7 @@ function AuthenticatedShopPage() {
       return;
     }
 
-    if (normalizeProductReward(product).rewardCurrency === "CO" && !coinCheckoutAvailable) {
+    if (normalizeProductReward(product).rewardCurrency === "CO" && !coinProductAvailable(product)) {
       toast.error(
         balanceQuery.data?.coinsMigrationRequired
           ? "Open the updated game and finish selecting your account save before buying Coins."
@@ -470,6 +477,15 @@ function AuthenticatedShopPage() {
                   : "Coin purchases are temporarily unavailable. No payment will be started."}
               </p>
             ) : null}
+            {selectedCode === "CO" && balanceQuery.data?.coinTestCheckout === true ? (
+              <p
+                role="status"
+                className="rounded-lg border border-gold/40 bg-gold/10 p-4 text-center text-sm"
+              >
+                Account-limited Coin test: only the 500 Coin package is available. This uses
+                PayMongo TEST mode; no real money is charged. Other Coin packages remain paused.
+              </p>
+            ) : null}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 items-stretch pt-2">
               {products.map((product) => {
@@ -567,7 +583,7 @@ function AuthenticatedShopPage() {
                           disabled={
                             purchasingId !== null ||
                             !gameAccountVerified ||
-                            (selectedCode === "CO" && !coinCheckoutAvailable) ||
+                            (selectedCode === "CO" && !coinProductAvailable(product)) ||
                             (selectedCode === "DI" && !diamondCheckoutAvailable)
                           }
                         >

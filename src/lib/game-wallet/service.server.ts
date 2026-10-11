@@ -3,7 +3,12 @@ import { AdminApiError, object } from "../playfab/admin-client.server.ts";
 import { getDiamondBalance, resolvePremiumEntity } from "../playfab/premium-wallet.server.ts";
 import { normalizeOrderReward } from "../payments/products.ts";
 import { updateOrderStatus } from "../payments/orders.server.ts";
-import { assertCoinFulfillmentAvailable } from "../payments/coin-maintenance.server.ts";
+import {
+  assertCoinBetaWalletBinding,
+  assertCoinCheckoutSnapshotAllowed,
+  assertCoinOrderDeliveryAllowed,
+} from "../payments/coin-beta.server.ts";
+import type { CoinBetaBinding } from "../payments/types.ts";
 import {
   isGameWalletEnabled,
   isGameWalletInstalled,
@@ -72,8 +77,11 @@ export async function gameWallet(playFabId: string): Promise<GameWalletDTO> {
   }
   return { ...coins, diamonds };
 }
-export async function gameCoinSnapshot(playFabId: string): Promise<GameWalletSnapshot> {
-  assertCoinFulfillmentAvailable();
+export async function gameCoinSnapshot(
+  playFabId: string,
+  beta?: CoinBetaBinding,
+): Promise<GameWalletSnapshot> {
+  assertCoinCheckoutSnapshotAllowed(playFabId, beta);
   const config = requireGameWalletReady();
   const entity = await resolvePremiumEntity(playFabId);
   const rows = await walletCall("wallet_balance", walletIdentity(config, playFabId, entity));
@@ -82,10 +90,12 @@ export async function gameCoinSnapshot(playFabId: string): Promise<GameWalletSna
       409,
       "Open the updated game and approve your account save before buying Coins.",
     );
-  return Object.freeze({
+  const snapshot = Object.freeze({
     ...config,
     entity: Object.freeze({ Id: entity.Id.toUpperCase(), Type: entity.Type }),
   });
+  if (beta !== undefined) assertCoinBetaWalletBinding(beta, snapshot);
+  return snapshot;
 }
 function orderInput(order: GameCoinOrder) {
   const config = requireGameWalletSettlementReady();
@@ -113,11 +123,12 @@ function orderInput(order: GameCoinOrder) {
     player: order.playFabId.toUpperCase(),
     amount: reward.rewardAmount,
     snapshot,
+    ...(order.coinBeta !== undefined ? { coinBeta: order.coinBeta } : {}),
   });
   return { identity, amount: reward.rewardAmount, fingerprint };
 }
 export async function grantGameCoins(order: GameCoinOrder): Promise<{ alreadyGranted: boolean }> {
-  assertCoinFulfillmentAvailable();
+  assertCoinOrderDeliveryAllowed(order);
   const input = orderInput(order);
   const rows = await walletCall(
     "credit",
@@ -129,7 +140,7 @@ export async function grantGameCoins(order: GameCoinOrder): Promise<{ alreadyGra
   return { alreadyGranted: rows[0]["already_granted"] };
 }
 export async function repairGameCoinOrder<T extends GameCoinOrder>(order: T): Promise<T> {
-  assertCoinFulfillmentAvailable();
+  assertCoinOrderDeliveryAllowed(order);
   const input = orderInput(order);
   const rows = await walletCall(
     "receipt",

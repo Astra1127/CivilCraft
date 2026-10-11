@@ -1,0 +1,264 @@
+import { adminGameConfig } from "../playfab/admin-client.server.ts";
+import {
+  requireGameWalletReady,
+  requireGameWalletSettlementReady,
+} from "../game-wallet/config.server.ts";
+import type { GameCoinOrder, GameWalletSnapshot } from "../game-wallet/types.ts";
+import {
+  CoinFulfillmentMaintenance,
+  assertCoinFulfillmentAvailable,
+  isCoinFulfillmentMaintenance,
+} from "./coin-maintenance.server.ts";
+import { requirePayMongoCheckoutReady } from "./paymongo.server.ts";
+import { normalizeProductReward } from "./products.ts";
+import type { CoinBetaBinding, PaymentOrder, PaymentProduct } from "./types.ts";
+
+export const COIN_BETA_PRODUCT_ID = "coins_500" as const;
+const MAIN_ORIGIN = "https://civil-craft.vercel.app";
+const bindingKeys = [
+  "protocolVersion",
+  "mode",
+  "scopeId",
+  "titleId",
+  "playerId",
+  "entity",
+  "productId",
+  "rewardCurrency",
+  "rewardAmount",
+  "expectedAmount",
+  "currency",
+];
+const snapshotKeys = [
+  "storage",
+  "namespace",
+  "databaseId",
+  "targetId",
+  "protocolVersion",
+  "entity",
+];
+const enabled = (key: string) => process.env[key]?.trim().toLowerCase() === "true";
+const paused = (): never => {
+  throw new CoinFulfillmentMaintenance();
+};
+
+function exactObject(value: unknown, keys: string[]): value is Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== null && Object.getPrototypeOf(prototype) !== null) return false;
+  const actual = Reflect.ownKeys(value);
+  return (
+    actual.length === keys.length &&
+    actual.every((key) => typeof key === "string" && keys.includes(key))
+  );
+}
+
+function scope(phase: "checkout" | "delivery") {
+  if (
+    !enabled("COIN_BETA_DELIVERY_ENABLED") ||
+    (phase === "checkout" && !enabled("COIN_BETA_CHECKOUT_ENABLED"))
+  )
+    paused();
+  const scopeId = process.env["COIN_BETA_SCOPE_ID"]?.trim() || "";
+  const titleId = process.env["COIN_BETA_TITLE_ID"]?.trim().toUpperCase() || "";
+  const playerId = process.env["COIN_BETA_PLAYER_ID"]?.trim().toUpperCase() || "";
+  const entityId = process.env["COIN_BETA_ENTITY_ID"]?.trim().toUpperCase() || "";
+  if (
+    scopeId.length > 64 ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(scopeId) ||
+    !/^[A-F0-9]{1,16}$/.test(titleId) ||
+    !/^[A-F0-9]{1,32}$/.test(playerId) ||
+    !/^[A-F0-9]{1,64}$/.test(entityId) ||
+    titleId !== adminGameConfig().titleId.toUpperCase()
+  )
+    paused();
+  const provider = requirePayMongoCheckoutReady();
+  const rawOrigin = (
+    process.env["PUBLIC_APP_URL"] ||
+    process.env["PUBLIC_SITE_URL"] ||
+    process.env["SITE_URL"] ||
+    ""
+  ).trim();
+  const origin = new URL(rawOrigin);
+  const providerOrigin = new URL(provider.appUrl);
+  if (
+    !provider.secretKey.startsWith("sk_test_") ||
+    provider.secretKey.length <= "sk_test_".length ||
+    (rawOrigin !== MAIN_ORIGIN && rawOrigin !== `${MAIN_ORIGIN}/`) ||
+    origin.origin !== MAIN_ORIGIN ||
+    origin.pathname !== "/" ||
+    origin.search ||
+    origin.hash ||
+    origin.username ||
+    origin.password ||
+    providerOrigin.origin !== MAIN_ORIGIN ||
+    providerOrigin.pathname !== "/" ||
+    providerOrigin.search ||
+    providerOrigin.hash ||
+    providerOrigin.username ||
+    providerOrigin.password
+  )
+    paused();
+  const wallet =
+    phase === "checkout" ? requireGameWalletReady() : requireGameWalletSettlementReady();
+  if (
+    wallet.storage !== "postgres" ||
+    wallet.namespace !== "civilcraft_game_wallet_v3" ||
+    wallet.protocolVersion !== 3 ||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(wallet.databaseId) ||
+    !/^[a-f0-9]{64}$/.test(wallet.targetId)
+  )
+    paused();
+  return { scopeId, titleId, playerId, entityId, wallet };
+}
+
+function assertBinding(
+  beta: unknown,
+  current: ReturnType<typeof scope>,
+): asserts beta is CoinBetaBinding {
+  if (
+    !exactObject(beta, bindingKeys) ||
+    !exactObject(beta["entity"], ["Id", "Type"]) ||
+    beta["protocolVersion"] !== 1 ||
+    beta["mode"] !== "test" ||
+    beta["scopeId"] !== current.scopeId ||
+    beta["titleId"] !== current.titleId ||
+    beta["playerId"] !== current.playerId ||
+    beta["entity"]["Id"] !== current.entityId ||
+    beta["entity"]["Type"] !== "title_player_account" ||
+    beta["productId"] !== COIN_BETA_PRODUCT_ID ||
+    beta["rewardCurrency"] !== "CO" ||
+    beta["rewardAmount"] !== 500 ||
+    beta["expectedAmount"] !== 5000 ||
+    beta["currency"] !== "PHP"
+  )
+    paused();
+}
+
+function assertSnapshot(
+  beta: CoinBetaBinding,
+  snapshot: unknown,
+  current: ReturnType<typeof scope>,
+): void {
+  if (
+    !exactObject(snapshot, snapshotKeys) ||
+    !exactObject(snapshot["entity"], ["Id", "Type"]) ||
+    snapshot["storage"] !== current.wallet.storage ||
+    snapshot["namespace"] !== current.wallet.namespace ||
+    snapshot["protocolVersion"] !== 3 ||
+    snapshot["databaseId"] !== current.wallet.databaseId ||
+    snapshot["targetId"] !== current.wallet.targetId ||
+    snapshot["entity"]["Id"] !== beta.entity.Id ||
+    snapshot["entity"]["Type"] !== beta.entity.Type
+  )
+    paused();
+}
+
+/** Display preflight only: actual entity/imported-wallet readiness is checked separately. */
+export function isCoinBetaCheckoutCandidate(playFabId: string): boolean {
+  if (!isCoinFulfillmentMaintenance()) return false;
+  try {
+    return scope("checkout").playerId === playFabId.toUpperCase();
+  } catch {
+    return false;
+  }
+}
+
+/** Called only with the authenticated owner and active server-loaded product, never browser bindings. */
+export function createCoinBetaCheckoutBinding(
+  playFabId: string,
+  product: PaymentProduct,
+): CoinBetaBinding | undefined {
+  if (!isCoinFulfillmentMaintenance()) return undefined;
+  try {
+    const current = scope("checkout");
+    const reward = normalizeProductReward(product);
+    if (
+      typeof playFabId !== "string" ||
+      !/^[a-f0-9]{1,32}$/i.test(playFabId) ||
+      playFabId.toUpperCase() !== current.playerId ||
+      product.id !== COIN_BETA_PRODUCT_ID ||
+      product.active !== true ||
+      product.category !== "currency" ||
+      product.amount !== 5000 ||
+      product.currency !== "PHP" ||
+      product.rewardCurrency !== "CO" ||
+      product.rewardAmount !== 500 ||
+      product.rewardCoins !== 500 ||
+      reward.rewardCurrency !== "CO" ||
+      reward.rewardAmount !== 500
+    )
+      paused();
+    return Object.freeze({
+      protocolVersion: 1,
+      mode: "test",
+      scopeId: current.scopeId,
+      titleId: current.titleId,
+      playerId: current.playerId,
+      entity: Object.freeze({ Id: current.entityId, Type: "title_player_account" }),
+      productId: COIN_BETA_PRODUCT_ID,
+      rewardCurrency: "CO",
+      rewardAmount: 500,
+      expectedAmount: 5000,
+      currency: "PHP",
+    });
+  } catch {
+    return paused();
+  }
+}
+
+export function assertCoinCheckoutSnapshotAllowed(playFabId: string, beta?: CoinBetaBinding): void {
+  if (beta === undefined) return assertCoinFulfillmentAvailable();
+  try {
+    const current = scope("checkout");
+    assertBinding(beta, current);
+    if (
+      typeof playFabId !== "string" ||
+      !/^[a-f0-9]{1,32}$/i.test(playFabId) ||
+      playFabId.toUpperCase() !== beta.playerId
+    )
+      paused();
+  } catch {
+    paused();
+  }
+}
+
+export function assertCoinBetaWalletBinding(
+  beta: CoinBetaBinding,
+  snapshot: GameWalletSnapshot,
+): void {
+  try {
+    const current = scope("delivery");
+    assertBinding(beta, current);
+    assertSnapshot(beta, snapshot, current);
+  } catch {
+    paused();
+  }
+}
+
+/** A bound paid TEST order may settle with checkout closed, but never with delivery closed. */
+export function assertCoinOrderDeliveryAllowed(order: GameCoinOrder | PaymentOrder): void {
+  if (order.coinBeta === undefined) return assertCoinFulfillmentAvailable();
+  try {
+    const current = scope("delivery");
+    assertBinding(order.coinBeta, current);
+    if (
+      order.coinReceiptVersion !== 3 ||
+      order.playFabId !== current.playerId ||
+      typeof order.orderId !== "string" ||
+      !/^[a-z0-9][a-z0-9._:-]{0,199}$/i.test(order.orderId) ||
+      order.productId !== COIN_BETA_PRODUCT_ID ||
+      order.rewardCurrency !== "CO" ||
+      order.rewardAmount !== 500 ||
+      order.expectedCoins !== 500 ||
+      order.expectedAmount !== 5000 ||
+      order.currency !== "PHP" ||
+      order.coinCurrencyCode !== "CO" ||
+      order.coinReceipt !== undefined ||
+      (order as unknown as Record<string, unknown>)["premiumWallet"] !== undefined
+    )
+      paused();
+    assertSnapshot(order.coinBeta, order.gameWallet, current);
+  } catch {
+    paused();
+  }
+}

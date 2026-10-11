@@ -431,6 +431,72 @@ test("unavailable Diamond wallet disables checkout; catalog outages never use st
   }
 });
 
+test("account-limited Coin beta enables only the server-allowlisted package", async () => {
+  const module = load("../src/routes/dashboard.shop.tsx", {
+    search: { currency: "coins" },
+    balances: { coinTestCheckout: true, coinTestProductIds: ["coins_500"] },
+    fetch: async () => Response.json({ checkoutUrl: "https://checkout.paymongo.test/beta" }),
+  });
+  const renderer = await mount(module);
+  try {
+    const buttons = renderer.root
+      .findAllByType("button")
+      .filter((button) => renderedText(button).includes("Buy "));
+    assert.equal(buttons.length, 3);
+    assert.deepEqual(
+      buttons.map((button) => button.props.disabled),
+      [false, true, true],
+    );
+    assert.match(JSON.stringify(renderer.toJSON()), /Account-limited Coin test/);
+    await act(async () => buttons[1].props.onClick());
+    assert.equal(module.requests.length, 0);
+    await act(async () => buttons[0].props.onClick());
+    assert.deepEqual(JSON.parse(module.requests[0].init.body), { productId: "coins_500" });
+    assert.equal(module.requests[0].init.headers.Authorization, "Bearer ticket-A");
+  } finally {
+    await act(async () => renderer.unmount());
+  }
+});
+
+test("malformed or missing beta package allowlist never enables a Coin button", async () => {
+  for (const ids of [undefined, [], "coins_500", ["not-a-package"]]) {
+    const module = load("../src/routes/dashboard.shop.tsx", {
+      search: { currency: "coins" },
+      balances: { coinTestCheckout: true, coinTestProductIds: ids },
+    });
+    const renderer = await mount(module);
+    try {
+      const buttons = renderer.root
+        .findAllByType("button")
+        .filter((button) => renderedText(button).includes("Buy "));
+      assert.ok(buttons.every((button) => button.props.disabled));
+      await act(async () => buttons[0].props.onClick());
+      assert.equal(module.requests.length, 0);
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  }
+});
+
+test("beta package restriction does not change normal Coins or Diamond availability", async () => {
+  for (const options of [
+    { search: { currency: "coins" } },
+    { balances: { coinTestCheckout: true, coinTestProductIds: ["coins_500"] } },
+  ]) {
+    const module = load("../src/routes/dashboard.shop.tsx", options);
+    const renderer = await mount(module);
+    try {
+      const buttons = renderer.root
+        .findAllByType("button")
+        .filter((button) => renderedText(button).includes("Buy "));
+      assert.equal(buttons.length, 3);
+      assert.ok(buttons.every((button) => !button.props.disabled));
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  }
+});
+
 test("expired checkout session returns to the selected Diamond shop without payment", async () => {
   const module = load("../src/routes/dashboard.shop.tsx", { ticket: null });
   const renderer = await mount(module);

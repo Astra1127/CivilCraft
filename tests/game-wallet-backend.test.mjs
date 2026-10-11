@@ -144,6 +144,11 @@ function harness() {
         if (state.auditFailure) throw new Error("private");
       },
     },
+    "../payments/coin-beta.server.ts": {
+      assertCoinCheckoutSnapshotAllowed: () => coinMaintenance.assertCoinFulfillmentAvailable(),
+      assertCoinBetaWalletBinding: () => {},
+      assertCoinOrderDeliveryAllowed: () => coinMaintenance.assertCoinFulfillmentAvailable(),
+    },
     "./config.server.ts": config,
     "./database.server.ts": database,
     "./catalog.server.ts": catalog,
@@ -199,6 +204,51 @@ test("verified wallet still reads and settles immutable v3 orders while new oper
     /unavailable/,
   );
   assert.equal(state.calls.length, before);
+});
+test("ordinary v3 payment fingerprints stay unchanged and scoped beta bindings become permanent fingerprint input", async () => {
+  const { service, state } = harness();
+  const snapshot = { ...CONFIG, entity: ENTITY };
+  const ordinary = {
+    orderId: "fixture-v3-order",
+    playFabId: PLAYER,
+    expectedCoins: 500,
+    rewardCurrency: "CO",
+    rewardAmount: 500,
+    coinReceiptVersion: 3,
+    gameWallet: snapshot,
+    status: "paid",
+  };
+  const originalInput = {
+    protocol: 3,
+    titleId: "17FA03",
+    orderId: ordinary.orderId,
+    player: PLAYER,
+    amount: 500,
+    snapshot,
+  };
+  await service.grantGameCoins(ordinary);
+  const ordinaryFingerprint = state.calls.at(-1).args[7];
+  assert.equal(ordinaryFingerprint, catalog.digest(originalInput));
+  const beta = {
+    protocolVersion: 1,
+    mode: "test",
+    scopeId: "fixture-scope",
+    titleId: "17FA03",
+    playerId: PLAYER,
+    entity: ENTITY,
+    productId: "coins_500",
+    rewardCurrency: "CO",
+    rewardAmount: 500,
+    expectedAmount: 5000,
+    currency: "PHP",
+  };
+  await service.grantGameCoins({ ...ordinary, coinBeta: beta });
+  const betaFingerprint = state.calls.at(-1).args[7];
+  assert.equal(betaFingerprint, catalog.digest({ ...originalInput, coinBeta: beta }));
+  assert.notEqual(betaFingerprint, ordinaryFingerprint);
+  await service.repairGameCoinOrder({ ...ordinary, coinBeta: plain(beta) });
+  assert.equal(state.calls.at(-1).name, "receipt");
+  assert.equal(state.calls.at(-1).args[7], betaFingerprint);
 });
 test("approved import snapshots counters, unknown old IDs cannot grant, second save never reimports", async () => {
   const { service, state } = harness();

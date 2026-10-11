@@ -1,3 +1,5 @@
+import type { CoinBetaBinding } from "../payments/types.ts";
+
 export const GAME_WALLET_NAMESPACE = "civilcraft_game_wallet_v3" as const;
 export const GAME_WALLET_VERSION = 3 as const;
 export const MAX_GAME_COINS = 2_147_483_647;
@@ -18,6 +20,10 @@ export interface GameCoinOrder {
   rewardCurrency?: "CO" | "DI" | undefined;
   rewardAmount?: number | undefined;
   gameWallet?: GameWalletSnapshot | undefined;
+  coinBeta?: CoinBetaBinding | undefined;
+  productId?: string | undefined;
+  expectedAmount?: number | undefined;
+  currency?: string | undefined;
   coinReceiptVersion?: 1 | 2 | 3 | undefined;
   coinCurrencyCode?: string | undefined;
   coinReceipt?:

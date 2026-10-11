@@ -7,6 +7,21 @@ export interface CurrencyReward {
   rewardAmount: number;
 }
 
+/** Server-authored TEST-only exception; frozen with the original version-3 order. */
+export interface CoinBetaBinding {
+  protocolVersion: 1;
+  mode: "test";
+  scopeId: string;
+  titleId: string;
+  playerId: string;
+  entity: { Id: string; Type: "title_player_account" };
+  productId: "coins_500";
+  rewardCurrency: "CO";
+  rewardAmount: 500;
+  expectedAmount: 5000;
+  currency: "PHP";
+}
+
 /** Immutable version-3 destination; never selected again while fulfilling an order. */
 export interface GameWalletSnapshot {
   storage: "postgres";
@@ -51,6 +66,7 @@ export interface PaymentOrder {
   rewardAmount?: number | undefined;
   premiumWallet?: PremiumWalletSnapshot | undefined;
   gameWallet?: GameWalletSnapshot | undefined;
+  coinBeta?: CoinBetaBinding | undefined;
   /** Snapshots the configured classic Coin code so later config changes cannot reroute it. */
   coinCurrencyCode?: string | undefined;
   /** Missing on historic orders: their unconfirmed grants must be reviewed, never replayed. */

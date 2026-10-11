@@ -5,10 +5,8 @@ import { normalizeOrderReward } from "./products.ts";
 import { getOrder, markEventProcessed, updateOrderStatus } from "./orders.server.ts";
 import { retrievePayMongoCheckout, verifyPayMongoSignature } from "./paymongo.server.ts";
 import type { PaymentOrder } from "./types.ts";
-import {
-  assertCoinFulfillmentAvailable,
-  CoinFulfillmentMaintenance,
-} from "./coin-maintenance.server.ts";
+import { CoinFulfillmentMaintenance } from "./coin-maintenance.server.ts";
+import { assertCoinOrderDeliveryAllowed } from "./coin-beta.server.ts";
 import {
   CoinGrantReviewRequired,
   getCoinReceiptStatus,
@@ -123,8 +121,10 @@ export function coinGrantInput(order: PaymentOrder) {
 }
 
 export async function repairPaymentOrder(order: PaymentOrder): Promise<PaymentOrder> {
-  if (normalizeOrderReward(order).rewardCurrency === "DI") return repairDiamondOrder(order);
-  assertCoinFulfillmentAvailable();
+  const reward = normalizeOrderReward(order);
+  if (reward.rewardCurrency === "CO" || order.coinBeta !== undefined)
+    assertCoinOrderDeliveryAllowed(order);
+  if (reward.rewardCurrency === "DI") return repairDiamondOrder(order);
   // Provider selection belongs to the immutable order, including after feature rollback.
   if (order.coinReceiptVersion === 3) return repairGameCoinOrder(order);
   if (![1, 2].includes(order.coinReceiptVersion ?? 0)) {
@@ -171,6 +171,7 @@ function paymentEvidence(
   }
   const attrs = object(session["attributes"]);
   if (attrs["livemode"] === true) throw new AdminApiError(400, "Live payments are not accepted.");
+  const requiresExplicitTestMode = order.coinBeta !== undefined;
   const metadata = object(attrs["metadata"]);
   for (const [key, expected] of [
     ["orderId", order.orderId],
@@ -202,6 +203,10 @@ function paymentEvidence(
     throw new AdminApiError(400, "Payment amount mismatch");
   if (currency !== order.currency || currency !== "PHP")
     throw new AdminApiError(400, "Payment currency mismatch");
+  // The exception never treats an omitted/loosely typed provider mode as TEST.
+  // Incomplete signed evidence may be replaced only by this order's bound GET.
+  if (requiresExplicitTestMode && (attrs["livemode"] !== false || payment["livemode"] !== false))
+    return "incomplete";
   if (
     !metadata["orderId"] ||
     !metadata["productId"] ||
@@ -311,6 +316,11 @@ export async function processPayMongoWebhook(
   try {
     order = await getOrder(rawOrderId);
     if (!order) return fail(404, "Payment order not found.");
+    const reward = normalizeOrderReward(order);
+    // Hold legacy/non-beta Coin deliveries before even provider lookup or audit
+    // repair. Only the immutable TEST exception can pass the maintenance fence.
+    if (reward.rewardCurrency === "CO" || order.coinBeta !== undefined)
+      assertCoinOrderDeliveryAllowed(order);
     if (!order.PayMongoCheckoutSessionId)
       throw new AdminApiError(503, "Checkout binding is not ready. Retry expected.");
     let verifiedSession = session;
@@ -322,8 +332,6 @@ export async function processPayMongoWebhook(
         throw new AdminApiError(400, "A completed paid payment could not be verified.");
     }
     verifiedPayment = true;
-    const reward = normalizeOrderReward(order);
-    if (reward.rewardCurrency === "CO") assertCoinFulfillmentAvailable();
     order = await repairPaymentOrder(order);
     if (reward.rewardCurrency === "CO" && order.fulfillmentReviewRequired)
       throw new CoinGrantReviewRequired();

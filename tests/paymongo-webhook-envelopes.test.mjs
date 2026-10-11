@@ -44,6 +44,10 @@ function load(path, mocks = {}, environment = {}) {
     process: { env: environment },
     require(name) {
       if (name.endsWith("coin-maintenance.server.ts")) return coinMaintenance;
+      if (name.endsWith("coin-beta.server.ts"))
+        return {
+          assertCoinOrderDeliveryAllowed: () => coinMaintenance.assertCoinFulfillmentAvailable(),
+        };
       if (name === "node:crypto") return crypto;
       if (Object.hasOwn(mocks, name)) return mocks[name];
       throw new Error(`Unexpected isolated dependency: ${name}`);

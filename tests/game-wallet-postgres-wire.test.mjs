@@ -242,6 +242,7 @@ function serviceHarness(send) {
     "../payments/products.ts": {},
     "../payments/orders.server.ts": {},
     "../payments/coin-maintenance.server.ts": {},
+    "../payments/coin-beta.server.ts": {},
     "./config.server.ts": {
       isGameWalletEnabled: () => true,
       isGameWalletInstalled: () => true,
