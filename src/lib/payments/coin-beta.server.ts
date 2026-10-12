@@ -19,6 +19,23 @@ import { normalizeProductReward } from "./products.ts";
 import type { CoinBetaBinding, PaymentOrder, PaymentProduct } from "./types.ts";
 
 export const COIN_BETA_PRODUCT_ID = "coins_500" as const;
+// Permanent protocol tuples: retain these for settlement of already accepted orders.
+const COHORT_PACKAGES = Object.freeze({
+  coins_500: Object.freeze({ rewardAmount: 500, expectedAmount: 5000 }),
+  coins_1000: Object.freeze({ rewardAmount: 1000, expectedAmount: 9500 }),
+  coins_2500: Object.freeze({ rewardAmount: 2500, expectedAmount: 22000 }),
+  coins_5000: Object.freeze({ rewardAmount: 5000, expectedAmount: 350000 }),
+});
+export const COIN_COHORT_PRODUCT_IDS = Object.freeze(Object.keys(COHORT_PACKAGES));
+function packageTuple(id: unknown, cohort: boolean) {
+  if (
+    typeof id !== "string" ||
+    !Object.hasOwn(COHORT_PACKAGES, id) ||
+    (!cohort && id !== COIN_BETA_PRODUCT_ID)
+  )
+    return paused();
+  return COHORT_PACKAGES[id as keyof typeof COHORT_PACKAGES];
+}
 const MAIN_ORIGIN = "https://civil-craft.vercel.app";
 const bindingKeys = [
   "protocolVersion",
@@ -104,15 +121,15 @@ export async function createCoinCheckoutBindingForAccount(
     );
   const current = cohortScope("checkout", playFabId.toUpperCase(), prepared.entity.Id);
   const reward = normalizeProductReward(product);
+  const pack = packageTuple(product.id, true);
   if (
     !product.active ||
-    product.id !== COIN_BETA_PRODUCT_ID ||
     product.category !== "currency" ||
-    product.amount !== 5000 ||
+    product.amount !== pack.expectedAmount ||
     product.currency !== "PHP" ||
     reward.rewardCurrency !== "CO" ||
-    reward.rewardAmount !== 500 ||
-    product.rewardCoins !== 500
+    reward.rewardAmount !== pack.rewardAmount ||
+    product.rewardCoins !== pack.rewardAmount
   )
     return paused();
   const binding: CoinBetaBinding = {
@@ -122,10 +139,10 @@ export async function createCoinCheckoutBindingForAccount(
     titleId: current.titleId,
     playerId: current.playerId,
     entity: { Id: current.entityId, Type: "title_player_account" },
-    productId: COIN_BETA_PRODUCT_ID,
+    productId: product.id as CoinBetaBinding["productId"],
     rewardCurrency: "CO",
-    rewardAmount: 500,
-    expectedAmount: 5000,
+    rewardAmount: pack.rewardAmount,
+    expectedAmount: pack.expectedAmount,
     currency: "PHP",
   };
   assertBinding(binding, current);
@@ -367,6 +384,10 @@ function assertBinding(
   beta: unknown,
   current: ReturnType<typeof scope>,
 ): asserts beta is CoinBetaBinding {
+  const pack = packageTuple(
+    beta && typeof beta === "object" ? (beta as Record<string, unknown>)["productId"] : undefined,
+    current.scopeId.startsWith("cohort-"),
+  );
   if (
     !exactObject(beta, bindingKeys) ||
     !exactObject(beta["entity"], ["Id", "Type"]) ||
@@ -377,10 +398,9 @@ function assertBinding(
     beta["playerId"] !== current.playerId ||
     beta["entity"]["Id"] !== current.entityId ||
     beta["entity"]["Type"] !== "title_player_account" ||
-    beta["productId"] !== COIN_BETA_PRODUCT_ID ||
     beta["rewardCurrency"] !== "CO" ||
-    beta["rewardAmount"] !== 500 ||
-    beta["expectedAmount"] !== 5000 ||
+    beta["rewardAmount"] !== pack.rewardAmount ||
+    beta["expectedAmount"] !== pack.expectedAmount ||
     beta["currency"] !== "PHP"
   )
     paused();
@@ -498,11 +518,11 @@ export function assertCoinOrderDeliveryAllowed(order: GameCoinOrder | PaymentOrd
       order.playFabId !== current.playerId ||
       typeof order.orderId !== "string" ||
       !/^[a-z0-9][a-z0-9._:-]{0,199}$/i.test(order.orderId) ||
-      order.productId !== COIN_BETA_PRODUCT_ID ||
+      order.productId !== order.coinBeta.productId ||
       order.rewardCurrency !== "CO" ||
-      order.rewardAmount !== 500 ||
-      order.expectedCoins !== 500 ||
-      order.expectedAmount !== 5000 ||
+      order.rewardAmount !== order.coinBeta.rewardAmount ||
+      order.expectedCoins !== order.coinBeta.rewardAmount ||
+      order.expectedAmount !== order.coinBeta.expectedAmount ||
       order.currency !== "PHP" ||
       order.coinCurrencyCode !== "CO" ||
       order.coinReceipt !== undefined ||

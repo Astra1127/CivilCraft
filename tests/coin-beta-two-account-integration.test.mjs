@@ -417,8 +417,23 @@ function harness(existingOrders = new Map()) {
       ...mocks,
       "./fulfillment.server.ts": fulfillment,
       "./products.server.ts": {
-        getProductById: async (id) =>
-          id === "coins_500" ? { ...plain(products.COINS_500), active: true } : null,
+        getProductById: async (id) => {
+          if (state.productOverrides && Object.hasOwn(state.productOverrides, id))
+            return state.productOverrides[id];
+          const product =
+            id === "coins_5000"
+              ? {
+                  id,
+                  category: "currency",
+                  amount: 350000,
+                  currency: "PHP",
+                  rewardCurrency: "CO",
+                  rewardAmount: 5000,
+                  rewardCoins: 5000,
+                }
+              : products.getProduct(id);
+          return product ? { ...plain(product), active: true } : null;
+        },
         listActiveProducts: async () => [],
       },
       "./player-auth.server.ts": {
@@ -467,7 +482,7 @@ function harness(existingOrders = new Map()) {
                   type: "payment",
                   attributes: {
                     status: "paid",
-                    amount: 5000,
+                    amount: order.expectedAmount,
                     currency: "PHP",
                     livemode: false,
                     ...payment,
@@ -789,4 +804,92 @@ test("cohort split keeps legacy accounts unchanged and new zero wallets buy once
   assert.equal((await h.game.gameWallet(D)).coins, 500);
   assert.equal((await paymentRows(orderId)).length, 1);
   assert.equal((await h.game.gameWallet(E)).coinAuthority, "legacy");
+});
+
+test("all cohort Coin packages bind fixed prices, settle once, and retain delivery after closure", async () => {
+  const h = harness();
+  Object.assign(h.environment, {
+    GAME_WALLET_NEW_ACCOUNT_COHORT_ENABLED: "true",
+    GAME_WALLET_NEW_ACCOUNT_CUTOFF_AT: "2026-01-01T00:00:00.000Z",
+    COIN_COHORT_TEST_CHECKOUT_ENABLED: "true",
+    COIN_COHORT_TEST_DELIVERY_ENABLED: "true",
+    COIN_BETA_CHECKOUT_ENABLED: "false",
+  });
+  const before = (await h.game.gameWallet(D)).coins;
+  const available = await (await h.request(D, "/api/player/currencies")).json();
+  assert.deepEqual(available.coinTestProductIds, [
+    "coins_500",
+    "coins_1000",
+    "coins_2500",
+    "coins_5000",
+  ]);
+  const ids = [];
+  for (const [productId, amount, reward] of [
+    ["coins_500", 5000, 500],
+    ["coins_1000", 9500, 1000],
+    ["coins_2500", 22000, 2500],
+    ["coins_5000", 350000, 5000],
+  ]) {
+    assert.equal((await h.checkout(E, { productId })).status, 409);
+    const response = await h.checkout(D, { productId, amount: 1, rewardAmount: 999999 });
+    assert.equal(response.status, 200);
+    const { orderId } = await response.json();
+    ids.push(orderId);
+    const order = h.state.orders.get(orderId);
+    assert.equal(order.coinBeta.expectedAmount, amount);
+    assert.equal(order.coinBeta.rewardAmount, reward);
+    assert.equal(order.coinBeta.productId, productId);
+    assert.equal((await paymentRows(orderId)).length, 0);
+    assert.equal((await h.request(E, `/api/payments/paymongo/order?id=${orderId}`)).status, 404);
+    const tampered = plain(order);
+    tampered.coinBeta.rewardAmount += 1;
+    assert.throws(() => h.policy.assertCoinOrderDeliveryAllowed(tampered));
+  }
+  h.environment.COIN_COHORT_TEST_CHECKOUT_ENABLED = "false";
+  assert.equal((await h.checkout(D, { productId: "coins_2500" })).status, 503);
+  h.state.productOverrides = {
+    coins_500: null,
+    coins_1000: null,
+    coins_2500: null,
+    coins_5000: null,
+  };
+  for (const orderId of ids) {
+    await h.webhook(h.event(orderId));
+    await h.webhook(h.event(orderId));
+    const rows = await paymentRows(orderId);
+    assert.equal(rows.length, 1);
+    assert.equal(Number(rows[0].amount), h.state.orders.get(orderId).rewardAmount);
+  }
+  assert.equal((await h.game.gameWallet(D)).coins, before + 9000);
+});
+
+test("cohort package availability rejects altered catalog tuples and leaves historical beta limited", async () => {
+  const h = harness();
+  assert.equal((await h.checkout(A, { productId: "coins_1000" })).status, 503);
+  assert.equal((await h.checkout(A, { productId: "coins_2500" })).status, 503);
+  Object.assign(h.environment, {
+    GAME_WALLET_NEW_ACCOUNT_COHORT_ENABLED: "true",
+    GAME_WALLET_NEW_ACCOUNT_CUTOFF_AT: "2026-01-01T00:00:00.000Z",
+    COIN_COHORT_TEST_CHECKOUT_ENABLED: "true",
+    COIN_COHORT_TEST_DELIVERY_ENABLED: "true",
+  });
+  h.state.productOverrides = {
+    coins_1000: {
+      id: "coins_1000",
+      active: true,
+      category: "currency",
+      amount: 1,
+      currency: "PHP",
+      rewardCurrency: "CO",
+      rewardAmount: 1000,
+      rewardCoins: 1000,
+    },
+    coins_2500: null,
+    coins_5000: null,
+  };
+  const availability = await (await h.request(D, "/api/player/currencies")).json();
+  assert.deepEqual(availability.coinTestProductIds, ["coins_500"]);
+  assert.equal((await h.checkout(D, { productId: "coins_1000" })).status, 503);
+  assert.equal((await h.checkout(D, { productId: "coins_2500" })).status, 400);
+  assert.equal(h.state.checkouts, 0);
 });
