@@ -23,6 +23,7 @@ const PLAYER = "C0FFEE";
 const ENTITY = { Id: "FACE1234", Type: "title_player_account" as const };
 const TITLE = "AB12";
 const envKeys = [
+  "COIN_BETA_ADDITIONAL_ACCOUNTS",
   "COIN_FULFILLMENT_MAINTENANCE",
   "COIN_BETA_CHECKOUT_ENABLED",
   "COIN_BETA_CHECKOUT_STARTS_AT",
@@ -56,11 +57,12 @@ const envKeys = [
 function fixture(run: () => void) {
   const previous = new Map(envKeys.map((key) => [key, process.env[key]]));
   for (const key of envKeys) delete process.env[key];
+  const now = Date.now();
   Object.assign(process.env, {
     COIN_FULFILLMENT_MAINTENANCE: "true",
     COIN_BETA_CHECKOUT_ENABLED: "true",
-    COIN_BETA_CHECKOUT_STARTS_AT: new Date(Date.now() - 60_000).toISOString(),
-    COIN_BETA_CHECKOUT_ENDS_AT: new Date(Date.now() + 29 * 60_000).toISOString(),
+    COIN_BETA_CHECKOUT_STARTS_AT: new Date(now - 60_000).toISOString(),
+    COIN_BETA_CHECKOUT_ENDS_AT: new Date(now + 29 * 60_000).toISOString(),
     COIN_BETA_DELIVERY_ENABLED: "true",
     COIN_BETA_SCOPE_ID: "coin-beta-fixture",
     COIN_BETA_TITLE_ID: TITLE,
@@ -351,6 +353,70 @@ test("unverified wallet configuration, changed database target, or changed scope
   }));
 
 const SECOND_PLAYER = "BEE123";
+const extraAccount = () => ({
+  scopeId: "coin-beta-third",
+  playerId: "CC123",
+  entityId: "CC456",
+  checkoutEnabled: true,
+  deliveryEnabled: true,
+});
+test("additional scopes retain original delivery, close independently and reject malformed/colliding lists", () =>
+  fixture(() => {
+    enableSecond();
+    const original = [order(), secondOrder()];
+    const extra = extraAccount();
+    const configure = (entries: unknown) => {
+      process.env["COIN_BETA_ADDITIONAL_ACCOUNTS"] = JSON.stringify(entries);
+    };
+    configure([extra]);
+    const beta = createCoinBetaCheckoutBinding(extra.playerId, product())!;
+    const accepted: GameCoinOrder = {
+      ...order(),
+      playFabId: extra.playerId,
+      coinBeta: beta,
+      gameWallet: { ...snapshot(), entity: { Id: extra.entityId, Type: "title_player_account" } },
+    };
+    assert.equal(beta.scopeId, extra.scopeId);
+    assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(accepted));
+    paused(() => assertCoinCheckoutSnapshotAllowed(PLAYER, beta));
+    paused(() => assertCoinOrderDeliveryAllowed({ ...accepted, gameWallet: snapshot() }));
+    configure([{ ...extra, checkoutEnabled: false }]);
+    paused(() => createCoinBetaCheckoutBinding(extra.playerId, product()));
+    assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(accepted));
+    configure([{ ...extra, deliveryEnabled: false }]);
+    paused(() => assertCoinOrderDeliveryAllowed(accepted));
+    for (const entries of [
+      null,
+      {},
+      [extra, extra],
+      [{ ...extra, scopeId: "coin-beta-fixture" }],
+      [{ ...extra, playerId: SECOND_PLAYER }],
+      [{ ...extra, entityId: ENTITY.Id }],
+      [{ ...extra, checkoutEnabled: "true" }],
+      [{ ...extra, deliveryEnabled: undefined }],
+      [{ ...extra, playerId: "cc123" }],
+      [{ ...extra, unknown: true }],
+      Array(33).fill(extra),
+    ]) {
+      configure(entries);
+      paused(() => createCoinBetaCheckoutBinding(extra.playerId, product()));
+      paused(() => assertCoinOrderDeliveryAllowed(accepted));
+      for (const old of original) assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(old));
+    }
+    for (const raw of ["{broken", " ".repeat(16385)]) {
+      process.env["COIN_BETA_ADDITIONAL_ACCOUNTS"] = raw;
+      paused(() => createCoinBetaCheckoutBinding(extra.playerId, product()));
+      for (const old of original) assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(old));
+    }
+    configure([extra]);
+    process.env["COIN_BETA_CHECKOUT_ENABLED"] = "false";
+    paused(() => createCoinBetaCheckoutBinding(extra.playerId, product()));
+    assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(accepted));
+    process.env["COIN_BETA_CHECKOUT_ENABLED"] = "true";
+    process.env["COIN_BETA_CHECKOUT_ENDS_AT"] = new Date(Date.now() - 1).toISOString();
+    paused(() => createCoinBetaCheckoutBinding(extra.playerId, product()));
+    assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(accepted));
+  }));
 const SECOND_ENTITY = { Id: "B0B1234", Type: "title_player_account" as const };
 function enableSecond() {
   Object.assign(process.env, {
