@@ -34,6 +34,7 @@ export interface GameCoinOrder {
   fulfillmentReviewRequired?: boolean | undefined;
 }
 export interface GameWalletDTO {
+  coinAuthority?: "legacy" | "shared";
   coins: number | null;
   diamonds: number | null;
   ready: boolean;

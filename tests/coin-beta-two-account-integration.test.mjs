@@ -16,7 +16,9 @@ const A = "ABC123";
 const B = "ABC456";
 const C = "ABC789";
 const D = "ABC999";
+const E = "ABC888";
 const ENTITIES = {
+  [E]: { Id: "FACE888", Type: "title_player_account" },
   [A]: { Id: "FACE123", Type: "title_player_account" },
   [B]: { Id: "FACE456", Type: "title_player_account" },
   [C]: { Id: "FACE789", Type: "title_player_account" },
@@ -56,6 +58,12 @@ function load(path, mocks = {}, environment = {}) {
         throw new Error("External network is forbidden in this fixture");
       },
       require(name) {
+        if (name.endsWith("cohort.server.ts") && !Object.hasOwn(mocks, name))
+          return {
+            newAccountCohortConfig: () => null,
+            prepareAccountCoinAuthority: () =>
+              assert.fail("Cohort enrollment is not enabled in this legacy fixture"),
+          };
         if (Object.hasOwn(mocks, name)) return mocks[name];
         if (name === "node:crypto") return crypto;
         throw new Error(`Unexpected isolated dependency: ${name}`);
@@ -83,6 +91,15 @@ before(async () => {
   db = await PGlite.create();
   await db.exec(readFileSync(new URL("../database/currency-schema.sql", import.meta.url), "utf8"));
   await db.exec(readFileSync(new URL("../database/game-wallet-v3.sql", import.meta.url), "utf8"));
+  await db.exec(
+    readFileSync(
+      new URL("../database/game-wallet-new-account-cohort.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  await db.exec(
+    "INSERT INTO civilcraft_game_wallet_v3.new_account_policy(cutoff_at) VALUES ('2026-01-01T00:00:00Z')",
+  );
   databaseId = (await db.query("SELECT database_id FROM civilcraft_currency.installation")).rows[0]
     .database_id;
   await db.exec(
@@ -236,6 +253,18 @@ function harness(existingOrders = new Map()) {
     gameEnabled: true,
   };
   const admin = {
+    playFabAdmin: async (operation, { PlayFabId }) => {
+      assert.equal(operation, "Admin/GetUserAccountInfo");
+      return {
+        UserInfo: {
+          PlayFabId,
+          TitleInfo: {
+            Created: PlayFabId === D ? "2026-01-02T00:00:00Z" : "2025-01-01T00:00:00Z",
+            TitlePlayerAccount: ENTITIES[PlayFabId],
+          },
+        },
+      };
+    },
     AdminApiError: ApiError,
     adminGameConfig: () => ({ titleId: TITLE }),
     object: (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {}),
@@ -264,6 +293,17 @@ function harness(existingOrders = new Map()) {
     },
   });
   const products = load("payments/products.ts");
+  const cohort = load(
+    "game-wallet/cohort.server.ts",
+    {
+      "../playfab/admin-client.server.ts": admin,
+      "./cohort-policy.ts": load("game-wallet/cohort-policy.ts"),
+      "./config.server.ts": configMock,
+      "./database.server.ts": database,
+      "./catalog.server.ts": catalog,
+    },
+    environment,
+  );
   const maintenance = load(
     "payments/coin-maintenance.server.ts",
     { "../playfab/admin-client.server.ts": admin },
@@ -273,6 +313,7 @@ function harness(existingOrders = new Map()) {
   const policy = load(
     "payments/coin-beta.server.ts",
     {
+      "../game-wallet/cohort.server.ts": cohort,
       "../playfab/admin-client.server.ts": admin,
       "../game-wallet/config.server.ts": configMock,
       "./coin-maintenance.server.ts": maintenance,
@@ -320,6 +361,7 @@ function harness(existingOrders = new Map()) {
     GateBeforeMutationError: class extends Error {},
   };
   const game = load("game-wallet/service.server.ts", {
+    "./cohort.server.ts": cohort,
     "../playfab/admin-client.server.ts": admin,
     "../playfab/premium-wallet.server.ts": premium,
     "../payments/products.ts": products,
@@ -377,7 +419,7 @@ function harness(existingOrders = new Map()) {
       "./player-auth.server.ts": {
         authenticatePaymentPlayer: async (request) => {
           const ticket = request.headers.get("Authorization");
-          if (![A, B, C, D].some((player) => ticket === `Bearer fixture-${player}`))
+          if (![A, B, C, D, E].some((player) => ticket === `Bearer fixture-${player}`))
             throw new ApiError(401, "Player sign-in is required.");
           return { playFabId: ticket.slice("Bearer fixture-".length) };
         },
@@ -704,4 +746,42 @@ test("B preflight rejects forged scope, crossed resolved Entity and secondary cl
   );
   assert.equal(h.state.checkouts, 0);
   assert.equal(h.state.orders.size, 0);
+});
+
+test("cohort split keeps legacy accounts unchanged and new zero wallets buy once in TEST mode", async () => {
+  const h = harness();
+  Object.assign(h.environment, {
+    GAME_WALLET_NEW_ACCOUNT_COHORT_ENABLED: "true",
+    GAME_WALLET_NEW_ACCOUNT_CUTOFF_AT: "2026-01-01T00:00:00.000Z",
+    COIN_COHORT_TEST_CHECKOUT_ENABLED: "true",
+    COIN_COHORT_TEST_DELIVERY_ENABLED: "true",
+    COIN_BETA_CHECKOUT_ENABLED: "false",
+  });
+  const legacy = await h.game.gameWallet(E);
+  assert.equal(legacy.coinAuthority, "legacy");
+  assert.equal(legacy.coins, null);
+  await assert.rejects(h.game.importGameWallet(E, { gold: 99999 }), /keeps its legacy/);
+  assert.equal((await h.checkout(E)).status, 409);
+  assert.equal(h.state.checkouts, 0);
+  const first = await h.game.gameWallet(D);
+  assert.equal(first.coins, 0);
+  assert.equal(first.ready, true);
+  await h.game.importGameWallet(D, { gold: 99999 });
+  assert.equal((await h.game.gameWallet(D)).coins, 0);
+  h.environment.PAYMONGO_SECRET_KEY = "sk_live_fixture_not_a_key";
+  assert.equal((await h.checkout(D)).status, 503);
+  assert.equal(h.state.checkouts, 0);
+  h.environment.PAYMONGO_SECRET_KEY = "sk_test_fixture_not_a_key";
+  const response = await h.checkout(D);
+  assert.equal(response.status, 200);
+  const { orderId } = await response.json();
+  assert.match(h.state.orders.get(orderId).coinBeta.scopeId, /^cohort-/);
+  assert.equal((await h.request(E, `/api/payments/paymongo/order?id=${orderId}`)).status, 404);
+  h.environment.COIN_COHORT_TEST_CHECKOUT_ENABLED = "false";
+  assert.equal((await h.checkout(D)).status, 503);
+  await h.webhook(h.event(orderId));
+  await h.webhook(h.event(orderId));
+  assert.equal((await h.game.gameWallet(D)).coins, 500);
+  assert.equal((await paymentRows(orderId)).length, 1);
+  assert.equal((await h.game.gameWallet(E)).coinAuthority, "legacy");
 });

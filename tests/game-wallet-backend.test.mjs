@@ -40,6 +40,12 @@ function load(file, mocks, env = {}) {
     process: { env },
     Buffer,
     require(name) {
+      if (name.endsWith("cohort.server.ts") && !Object.hasOwn(mocks, name))
+        return {
+          newAccountCohortConfig: () => null,
+          prepareAccountCoinAuthority: () =>
+            assert.fail("Cohort enrollment is not enabled in this legacy fixture"),
+        };
       if (name.endsWith("coin-maintenance.server.ts")) return coinMaintenance;
       if (name in mocks) return mocks[name];
       if (name.startsWith("node:")) return require(name);

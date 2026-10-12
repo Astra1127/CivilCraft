@@ -1,4 +1,5 @@
 import { randomBytes, createHash } from "node:crypto";
+import { newAccountCohortConfig, prepareAccountCoinAuthority } from "./cohort.server.ts";
 import { AdminApiError, object } from "../playfab/admin-client.server.ts";
 import { getDiamondBalance, resolvePremiumEntity } from "../playfab/premium-wallet.server.ts";
 import { normalizeOrderReward } from "../payments/products.ts";
@@ -47,6 +48,18 @@ import {
 
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export async function gameCoinBalance(playFabId: string) {
+  if (newAccountCohortConfig() && isGameWalletEnabled()) {
+    const prepared = await prepareAccountCoinAuthority(playFabId);
+    if (prepared.authority === "legacy")
+      return {
+        coins: null,
+        ready: false,
+        version: 0,
+        lifetimeGoldEarned: null,
+        lifetimeGoldSpent: null,
+        coinAuthority: "legacy" as const,
+      };
+  }
   if (!isGameWalletEnabled() && !isGameWalletInstalled())
     return {
       coins: null,
@@ -173,6 +186,16 @@ export async function importGameWallet(
   body: Record<string, unknown>,
 ): Promise<GameWalletDTO> {
   requireGameWalletReady();
+  if (newAccountCohortConfig()) {
+    const prepared = await prepareAccountCoinAuthority(playFabId);
+    if (prepared.authority === "legacy")
+      throw new AdminApiError(
+        409,
+        "This development account keeps its legacy Coins. Website Coin purchases are not available for legacy accounts.",
+      );
+    // New-account opening never consumes client gold, ownership or reward history.
+    return gameWallet(playFabId);
+  }
   // A second device/old save never reimports or replaces the first approved snapshot.
   if ((await gameCoinBalance(playFabId)).ready) return gameWallet(playFabId);
   const gold = boundedInteger(body["gold"]);

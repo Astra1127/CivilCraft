@@ -16,6 +16,7 @@ const operations = new Set([
   "gate_acquire",
   "gate_release",
   "import_wallet",
+  "new_account_open",
   "credit",
   "receipt",
   "reward",

@@ -299,6 +299,12 @@ function serviceHarness(send) {
     URLSearchParams,
     Date,
     require(name) {
+      if (name === "./cohort.server.ts")
+        return {
+          newAccountCohortConfig: () => null,
+          prepareAccountCoinAuthority: () =>
+            assert.fail("Cohort enrollment is disabled in this legacy wire fixture"),
+        };
       if (name in mocks) return mocks[name];
       if (name.startsWith("node:")) return require(name);
       throw new Error(`Unexpected import ${name}`);

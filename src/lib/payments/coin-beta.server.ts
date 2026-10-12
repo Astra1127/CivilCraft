@@ -1,4 +1,9 @@
 import { adminGameConfig } from "../playfab/admin-client.server.ts";
+import { AdminApiError } from "../playfab/admin-client.server.ts";
+import {
+  newAccountCohortConfig,
+  prepareAccountCoinAuthority,
+} from "../game-wallet/cohort.server.ts";
 import {
   requireGameWalletReady,
   requireGameWalletSettlementReady,
@@ -40,6 +45,92 @@ const enabled = (key: string) => process.env[key]?.trim().toLowerCase() === "tru
 const paused = (): never => {
   throw new CoinFulfillmentMaintenance();
 };
+
+export function isGeneralTestCoinCheckoutEnabled(): boolean {
+  return (
+    enabled("COIN_COHORT_TEST_CHECKOUT_ENABLED") && enabled("COIN_COHORT_TEST_DELIVERY_ENABLED")
+  );
+}
+
+function cohortScope(phase: "checkout" | "delivery", playerId: string, entityId: string) {
+  if (
+    !enabled("COIN_COHORT_TEST_DELIVERY_ENABLED") ||
+    (phase === "checkout" && !isGeneralTestCoinCheckoutEnabled()) ||
+    !isCoinFulfillmentMaintenance()
+  )
+    return paused();
+  const cutoff = process.env["GAME_WALLET_NEW_ACCOUNT_CUTOFF_AT"] || "";
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(cutoff) ||
+    !Number.isFinite(Date.parse(cutoff)) ||
+    new Date(cutoff).toISOString() !== cutoff ||
+    Date.parse(cutoff) > Date.now() ||
+    !/^[A-F0-9]{1,32}$/.test(playerId) ||
+    !/^[A-F0-9]{1,64}$/.test(entityId)
+  )
+    return paused();
+  if (phase === "checkout" && !newAccountCohortConfig()) return paused();
+  const provider = requirePayMongoCheckoutReady();
+  if (
+    !provider.secretKey.startsWith("sk_test_") ||
+    provider.secretKey.length <= 8 ||
+    ![MAIN_ORIGIN, `${MAIN_ORIGIN}/`].includes(provider.appUrl) ||
+    ![MAIN_ORIGIN, `${MAIN_ORIGIN}/`].includes((process.env["PUBLIC_APP_URL"] || "").trim())
+  )
+    return paused();
+  const wallet =
+    phase === "checkout" ? requireGameWalletReady() : requireGameWalletSettlementReady();
+  return {
+    scopeId: `cohort-${Date.parse(cutoff)}-${playerId.toLowerCase()}`,
+    titleId: adminGameConfig().titleId.toUpperCase(),
+    playerId,
+    entityId,
+    wallet,
+  };
+}
+
+/** General development TEST path; eligibility comes from verified server account/wallet records. */
+export async function createCoinCheckoutBindingForAccount(
+  playFabId: string,
+  product: PaymentProduct,
+) {
+  if (newAccountCohortConfig() && !isCoinFulfillmentMaintenance()) return paused();
+  if (!isGeneralTestCoinCheckoutEnabled()) return createCoinBetaCheckoutBinding(playFabId, product);
+  const prepared = await prepareAccountCoinAuthority(playFabId);
+  if (!prepared.websiteCoinCheckoutAllowed)
+    throw new AdminApiError(
+      409,
+      "This development account keeps legacy Coins and cannot buy website Coins.",
+    );
+  const current = cohortScope("checkout", playFabId.toUpperCase(), prepared.entity.Id);
+  const reward = normalizeProductReward(product);
+  if (
+    !product.active ||
+    product.id !== COIN_BETA_PRODUCT_ID ||
+    product.category !== "currency" ||
+    product.amount !== 5000 ||
+    product.currency !== "PHP" ||
+    reward.rewardCurrency !== "CO" ||
+    reward.rewardAmount !== 500 ||
+    product.rewardCoins !== 500
+  )
+    return paused();
+  const binding: CoinBetaBinding = {
+    protocolVersion: 1,
+    mode: "test",
+    scopeId: current.scopeId,
+    titleId: current.titleId,
+    playerId: current.playerId,
+    entity: { Id: current.entityId, Type: "title_player_account" },
+    productId: COIN_BETA_PRODUCT_ID,
+    rewardCurrency: "CO",
+    rewardAmount: 500,
+    expectedAmount: 5000,
+    currency: "PHP",
+  };
+  assertBinding(binding, current);
+  return Object.freeze(binding);
+}
 
 /** Absolute, server-only window; no restart or request can extend its deadline. */
 function assertCheckoutWindow(): void {
@@ -251,6 +342,15 @@ function scope(phase: "checkout" | "delivery", selection: ScopeSelection) {
 
 function boundScope(phase: "checkout" | "delivery", beta: unknown) {
   if (!exactObject(beta, bindingKeys) || typeof beta["scopeId"] !== "string") return paused();
+  if (beta["scopeId"].startsWith("cohort-")) {
+    if (
+      typeof beta["playerId"] !== "string" ||
+      !exactObject(beta["entity"], ["Id", "Type"]) ||
+      typeof beta["entity"]["Id"] !== "string"
+    )
+      return paused();
+    return cohortScope(phase, beta["playerId"], beta["entity"]["Id"]);
+  }
   // Stored server-authored scope chooses a candidate, never authorizes a grant:
   // assertBinding and assertSnapshot still validate every immutable field below.
   return scope(phase, { scopeId: beta["scopeId"] });
