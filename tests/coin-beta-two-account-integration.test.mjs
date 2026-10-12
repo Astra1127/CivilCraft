@@ -14,9 +14,13 @@ import * as catalog from "../src/lib/game-wallet/catalog.server.ts";
 const TITLE = "17FA03";
 const A = "ABC123";
 const B = "ABC456";
+const C = "ABC789";
+const D = "ABC999";
 const ENTITIES = {
   [A]: { Id: "FACE123", Type: "title_player_account" },
   [B]: { Id: "FACE456", Type: "title_player_account" },
+  [C]: { Id: "FACE789", Type: "title_player_account" },
+  [D]: { Id: "FACE999", Type: "title_player_account" },
 };
 const WEBHOOK_SECRET = "fixture_webhook_not_a_key";
 const TARGET = crypto.createHash("sha256").update("two-account-memory-fixture").digest("hex");
@@ -87,6 +91,7 @@ before(async () => {
   for (const [player, gold] of [
     [A, 1000],
     [B, 0],
+    [C, 57113],
   ]) {
     const owner = crypto.randomUUID();
     assert.equal(
@@ -132,6 +137,60 @@ async function paymentRows(orderId) {
     await db.exec("SET SESSION AUTHORIZATION two_beta_fixture");
   }
 }
+test("additional account checkout, unpaid and duplicate paid delivery remain isolated after closure", async () => {
+  const h = harness();
+  enableSecond(h.environment);
+  const entry = {
+    scopeId: "fixture-third",
+    playerId: C,
+    entityId: ENTITIES[C].Id,
+    checkoutEnabled: true,
+    deliveryEnabled: true,
+  };
+  const pending = {
+    scopeId: "fixture-unmigrated",
+    playerId: D,
+    entityId: ENTITIES[D].Id,
+    checkoutEnabled: true,
+    deliveryEnabled: true,
+  };
+  h.environment.COIN_BETA_ADDITIONAL_ACCOUNTS = JSON.stringify([entry, pending]);
+  const before = await balances();
+  const coinBefore = Number((await sqlCall("wallet_balance", identity(C)))[0].coins);
+  assert.equal((await h.checkout(D)).status, 409);
+  assert.equal(h.state.checkouts, 0);
+  const owner = crypto.randomUUID();
+  await sqlCall("gate_acquire", [...identity(D), owner, "import"]);
+  try {
+    assert.equal((await h.checkout(D)).status, 409);
+  } finally {
+    await sqlCall("gate_release", [...identity(D), owner]);
+  }
+  const response = await h.checkout(C);
+  assert.equal(response.status, 200);
+  const { orderId } = await response.json();
+  assert.equal(h.state.orders.get(orderId).coinBeta.scopeId, entry.scopeId);
+  assert.equal((await h.request(A, `/api/payments/paymongo/order?id=${orderId}`)).status, 404);
+  const failed = h.event(orderId, { status: "failed" });
+  h.state.providerSession = failed.data.attributes.data;
+  assert.equal((await h.webhook(failed)).status, 400);
+  assert.deepEqual(await paymentRows(orderId), []);
+  assert.equal(Number((await sqlCall("wallet_balance", identity(C)))[0].coins), coinBefore);
+  h.environment.COIN_BETA_CHECKOUT_ENABLED = "false";
+  h.environment.COIN_BETA_ADDITIONAL_ACCOUNTS = JSON.stringify([
+    { ...entry, checkoutEnabled: false },
+    pending,
+  ]);
+  assert.equal((await h.checkout(C)).status, 503);
+  h.state.failFulfilledOnce = true;
+  assert.equal((await h.webhook(h.event(orderId))).status, 500);
+  assert.equal((await h.webhook(h.event(orderId))).body.idempotent, true);
+  assert.equal((await h.webhook(h.event(orderId))).body.idempotent, true);
+  assert.equal(Number((await sqlCall("wallet_balance", identity(C)))[0].coins), coinBefore + 500);
+  assert.equal((await paymentRows(orderId)).length, 1);
+  assert.deepEqual(await balances(), before);
+});
+
 function enableSecond(environment) {
   Object.assign(environment, {
     COIN_BETA_SECOND_CHECKOUT_ENABLED: "true",
@@ -142,11 +201,12 @@ function enableSecond(environment) {
   });
 }
 function harness(existingOrders = new Map()) {
+  const now = Date.now();
   const environment = {
     COIN_FULFILLMENT_MAINTENANCE: "true",
     COIN_BETA_CHECKOUT_ENABLED: "true",
-    COIN_BETA_CHECKOUT_STARTS_AT: new Date(Date.now() - 60_000).toISOString(),
-    COIN_BETA_CHECKOUT_ENDS_AT: new Date(Date.now() + 29 * 60_000).toISOString(),
+    COIN_BETA_CHECKOUT_STARTS_AT: new Date(now - 60_000).toISOString(),
+    COIN_BETA_CHECKOUT_ENDS_AT: new Date(now + 29 * 60_000).toISOString(),
     COIN_BETA_DELIVERY_ENABLED: "true",
     COIN_BETA_SCOPE_ID: "fixture-original-test-scope",
     COIN_BETA_TITLE_ID: TITLE,
@@ -317,7 +377,7 @@ function harness(existingOrders = new Map()) {
       "./player-auth.server.ts": {
         authenticatePaymentPlayer: async (request) => {
           const ticket = request.headers.get("Authorization");
-          if (ticket !== `Bearer fixture-${A}` && ticket !== `Bearer fixture-${B}`)
+          if (![A, B, C, D].some((player) => ticket === `Bearer fixture-${player}`))
             throw new ApiError(401, "Player sign-in is required.");
           return { playFabId: ticket.slice("Bearer fixture-".length) };
         },

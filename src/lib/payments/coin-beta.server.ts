@@ -146,14 +146,88 @@ function scope(phase: "checkout" | "delivery", selection: ScopeSelection) {
   // Preserve the original v1 beta binding and its accepted-order delivery even
   // when the optional second account is absent, disabled or misconfigured.
   if (matches(primary)) return primary;
+  const secondScopeId = process.env["COIN_BETA_SECOND_SCOPE_ID"]?.trim() || "";
+  const secondPlayerId = process.env["COIN_BETA_SECOND_PLAYER_ID"]?.trim().toUpperCase() || "";
+  const secondEntityId = process.env["COIN_BETA_SECOND_ENTITY_ID"]?.trim().toUpperCase() || "";
+  if (!matches({ scopeId: secondScopeId, playerId: secondPlayerId })) {
+    // Parse only for additional accounts. A broken new list must never strand
+    // orders already accepted under either original immutable scope.
+    const raw = process.env["COIN_BETA_ADDITIONAL_ACCOUNTS"] || "[]";
+    if (raw.length > 16_384) return paused();
+    const entries: unknown = JSON.parse(raw);
+    if (!Array.isArray(entries) || entries.length > 32) return paused();
+    const scopes = new Set([scopeId, secondScopeId]);
+    const players = new Set([playerId, secondPlayerId]);
+    const entities = new Set([entityId, secondEntityId]);
+    let selected:
+      | {
+          scopeId: string;
+          playerId: string;
+          entityId: string;
+          checkoutEnabled: boolean;
+          deliveryEnabled: boolean;
+        }
+      | undefined;
+    for (const entry of entries) {
+      if (
+        !exactObject(entry, [
+          "scopeId",
+          "playerId",
+          "entityId",
+          "checkoutEnabled",
+          "deliveryEnabled",
+        ])
+      )
+        return paused();
+      const s = entry["scopeId"],
+        p = entry["playerId"],
+        e = entry["entityId"];
+      if (
+        typeof s !== "string" ||
+        s.length > 64 ||
+        !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s) ||
+        typeof p !== "string" ||
+        !/^[A-F0-9]{1,32}$/.test(p) ||
+        typeof e !== "string" ||
+        !/^[A-F0-9]{1,64}$/.test(e) ||
+        typeof entry["checkoutEnabled"] !== "boolean" ||
+        typeof entry["deliveryEnabled"] !== "boolean" ||
+        scopes.has(s) ||
+        players.has(p) ||
+        entities.has(e)
+      )
+        return paused();
+      scopes.add(s);
+      players.add(p);
+      entities.add(e);
+      if (matches({ scopeId: s, playerId: p }))
+        selected = {
+          scopeId: s,
+          playerId: p,
+          entityId: e,
+          checkoutEnabled: entry["checkoutEnabled"],
+          deliveryEnabled: entry["deliveryEnabled"],
+        };
+    }
+    if (
+      !selected ||
+      !selected.deliveryEnabled ||
+      (phase === "checkout" && !selected.checkoutEnabled)
+    )
+      return paused();
+    return {
+      scopeId: selected.scopeId,
+      playerId: selected.playerId,
+      entityId: selected.entityId,
+      titleId,
+      wallet,
+    };
+  }
   if (
     !enabled("COIN_BETA_SECOND_DELIVERY_ENABLED") ||
     (phase === "checkout" && !enabled("COIN_BETA_SECOND_CHECKOUT_ENABLED"))
   )
     paused();
-  const secondScopeId = process.env["COIN_BETA_SECOND_SCOPE_ID"]?.trim() || "";
-  const secondPlayerId = process.env["COIN_BETA_SECOND_PLAYER_ID"]?.trim().toUpperCase() || "";
-  const secondEntityId = process.env["COIN_BETA_SECOND_ENTITY_ID"]?.trim().toUpperCase() || "";
   if (
     secondScopeId.length > 64 ||
     !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(secondScopeId) ||
