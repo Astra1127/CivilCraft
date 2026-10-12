@@ -78,6 +78,12 @@ function load(file, mocks = {}, environment = {}) {
     URL,
     process: { env: environment },
     require(name) {
+      if (name.endsWith("cohort.server.ts") && !Object.hasOwn(mocks, name))
+        return {
+          newAccountCohortConfig: () => null,
+          prepareAccountCoinAuthority: () =>
+            assert.fail("Cohort enrollment is not enabled in this legacy fixture"),
+        };
       if (name === "node:crypto") return crypto;
       if (Object.hasOwn(mocks, name)) return mocks[name];
       throw new Error(`Unexpected isolated dependency: ${name}`);

@@ -42,6 +42,7 @@ interface PlayerCurrencies {
   diamondsAvailable: boolean;
   coinsAvailable?: boolean;
   coinsMigrationRequired?: boolean;
+  coinsLegacyAccount?: boolean;
   coinTestCheckout?: boolean;
   coinTestProductIds?: string[];
 }
@@ -209,9 +210,11 @@ function AuthenticatedShopPage() {
 
     if (normalizeProductReward(product).rewardCurrency === "CO" && !coinProductAvailable(product)) {
       toast.error(
-        balanceQuery.data?.coinsMigrationRequired
-          ? "Open the updated game and finish selecting your account save before buying Coins."
-          : "Coin purchases are temporarily unavailable. No payment has been started.",
+        balanceQuery.data?.coinsLegacyAccount
+          ? "This development account keeps its legacy Coins in the game. Website Coin purchases are not available for legacy accounts."
+          : balanceQuery.data?.coinsMigrationRequired
+            ? "Open the updated game and finish selecting your account save before buying Coins."
+            : "Coin purchases are temporarily unavailable. No payment has been started.",
       );
       return;
     }
@@ -472,9 +475,11 @@ function AuthenticatedShopPage() {
                 role="status"
                 className="rounded-lg border border-gold/40 bg-gold/10 p-4 text-center text-sm"
               >
-                {balanceQuery.data?.coinsMigrationRequired
-                  ? "Open the updated game and finish selecting your account save before buying Coins. Your existing Coins have not been replaced."
-                  : "Coin purchases are temporarily unavailable. No payment will be started."}
+                {balanceQuery.data?.coinsLegacyAccount
+                  ? "This development account keeps its legacy Coins in the game. Website Coin purchases are not available for legacy accounts."
+                  : balanceQuery.data?.coinsMigrationRequired
+                    ? "Open the updated game and finish selecting your account save before buying Coins. Your existing Coins have not been replaced."
+                    : "Coin purchases are temporarily unavailable. No payment will be started."}
               </p>
             ) : null}
             {selectedCode === "CO" && balanceQuery.data?.coinTestCheckout === true ? (

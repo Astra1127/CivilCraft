@@ -50,6 +50,12 @@ function load(path, mocks, environment = {}) {
       setTimeout,
       process: { env: environment },
       require(name) {
+        if (name.endsWith("cohort.server.ts") && !Object.hasOwn(mocks, name))
+          return {
+            newAccountCohortConfig: () => null,
+            prepareAccountCoinAuthority: () =>
+              assert.fail("Cohort enrollment is not enabled in this legacy fixture"),
+          };
         if (name in mocks) return mocks[name];
         if (name.endsWith("coin-maintenance.server.ts")) return coinMaintenance;
         if (name === "node:crypto") return require(name);
@@ -406,8 +412,9 @@ function harness() {
       state.productId = "coins_500";
       currency = "CO";
       betaEnvironment.COIN_BETA_CHECKOUT_ENABLED = "true";
-      betaEnvironment.COIN_BETA_CHECKOUT_STARTS_AT = new Date(Date.now() - 60_000).toISOString();
-      betaEnvironment.COIN_BETA_CHECKOUT_ENDS_AT = new Date(Date.now() + 29 * 60_000).toISOString();
+      const windowNow = Date.now();
+      betaEnvironment.COIN_BETA_CHECKOUT_STARTS_AT = new Date(windowNow - 60_000).toISOString();
+      betaEnvironment.COIN_BETA_CHECKOUT_ENDS_AT = new Date(windowNow + 29 * 60_000).toISOString();
       betaEnvironment.COIN_BETA_DELIVERY_ENABLED = "true";
     },
     setCurrency(value) {

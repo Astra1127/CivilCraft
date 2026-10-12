@@ -29,7 +29,8 @@ import {
 import {
   COIN_BETA_PRODUCT_ID,
   assertCoinCheckoutSnapshotAllowed,
-  createCoinBetaCheckoutBinding,
+  createCoinCheckoutBindingForAccount,
+  isGeneralTestCoinCheckoutEnabled,
   isCoinBetaCheckoutCandidate,
 } from "./coin-beta.server.ts";
 import {
@@ -121,10 +122,12 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
     if (path === "/api/player/currencies") {
       const unifiedCoins = isGameWalletInstalled();
       let coinsReady = !unifiedCoins;
+      let legacyCoins = false;
       const readCoins = async () => {
         if (unifiedCoins) {
           const wallet = await gameCoinBalance(playFabId);
           coinsReady = wallet.ready;
+          legacyCoins = "coinAuthority" in wallet && wallet.coinAuthority === "legacy";
           return wallet.coins;
         }
         if (process.env["COIN_RECEIPTS_STORAGE"]?.trim() === "postgres") {
@@ -162,12 +165,12 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         coinsReady &&
         paymentReady &&
         isGameWalletEnabled() &&
-        isCoinBetaCheckoutCandidate(playFabId)
+        (isCoinBetaCheckoutCandidate(playFabId) || isGeneralTestCoinCheckoutEnabled())
       ) {
         try {
           const product = await getProductById(COIN_BETA_PRODUCT_ID);
           if (product) {
-            const beta = createCoinBetaCheckoutBinding(playFabId, product);
+            const beta = await createCoinCheckoutBindingForAccount(playFabId, product);
             if (beta) {
               // Availability also verifies the actual server-resolved entity and ready wallet.
               await gameCoinSnapshot(playFabId, beta);
@@ -189,7 +192,9 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
           paymentReady &&
           coinMaintenanceAllowsCheckout &&
           (!unifiedCoins || isGameWalletEnabled()),
-        coinsMigrationRequired: unifiedCoins && coins.status === "fulfilled" && !coinsReady,
+        ...(legacyCoins ? { coinsLegacyAccount: true } : {}),
+        coinsMigrationRequired:
+          !legacyCoins && unifiedCoins && coins.status === "fulfilled" && !coinsReady,
         ...(coinTestProductIds ? { coinTestCheckout: true, coinTestProductIds } : {}),
       });
     }
@@ -214,7 +219,7 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
       const reward = normalizeProductReward(product);
       const coinBeta =
         reward.rewardCurrency === "CO"
-          ? createCoinBetaCheckoutBinding(playFabId, product)
+          ? await createCoinCheckoutBindingForAccount(playFabId, product)
           : undefined;
       if (reward.rewardCurrency === "CO" && !coinBeta) assertCoinFulfillmentAvailable();
       const returnOrigin = configuredReturnOrigin();
