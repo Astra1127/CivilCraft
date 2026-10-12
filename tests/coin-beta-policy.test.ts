@@ -23,6 +23,7 @@ const PLAYER = "C0FFEE";
 const ENTITY = { Id: "FACE1234", Type: "title_player_account" as const };
 const TITLE = "AB12";
 const envKeys = [
+  "COIN_BETA_PRIMARY_CHECKOUT_ENABLED",
   "COIN_BETA_ADDITIONAL_ACCOUNTS",
   "COIN_FULFILLMENT_MAINTENANCE",
   "COIN_BETA_CHECKOUT_ENABLED",
@@ -353,6 +354,23 @@ test("unverified wallet configuration, changed database target, or changed scope
   }));
 
 const SECOND_PLAYER = "BEE123";
+test("primary checkout can close independently without closing additional checkout or original delivery", () =>
+  fixture(() => {
+    const original = order();
+    const extra = extraAccount();
+    process.env["COIN_BETA_ADDITIONAL_ACCOUNTS"] = JSON.stringify([extra]);
+    for (const value of ["false", "", "TRUE", "invalid"]) {
+      process.env["COIN_BETA_PRIMARY_CHECKOUT_ENABLED"] = value;
+      assert.equal(isCoinBetaCheckoutCandidate(PLAYER), false);
+      paused(() => createCoinBetaCheckoutBinding(PLAYER, product()));
+      paused(() => assertCoinCheckoutSnapshotAllowed(PLAYER, original.coinBeta));
+      assert.doesNotThrow(() => assertCoinOrderDeliveryAllowed(original));
+      assert.equal(createCoinBetaCheckoutBinding(extra.playerId, product())?.playerId, extra.playerId);
+    }
+    process.env["COIN_BETA_PRIMARY_CHECKOUT_ENABLED"] = "true";
+    assert.equal(isCoinBetaCheckoutCandidate(PLAYER), true);
+  }));
+
 const extraAccount = () => ({
   scopeId: "coin-beta-third",
   playerId: "CC123",

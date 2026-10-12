@@ -236,7 +236,14 @@ function scope(phase: "checkout" | "delivery", selection: ScopeSelection) {
   const primary = { scopeId, titleId, playerId, entityId, wallet };
   // Preserve the original v1 beta binding and its accepted-order delivery even
   // when the optional second account is absent, disabled or misconfigured.
-  if (matches(primary)) return primary;
+  if (matches(primary)) {
+    // Global beta checkout may be open for an additional account only. Keep
+    // original receipt delivery independent of this new-checkout-only switch.
+    const primaryCheckout = process.env["COIN_BETA_PRIMARY_CHECKOUT_ENABLED"];
+    if (phase === "checkout" && primaryCheckout !== undefined && primaryCheckout !== "true")
+      return paused();
+    return primary;
+  }
   const secondScopeId = process.env["COIN_BETA_SECOND_SCOPE_ID"]?.trim() || "";
   const secondPlayerId = process.env["COIN_BETA_SECOND_PLAYER_ID"]?.trim().toUpperCase() || "";
   const secondEntityId = process.env["COIN_BETA_SECOND_ENTITY_ID"]?.trim().toUpperCase() || "";
