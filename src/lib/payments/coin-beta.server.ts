@@ -15,7 +15,7 @@ import {
   isCoinFulfillmentMaintenance,
 } from "./coin-maintenance.server.ts";
 import { requirePayMongoCheckoutReady } from "./paymongo.server.ts";
-import { normalizeProductReward } from "./products.ts";
+import { MAX_REWARD_AMOUNT, normalizeProductReward } from "./products.ts";
 import type { CoinBetaBinding, PaymentOrder, PaymentProduct } from "./types.ts";
 
 export const COIN_BETA_PRODUCT_ID = "coins_500" as const;
@@ -26,7 +26,14 @@ const COHORT_PACKAGES = Object.freeze({
   coins_2500: Object.freeze({ rewardAmount: 2500, expectedAmount: 22000 }),
   coins_5000: Object.freeze({ rewardAmount: 5000, expectedAmount: 350000 }),
 });
-export const COIN_COHORT_PRODUCT_IDS = Object.freeze(Object.keys(COHORT_PACKAGES));
+function validCatalogAmount(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isSafeInteger(value) &&
+    value > 0 &&
+    value <= MAX_REWARD_AMOUNT
+  );
+}
 function packageTuple(id: unknown, cohort: boolean) {
   if (
     typeof id !== "string" ||
@@ -121,28 +128,28 @@ export async function createCoinCheckoutBindingForAccount(
     );
   const current = cohortScope("checkout", playFabId.toUpperCase(), prepared.entity.Id);
   const reward = normalizeProductReward(product);
-  const pack = packageTuple(product.id, true);
   if (
-    !product.active ||
+    product.active !== true ||
+    !/^[a-z0-9_-]{2,64}$/.test(product.id) ||
     product.category !== "currency" ||
-    product.amount !== pack.expectedAmount ||
+    !validCatalogAmount(product.amount) ||
     product.currency !== "PHP" ||
     reward.rewardCurrency !== "CO" ||
-    reward.rewardAmount !== pack.rewardAmount ||
-    product.rewardCoins !== pack.rewardAmount
+    !validCatalogAmount(reward.rewardAmount) ||
+    product.rewardCoins !== reward.rewardAmount
   )
     return paused();
   const binding: CoinBetaBinding = {
-    protocolVersion: 1,
+    protocolVersion: 2,
     mode: "test",
     scopeId: current.scopeId,
     titleId: current.titleId,
     playerId: current.playerId,
     entity: { Id: current.entityId, Type: "title_player_account" },
-    productId: product.id as CoinBetaBinding["productId"],
+    productId: product.id,
     rewardCurrency: "CO",
-    rewardAmount: pack.rewardAmount,
-    expectedAmount: pack.expectedAmount,
+    rewardAmount: reward.rewardAmount,
+    expectedAmount: product.amount,
     currency: "PHP",
   };
   assertBinding(binding, current);
@@ -384,14 +391,26 @@ function assertBinding(
   beta: unknown,
   current: ReturnType<typeof scope>,
 ): asserts beta is CoinBetaBinding {
-  const pack = packageTuple(
-    beta && typeof beta === "object" ? (beta as Record<string, unknown>)["productId"] : undefined,
-    current.scopeId.startsWith("cohort-"),
-  );
+  if (!exactObject(beta, bindingKeys)) return paused();
+  const cohort = current.scopeId.startsWith("cohort-");
+  // V1 receipts keep their original fixed tuples. V2 captures trusted catalog
+  // values at checkout; settlement never consults an edited/deleted product.
+  const catalog = beta["protocolVersion"] === 2 && cohort;
+  if (
+    catalog &&
+    (typeof beta["productId"] !== "string" ||
+      !/^[a-z0-9_-]{2,64}$/.test(beta["productId"]) ||
+      !validCatalogAmount(beta["rewardAmount"]) ||
+      !validCatalogAmount(beta["expectedAmount"]))
+  )
+    return paused();
+  const pack = catalog
+    ? { rewardAmount: beta["rewardAmount"], expectedAmount: beta["expectedAmount"] }
+    : packageTuple(beta["productId"], cohort);
   if (
     !exactObject(beta, bindingKeys) ||
     !exactObject(beta["entity"], ["Id", "Type"]) ||
-    beta["protocolVersion"] !== 1 ||
+    (beta["protocolVersion"] !== 1 && !catalog) ||
     beta["mode"] !== "test" ||
     beta["scopeId"] !== current.scopeId ||
     beta["titleId"] !== current.titleId ||

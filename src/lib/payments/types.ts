@@ -9,13 +9,13 @@ export interface CurrencyReward {
 
 /** Server-authored TEST-only exception; frozen with the original version-3 order. */
 export interface CoinBetaBinding {
-  protocolVersion: 1;
+  protocolVersion: 1 | 2;
   mode: "test";
   scopeId: string;
   titleId: string;
   playerId: string;
   entity: { Id: string; Type: "title_player_account" };
-  productId: "coins_500" | "coins_1000" | "coins_2500" | "coins_5000";
+  productId: string;
   rewardCurrency: "CO";
   rewardAmount: number;
   expectedAmount: number;
