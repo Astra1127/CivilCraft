@@ -15,10 +15,10 @@ export interface CoinBetaBinding {
   titleId: string;
   playerId: string;
   entity: { Id: string; Type: "title_player_account" };
-  productId: "coins_500";
+  productId: "coins_500" | "coins_1000" | "coins_2500" | "coins_5000";
   rewardCurrency: "CO";
-  rewardAmount: 500;
-  expectedAmount: 5000;
+  rewardAmount: number;
+  expectedAmount: number;
   currency: "PHP";
 }
 

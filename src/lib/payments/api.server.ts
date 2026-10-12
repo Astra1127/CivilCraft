@@ -28,6 +28,7 @@ import {
 } from "./coin-maintenance.server.ts";
 import {
   COIN_BETA_PRODUCT_ID,
+  COIN_COHORT_PRODUCT_IDS,
   assertCoinCheckoutSnapshotAllowed,
   createCoinCheckoutBindingForAccount,
   isGeneralTestCoinCheckoutEnabled,
@@ -168,14 +169,23 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         (isCoinBetaCheckoutCandidate(playFabId) || isGeneralTestCoinCheckoutEnabled())
       ) {
         try {
-          const product = await getProductById(COIN_BETA_PRODUCT_ID);
-          if (product) {
-            const beta = await createCoinCheckoutBindingForAccount(playFabId, product);
-            if (beta) {
-              // Availability also verifies the actual server-resolved entity and ready wallet.
-              await gameCoinSnapshot(playFabId, beta);
-              coinTestProductIds = [beta.productId];
-              coinMaintenanceAllowsCheckout = true;
+          const ids = isGeneralTestCoinCheckoutEnabled()
+            ? COIN_COHORT_PRODUCT_IDS
+            : [COIN_BETA_PRODUCT_ID];
+          for (const id of ids) {
+            try {
+              const product = await getProductById(id);
+              if (product) {
+                const beta = await createCoinCheckoutBindingForAccount(playFabId, product);
+                if (beta) {
+                  // Availability also verifies the actual server-resolved entity and ready wallet.
+                  await gameCoinSnapshot(playFabId, beta);
+                  (coinTestProductIds ??= []).push(beta.productId);
+                  coinMaintenanceAllowsCheckout = true;
+                }
+              }
+            } catch {
+              /* An unavailable package never enables itself or hides other valid packages. */
             }
           }
         } catch {
