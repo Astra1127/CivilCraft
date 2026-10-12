@@ -434,7 +434,27 @@ function harness(existingOrders = new Map()) {
               : products.getProduct(id);
           return product ? { ...plain(product), active: true } : null;
         },
-        listActiveProducts: async () => [],
+        listActiveProducts: async () => {
+          const defaults = Object.fromEntries(
+            ["coins_500", "coins_1000", "coins_2500"].map((id) => [
+              id,
+              { ...plain(products.getProduct(id)), active: true },
+            ]),
+          );
+          defaults.coins_5000 = {
+            id: "coins_5000",
+            active: true,
+            category: "currency",
+            amount: 350000,
+            currency: "PHP",
+            rewardCurrency: "CO",
+            rewardAmount: 5000,
+            rewardCoins: 5000,
+          };
+          return Object.values({ ...defaults, ...state.productOverrides }).filter(
+            (p) => p && p.active !== false,
+          );
+        },
       },
       "./player-auth.server.ts": {
         authenticatePaymentPlayer: async (request) => {
@@ -863,7 +883,7 @@ test("all cohort Coin packages bind fixed prices, settle once, and retain delive
   assert.equal((await h.game.gameWallet(D)).coins, before + 9000);
 });
 
-test("cohort package availability rejects altered catalog tuples and leaves historical beta limited", async () => {
+test("cohort package availability rejects invalid catalog amounts and leaves historical beta limited", async () => {
   const h = harness();
   assert.equal((await h.checkout(A, { productId: "coins_1000" })).status, 503);
   assert.equal((await h.checkout(A, { productId: "coins_2500" })).status, 503);
@@ -878,7 +898,7 @@ test("cohort package availability rejects altered catalog tuples and leaves hist
       id: "coins_1000",
       active: true,
       category: "currency",
-      amount: 1,
+      amount: 0,
       currency: "PHP",
       rewardCurrency: "CO",
       rewardAmount: 1000,
@@ -892,4 +912,116 @@ test("cohort package availability rejects altered catalog tuples and leaves hist
   assert.equal((await h.checkout(D, { productId: "coins_1000" })).status, 503);
   assert.equal((await h.checkout(D, { productId: "coins_2500" })).status, 400);
   assert.equal(h.state.checkouts, 0);
+});
+
+test("admin catalog Coin products snapshot server values, reflect edits, and survive disable/delete", async () => {
+  const h = harness();
+  Object.assign(h.environment, {
+    GAME_WALLET_NEW_ACCOUNT_COHORT_ENABLED: "true",
+    GAME_WALLET_NEW_ACCOUNT_CUTOFF_AT: "2026-01-01T00:00:00.000Z",
+    COIN_COHORT_TEST_CHECKOUT_ENABLED: "true",
+    COIN_COHORT_TEST_DELIVERY_ENABLED: "true",
+    COIN_BETA_CHECKOUT_ENABLED: "false",
+  });
+  const custom = {
+    id: "builder_special_777",
+    active: true,
+    category: "currency",
+    amount: 7777,
+    currency: "PHP",
+    rewardCurrency: "CO",
+    rewardAmount: 777,
+    rewardCoins: 777,
+  };
+  h.state.productOverrides = { [custom.id]: custom };
+  const before = (await h.game.gameWallet(D)).coins;
+  const available = await (await h.request(D, "/api/player/currencies")).json();
+  assert.ok(available.coinTestProductIds.includes(custom.id));
+  assert.equal((await h.checkout(E, { productId: custom.id })).status, 409);
+  const response = await h.checkout(D, { productId: custom.id, amount: 1, rewardAmount: 999999 });
+  assert.equal(response.status, 200);
+  const { orderId } = await response.json();
+  const stored = h.state.orders.get(orderId);
+  assert.equal(stored.coinBeta.protocolVersion, 2);
+  assert.equal(stored.coinBeta.expectedAmount, 7777);
+  assert.equal(stored.coinBeta.rewardAmount, 777);
+  // Admin price/reward edits affect only new orders.
+  h.state.productOverrides[custom.id] = {
+    ...custom,
+    amount: 8888,
+    rewardAmount: 888,
+    rewardCoins: 888,
+  };
+  const second = await (await h.checkout(D, { productId: custom.id })).json();
+  assert.equal(h.state.orders.get(second.orderId).coinBeta.rewardAmount, 888);
+  assert.equal(h.state.orders.get(second.orderId).coinBeta.expectedAmount, 8888);
+  h.state.productOverrides[custom.id].active = false;
+  assert.equal((await h.checkout(D, { productId: custom.id })).status, 400);
+  assert.ok(
+    !(await (await h.request(D, "/api/player/currencies")).json()).coinTestProductIds.includes(
+      custom.id,
+    ),
+  );
+  h.state.productOverrides[custom.id] = null;
+  assert.equal((await h.checkout(D, { productId: custom.id })).status, 400);
+  assert.equal((await h.checkout(D, { productId: "invented_999" })).status, 400);
+  h.environment.COIN_COHORT_TEST_CHECKOUT_ENABLED = "false";
+  // An unpaid order and spoofed/live/wrong-amount evidence never credit.
+  assert.equal((await paymentRows(second.orderId)).length, 0);
+  assert.equal((await h.webhook(h.event(orderId), false)).status, 400);
+  assert.equal((await h.webhook(h.event(orderId, { livemode: true }))).status, 400);
+  assert.equal((await h.webhook(h.event(orderId, { amount: 8888 }))).status, 400);
+  for (const id of [orderId, second.orderId]) {
+    assert.equal((await h.webhook(h.event(id))).status, 200);
+    assert.equal((await h.webhook(h.event(id))).body.idempotent, true);
+    assert.equal((await paymentRows(id)).length, 1);
+  }
+  assert.equal((await h.game.gameWallet(D)).coins, before + 777 + 888);
+});
+
+test("catalog bindings reject invalid bounds and preserve v1 cohort price protection", async () => {
+  const h = harness();
+  Object.assign(h.environment, {
+    GAME_WALLET_NEW_ACCOUNT_COHORT_ENABLED: "true",
+    GAME_WALLET_NEW_ACCOUNT_CUTOFF_AT: "2026-01-01T00:00:00.000Z",
+    COIN_COHORT_TEST_CHECKOUT_ENABLED: "true",
+    COIN_COHORT_TEST_DELIVERY_ENABLED: "true",
+  });
+  const custom = {
+    id: "coin_special",
+    active: true,
+    category: "currency",
+    amount: 7777,
+    currency: "PHP",
+    rewardCurrency: "CO",
+    rewardAmount: 777,
+    rewardCoins: 777,
+  };
+  for (const overrides of [
+    { amount: 0 },
+    { amount: -1 },
+    { amount: 1.5 },
+    { amount: 2147483648 },
+    { rewardAmount: 0, rewardCoins: 0 },
+    { rewardAmount: 2147483648, rewardCoins: 2147483648 },
+    { rewardCoins: 1 },
+    { currency: "USD" },
+    { category: "support" },
+  ]) {
+    h.state.productOverrides = { [custom.id]: { ...custom, ...overrides } };
+    const r = await h.checkout(D, { productId: custom.id });
+    assert.notEqual(r.status, 200);
+  }
+  assert.equal(h.state.checkouts, 0);
+  const { orderId } = await (await h.checkout(D)).json();
+  const order = plain(h.state.orders.get(orderId));
+  order.coinBeta.protocolVersion = 1;
+  assert.doesNotThrow(() => h.policy.assertCoinOrderDeliveryAllowed(order));
+  order.coinBeta.rewardAmount = order.rewardAmount = order.expectedCoins = 999;
+  assert.throws(() => h.policy.assertCoinOrderDeliveryAllowed(order));
+  for (const version of [0, 3, "2"]) {
+    const altered = plain(h.state.orders.get(orderId));
+    altered.coinBeta.protocolVersion = version;
+    assert.throws(() => h.policy.assertCoinOrderDeliveryAllowed(altered));
+  }
 });
