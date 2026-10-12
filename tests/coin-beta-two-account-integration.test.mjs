@@ -157,6 +157,11 @@ async function paymentRows(orderId) {
 test("additional account checkout, unpaid and duplicate paid delivery remain isolated after closure", async () => {
   const h = harness();
   enableSecond(h.environment);
+  h.environment.COIN_BETA_PRIMARY_CHECKOUT_ENABLED = "false";
+  h.environment.COIN_BETA_SECOND_CHECKOUT_ENABLED = "false";
+  assert.equal((await h.checkout(A)).status, 503);
+  assert.equal((await h.checkout(B)).status, 503);
+  assert.equal(h.state.checkouts, 0);
   const entry = {
     scopeId: "fixture-third",
     playerId: C,
