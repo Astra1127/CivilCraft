@@ -80,14 +80,12 @@ export async function gameCoinBalance(playFabId: string) {
   };
 }
 export async function gameWallet(playFabId: string): Promise<GameWalletDTO> {
-  const coins = await gameCoinBalance(playFabId);
-  if (!isGameWalletEnabled() && !isGameWalletInstalled()) return { ...coins, diamonds: null };
-  let diamonds: number | null = null;
-  try {
-    diamonds = await getDiamondBalance(playFabId);
-  } catch {
-    /* Independent DI outage is not a fake zero. */
-  }
+  if (!isGameWalletEnabled() && !isGameWalletInstalled())
+    return { ...(await gameCoinBalance(playFabId)), diamonds: null };
+  const [coins, diamonds] = await Promise.all([
+    gameCoinBalance(playFabId),
+    getDiamondBalance(playFabId).catch(() => null), // Independent outage is not a fake zero.
+  ]);
   return { ...coins, diamonds };
 }
 export async function gameCoinSnapshot(

@@ -137,7 +137,7 @@ function harness() {
         state.entityReads++;
         return ENTITY;
       },
-      getDiamondBalance: async () => 7,
+      getDiamondBalance: async () => (state.diamondRead ? state.diamondRead() : 7),
     },
     "../payments/products.ts": {
       normalizeOrderReward: (o) => ({
@@ -163,6 +163,43 @@ function harness() {
   });
   return { service, state, config, database, legacy };
 }
+test("game balances read independently in parallel", async () => {
+  const { service, state } = harness();
+  let finishCoins;
+  let diamondStarted = false;
+  state.rows = () =>
+    new Promise((resolve) => {
+      finishCoins = resolve;
+    });
+  state.diamondRead = async () => {
+    diamondStarted = true;
+    return 9;
+  };
+  const request = service.gameWallet(PLAYER);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(diamondStarted, true);
+  finishCoins([{ coins: 700, ready: true, version: 5 }]);
+  const result = await request;
+  assert.equal(result.coins, 700);
+  assert.equal(result.diamonds, 9);
+});
+
+test("Diamond outage remains null, not zero; disabled wallets skip its read", async () => {
+  const { service, state } = harness();
+  let reads = 0;
+  state.diamondRead = async () => {
+    reads++;
+    throw new Error("offline");
+  };
+  const result = await service.gameWallet(PLAYER);
+  assert.equal(result.coins, 700);
+  assert.equal(result.diamonds, null);
+  state.enabled = false;
+  state.installed = false;
+  assert.equal((await service.gameWallet(PLAYER)).diamonds, null);
+  assert.equal(reads, 1);
+});
+
 test("default disabled game balance performs no DB or PlayFab lookup", async () => {
   const { service, state } = harness();
   state.enabled = false;

@@ -316,6 +316,9 @@ function harness() {
     "payments/api.server.ts",
     {
       ...mocks,
+      "./checkout-preflight.ts": load("payments/checkout-preflight.ts", {
+        "./products.ts": mocks["./products.ts"],
+      }),
       "./fulfillment.server.ts": fulfillment,
       "./products.server.ts": {
         getProductById: async () => ({

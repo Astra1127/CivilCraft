@@ -415,6 +415,9 @@ function harness(existingOrders = new Map()) {
     "payments/api.server.ts",
     {
       ...mocks,
+      "./checkout-preflight.ts": load("payments/checkout-preflight.ts", {
+        "./products.ts": products,
+      }),
       "./fulfillment.server.ts": fulfillment,
       "./products.server.ts": {
         getProductById: async (id) => {

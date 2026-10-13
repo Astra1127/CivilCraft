@@ -94,11 +94,12 @@ function AuthenticatedShopPage() {
   // Both balances come from the authenticated backend; an outage is not a zero balance.
   const balanceQuery = useQuery<PlayerCurrencies>({
     queryKey: ["player-currencies", player?.playFabId],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const ticket = currentSessionTicket();
       if (!ticket) throw new Error("Please sign in again.");
       const res = await playerFetch("/api/player/currencies", {
         headers: { Authorization: `Bearer ${ticket}` },
+        signal,
       });
       if (!res.ok) throw new Error("Currency balances are unavailable.");
       const data = (await res.json()) as PlayerCurrencies;
@@ -108,6 +109,7 @@ function AuthenticatedShopPage() {
     },
     enabled: isAuthenticated && Boolean(player?.playFabId),
     staleTime: 15_000,
+    retry: false,
   });
 
   const gameLinkQuery = useQuery<GameLinkStatus>({

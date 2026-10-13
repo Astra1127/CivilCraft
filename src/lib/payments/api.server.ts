@@ -1,4 +1,5 @@
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
+import { availableCoinPackages } from "./checkout-preflight.ts";
 import {
   assertDiamondCheckoutCapacity,
   getDiamondBalance,
@@ -171,20 +172,16 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
           const products = isGeneralTestCoinCheckoutEnabled()
             ? await listActiveProducts()
             : [await getProductById(COIN_BETA_PRODUCT_ID)];
-          for (const product of products) {
-            try {
-              if (product) {
-                const beta = await createCoinCheckoutBindingForAccount(playFabId, product);
-                if (beta) {
-                  // Availability also verifies the actual server-resolved entity and ready wallet.
-                  await gameCoinSnapshot(playFabId, beta);
-                  (coinTestProductIds ??= []).push(beta.productId);
-                  coinMaintenanceAllowsCheckout = true;
-                }
-              }
-            } catch {
-              /* An unavailable package never enables itself or hides other valid packages. */
-            }
+          const available = await availableCoinPackages(products, async (product) => {
+            const beta = await createCoinCheckoutBindingForAccount(playFabId, product);
+            if (!beta) return false;
+            // Every package still verifies the actual entity, account and ready wallet.
+            await gameCoinSnapshot(playFabId, beta);
+            return beta.productId === product.id;
+          });
+          if (available.length) {
+            coinTestProductIds = available;
+            coinMaintenanceAllowsCheckout = true;
           }
         } catch {
           /* A failed beta guard disables checkout, never a healthy balance or Diamonds. */
