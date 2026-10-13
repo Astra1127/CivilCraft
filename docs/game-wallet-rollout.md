@@ -318,6 +318,29 @@ money. Handler maintenance/quiescence is still required before any DDL approval.
 
 ## Local verification (no external services)
 
+`database/game-wallet-test-order-exclusions.sql` records the additive, owner-only
+TEST-order exclusion capability installed on the main database October 13, 2026.
+Do not rerun it there. It contains no player-specific approvals or exclusion rows.
+The private approved transaction and post-commit evidence are retained separately.
+The triggers prevent excluded orders becoming database receipts, credits or false
+legacy coverage, without adding runtime permissions. They cannot intercept external
+PlayFab classic grants: keep unversioned-order rejection and retired legacy-handler
+controls in place. No deployment/build step automatically executes this SQL.
+
+`scripts/review-cloudscript-wallet-scope.mjs` exports a pure, offline AST reviewer
+for retained legacy CloudScript source. It rejects unknown/caller-selected object
+requests, namespace or entity targets, deletion/currency/nested writers, and
+unresolved privileged calls or HTTP destinations. Reports contain only fixed
+classifications, counts and hashes; source is never executed or included in a
+report. `STATIC_OBJECT_SCOPE_ONLY` is narrow syntactic evidence, not historical
+completeness, deployed protection, consumer quiescence, or permission to approve
+a manifest. Provider collection remains separate and private; no secrets, source
+snapshots or account-specific approval artifacts belong in Git.
+
+```sh
+node --test tests/cloudscript-wallet-scope.test.mjs
+```
+
 ```sh
 node --test tests/game-wallet-catalog.test.ts tests/game-wallet-backend.test.mjs tests/game-wallet-sql.test.mjs tests/game-wallet-verifier.test.mjs tests/game-wallet-receipt-authority.test.mjs tests/game-wallet-coverage-upgrade.test.mjs tests/game-wallet-entity-review-collector.test.mjs
 npx tsc --noEmit
