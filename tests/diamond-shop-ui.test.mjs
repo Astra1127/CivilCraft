@@ -112,6 +112,7 @@ function load(path, options = {}) {
               isPending: false,
               isError: false,
               ...options.queryResult,
+              ...(config.queryKey[2] === "display" ? options.displayResult : {}),
               ...(config.queryKey[0] === "game-shop-link" ? options.gameLinkQueryResult : {}),
               refetch: () => {},
             };
@@ -133,6 +134,36 @@ async function mount(module) {
   });
   return renderer;
 }
+
+test("balances display while package eligibility is still loading and Buy stays disabled", async () => {
+  const module = load("../src/routes/dashboard.shop.tsx", {
+    queryResult: { isPending: true, data: undefined },
+    displayResult: { isPending: false, data: { coins: 123, diamonds: 500 } },
+  });
+  const renderer = await mount(module);
+  const text = renderedText(renderer.root);
+  assert.match(text, /123/);
+  assert.match(text, /500/);
+  assert.ok(!buyButton(renderer) || buyButton(renderer).props.disabled);
+  const query = module.queries.find((q) => q.queryKey[2] === "display");
+  assert.deepEqual(Array.from(query.queryKey), ["player-currencies", "PLAYER-A", "display"]);
+  await act(async () => renderer.unmount());
+});
+
+test("initial balances have accessible animated placeholders with reduced-motion support", async () => {
+  const module = load("../src/routes/dashboard.shop.tsx", {
+    displayResult: { isPending: true, isFetching: true, data: undefined },
+  });
+  const renderer = await mount(module);
+  assert.equal(renderer.root.findAll((node) => node.props.role === "status").length, 2);
+  assert.match(renderedText(renderer.root), /Loading Coins balance/);
+  assert.match(renderedText(renderer.root), /Loading Diamonds balance/);
+  assert.ok(
+    renderer.root.findAll((node) => node.props.className?.includes("motion-safe:animate-pulse"))
+      .length >= 2,
+  );
+  await act(async () => renderer.unmount());
+});
 
 test("currency search is an allowlisted preference and missing balances are unavailable", () => {
   assert.equal(display.shopCurrency("diamonds"), "diamonds");

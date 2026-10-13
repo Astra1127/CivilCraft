@@ -91,6 +91,27 @@ function AuthenticatedShopPage() {
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const purchaseInFlight = useRef(false);
 
+  // Display balances independently of slower package eligibility checks.
+  const displayQuery = useQuery<PlayerCurrencies>({
+    queryKey: ["player-currencies", player?.playFabId, "display"],
+    queryFn: async ({ signal }) => {
+      const ticket = currentSessionTicket();
+      if (!ticket) throw new Error("Please sign in again.");
+      const res = await playerFetch("/api/player/currencies?view=balances", {
+        headers: { Authorization: `Bearer ${ticket}` },
+        signal,
+      });
+      if (!res.ok) throw new Error("Currency balances are unavailable.");
+      const data = (await res.json()) as PlayerCurrencies;
+      if (currentSessionTicket() !== ticket)
+        throw new Error("Your account changed. Please refresh.");
+      return data;
+    },
+    enabled: isAuthenticated && Boolean(player?.playFabId),
+    staleTime: 15_000,
+    retry: false,
+  });
+
   // Both balances come from the authenticated backend; an outage is not a zero balance.
   const balanceQuery = useQuery<PlayerCurrencies>({
     queryKey: ["player-currencies", player?.playFabId],
@@ -335,12 +356,12 @@ function AuthenticatedShopPage() {
                     {[
                       {
                         name: "Coins",
-                        value: balanceQuery.isError ? null : balanceQuery.data?.coins,
+                        value: displayQuery.isError ? null : displayQuery.data?.coins,
                         Icon: Coins,
                       },
                       {
                         name: "Diamonds",
-                        value: balanceQuery.isError ? null : balanceQuery.data?.diamonds,
+                        value: displayQuery.isError ? null : displayQuery.data?.diamonds,
                         Icon: Diamond,
                       },
                     ].map(({ name, value, Icon }) => (
@@ -355,7 +376,24 @@ function AuthenticatedShopPage() {
                           className="mt-1 font-display text-2xl font-extrabold text-foreground"
                           aria-live="polite"
                         >
-                          {displayBalance(value, balanceQuery.isPending)}
+                          {displayQuery.isPending ? (
+                            <span
+                              role="status"
+                              className="inline-flex h-8 items-center justify-center gap-2"
+                            >
+                              <Loader2
+                                className="h-5 w-5 motion-safe:animate-spin text-gold"
+                                aria-hidden="true"
+                              />
+                              <span
+                                className="h-5 w-16 rounded-md bg-gold/20 motion-safe:animate-pulse"
+                                aria-hidden="true"
+                              />
+                              <span className="sr-only">Loading {name} balance</span>
+                            </span>
+                          ) : (
+                            displayBalance(value, false)
+                          )}
                         </p>
                       </div>
                     ))}
@@ -368,10 +406,19 @@ function AuthenticatedShopPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      disabled={balanceQuery.isFetching}
-                      onClick={() => balanceQuery.refetch()}
+                      disabled={displayQuery.isFetching}
+                      onClick={() => {
+                        void displayQuery.refetch();
+                        void balanceQuery.refetch();
+                      }}
                     >
-                      Refresh balance
+                      {displayQuery.isFetching ? (
+                        <Loader2
+                          className="mr-2 h-4 w-4 motion-safe:animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                      {displayQuery.isFetching ? "Refreshing balances…" : "Refresh balance"}
                     </Button>
                     <Link to="/dashboard" className="font-bold text-gold hover:underline">
                       Dashboard →
@@ -477,11 +524,18 @@ function AuthenticatedShopPage() {
                 role="status"
                 className="rounded-lg border border-gold/40 bg-gold/10 p-4 text-center text-sm"
               >
-                {balanceQuery.data?.coinsLegacyAccount
-                  ? "This development account keeps its legacy Coins in the game. Website Coin purchases are not available for legacy accounts."
-                  : balanceQuery.data?.coinsMigrationRequired
-                    ? "Open the updated game and finish selecting your account save before buying Coins. Your existing Coins have not been replaced."
-                    : "Coin purchases are temporarily unavailable. No payment will be started."}
+                {balanceQuery.isPending ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
+                    Checking Coin purchase availability…
+                  </span>
+                ) : balanceQuery.data?.coinsLegacyAccount ? (
+                  "This development account keeps its legacy Coins in the game. Website Coin purchases are not available for legacy accounts."
+                ) : balanceQuery.data?.coinsMigrationRequired ? (
+                  "Open the updated game and finish selecting your account save before buying Coins. Your existing Coins have not been replaced."
+                ) : (
+                  "Coin purchases are temporarily unavailable. No payment will be started."
+                )}
               </p>
             ) : null}
             {selectedCode === "CO" && balanceQuery.data?.coinTestCheckout === true ? (

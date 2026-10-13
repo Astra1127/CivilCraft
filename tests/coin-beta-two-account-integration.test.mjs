@@ -438,6 +438,7 @@ function harness(existingOrders = new Map()) {
           return product ? { ...plain(product), active: true } : null;
         },
         listActiveProducts: async () => {
+          state.catalogReads = (state.catalogReads ?? 0) + 1;
           const defaults = Object.fromEntries(
             ["coins_500", "coins_1000", "coins_2500"].map((id) => [
               id,
@@ -840,12 +841,10 @@ test("all cohort Coin packages bind fixed prices, settle once, and retain delive
   });
   const before = (await h.game.gameWallet(D)).coins;
   const available = await (await h.request(D, "/api/player/currencies")).json();
-  assert.deepEqual(available.coinTestProductIds, [
-    "coins_500",
-    "coins_1000",
-    "coins_2500",
-    "coins_5000",
-  ]);
+  assert.equal(available.coinsAvailable, true);
+  assert.equal(available.coinTestProductIds, undefined);
+  assert.equal(available.coinTestCheckout, undefined);
+  assert.equal(h.state.catalogReads ?? 0, 0, "Balance loading must not enumerate packages");
   const ids = [];
   for (const [productId, amount, reward] of [
     ["coins_500", 5000, 500],
@@ -911,10 +910,32 @@ test("cohort package availability rejects invalid catalog amounts and leaves his
     coins_5000: null,
   };
   const availability = await (await h.request(D, "/api/player/currencies")).json();
-  assert.deepEqual(availability.coinTestProductIds, ["coins_500"]);
+  assert.equal(availability.coinsAvailable, true);
+  assert.equal(availability.coinTestProductIds, undefined);
   assert.equal((await h.checkout(D, { productId: "coins_1000" })).status, 503);
   assert.equal((await h.checkout(D, { productId: "coins_2500" })).status, 400);
   assert.equal(h.state.checkouts, 0);
+});
+
+test("general TEST checkout accepts migrated ready wallets without a beta account window", async () => {
+  const h = harness();
+  Object.assign(h.environment, {
+    GAME_WALLET_NEW_ACCOUNT_COHORT_ENABLED: "true",
+    GAME_WALLET_NEW_ACCOUNT_CUTOFF_AT: "2026-01-01T00:00:00.000Z",
+    COIN_COHORT_TEST_CHECKOUT_ENABLED: "true",
+    COIN_COHORT_TEST_DELIVERY_ENABLED: "true",
+    COIN_BETA_CHECKOUT_ENABLED: "false",
+  });
+  for (const player of [A, B, C]) {
+    const available = await (await h.request(player, "/api/player/currencies")).json();
+    assert.equal(available.coinsAvailable, true);
+    assert.equal(available.coinTestCheckout, undefined);
+    assert.equal((await h.checkout(player, { productId: "coins_1000" })).status, 200);
+  }
+  const legacy = await (await h.request(E, "/api/player/currencies")).json();
+  assert.equal(legacy.coinsAvailable, false);
+  assert.equal((await h.checkout(E, { productId: "coins_1000" })).status, 409);
+  assert.equal(h.state.catalogReads ?? 0, 0);
 });
 
 test("admin catalog Coin products snapshot server values, reflect edits, and survive disable/delete", async () => {
@@ -939,7 +960,8 @@ test("admin catalog Coin products snapshot server values, reflect edits, and sur
   h.state.productOverrides = { [custom.id]: custom };
   const before = (await h.game.gameWallet(D)).coins;
   const available = await (await h.request(D, "/api/player/currencies")).json();
-  assert.ok(available.coinTestProductIds.includes(custom.id));
+  assert.equal(available.coinsAvailable, true);
+  assert.equal(available.coinTestProductIds, undefined);
   assert.equal((await h.checkout(E, { productId: custom.id })).status, 409);
   const response = await h.checkout(D, { productId: custom.id, amount: 1, rewardAmount: 999999 });
   assert.equal(response.status, 200);
@@ -960,11 +982,7 @@ test("admin catalog Coin products snapshot server values, reflect edits, and sur
   assert.equal(h.state.orders.get(second.orderId).coinBeta.expectedAmount, 8888);
   h.state.productOverrides[custom.id].active = false;
   assert.equal((await h.checkout(D, { productId: custom.id })).status, 400);
-  assert.ok(
-    !(await (await h.request(D, "/api/player/currencies")).json()).coinTestProductIds.includes(
-      custom.id,
-    ),
-  );
+  assert.equal((await (await h.request(D, "/api/player/currencies")).json()).coinsAvailable, true);
   h.state.productOverrides[custom.id] = null;
   assert.equal((await h.checkout(D, { productId: custom.id })).status, 400);
   assert.equal((await h.checkout(D, { productId: "invented_999" })).status, 400);

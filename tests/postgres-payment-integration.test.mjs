@@ -678,6 +678,27 @@ test("unmigrated, overflowing and mismatched game accounts never start Coin chec
   }
 });
 
+test("display-only balance response excludes checkout authority and preserves unavailable", async () => {
+  const h = harness();
+  h.state.gameEnabled = true;
+  h.state.gameBalance = 1234;
+  const read = async () =>
+    (
+      await h.api.handlePaymentsRequest(
+        new Request("https://civilcraft.example/api/player/currencies?view=balances"),
+      )
+    ).json();
+  assert.deepEqual(await read(), {
+    coins: 1234,
+    diamonds: 0,
+    coinsAvailable: false,
+    diamondsAvailable: false,
+  });
+  h.state.gameMigrated = false;
+  assert.equal((await read()).coins, null);
+  assert.equal(h.state.checkouts, 0);
+});
+
 test("unified currency display uses account wallet; no import is represented as unavailable, not zero", async () => {
   const h = harness();
   h.state.gameEnabled = true;

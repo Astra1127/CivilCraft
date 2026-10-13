@@ -150,6 +150,15 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         return getDiamondBalance(playFabId);
       };
       const [coins, diamonds] = await Promise.allSettled([readCoins(), readDiamonds()]);
+      // Display-only reads must not wait for catalog/account checks for every package.
+      // This response never authorizes checkout; the normal preflight remains unchanged.
+      if (url.searchParams.get("view") === "balances")
+        return jsonResponse({
+          coins: coins.status === "fulfilled" ? coins.value : null,
+          diamonds: diamonds.status === "fulfilled" ? diamonds.value : null,
+          coinsAvailable: false,
+          diamondsAvailable: false,
+        });
       let paymentReady = false;
       try {
         requirePayMongoCheckoutReady();
@@ -168,24 +177,28 @@ export async function handlePaymentsRequest(request: Request): Promise<Response 
         isGameWalletEnabled() &&
         (isCoinBetaCheckoutCandidate(playFabId) || isGeneralTestCoinCheckoutEnabled())
       ) {
-        try {
-          const products = isGeneralTestCoinCheckoutEnabled()
-            ? await listActiveProducts()
-            : [await getProductById(COIN_BETA_PRODUCT_ID)];
-          const available = await availableCoinPackages(products, async (product) => {
-            const beta = await createCoinCheckoutBindingForAccount(playFabId, product);
-            if (!beta) return false;
-            // Every package still verifies the actual entity, account and ready wallet.
-            await gameCoinSnapshot(playFabId, beta);
-            return beta.productId === product.id;
-          });
-          if (available.length) {
-            coinTestProductIds = available;
-            coinMaintenanceAllowsCheckout = true;
+        if (isGeneralTestCoinCheckoutEnabled()) {
+          // All ready wallets may attempt TEST checkout. Validate only the selected
+          // server catalog product at create-checkout, never every package on load.
+          coinMaintenanceAllowsCheckout = true;
+        } else
+          try {
+            // Retain the old bounded beta path for deployments not on general rollout.
+            const products = [await getProductById(COIN_BETA_PRODUCT_ID)];
+            const available = await availableCoinPackages(products, async (product) => {
+              const beta = await createCoinCheckoutBindingForAccount(playFabId, product);
+              if (!beta) return false;
+              // Every package still verifies the actual entity, account and ready wallet.
+              await gameCoinSnapshot(playFabId, beta);
+              return beta.productId === product.id;
+            });
+            if (available.length) {
+              coinTestProductIds = available;
+              coinMaintenanceAllowsCheckout = true;
+            }
+          } catch {
+            /* A failed beta guard disables checkout, never a healthy balance or Diamonds. */
           }
-        } catch {
-          /* A failed beta guard disables checkout, never a healthy balance or Diamonds. */
-        }
       }
       return jsonResponse({
         coins: coins.status === "fulfilled" ? coins.value : null,
