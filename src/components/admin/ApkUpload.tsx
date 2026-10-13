@@ -80,7 +80,8 @@ export function ApkUpload({
         <h3 className="text-sm font-bold">{release.apkHosted ? "Replace APK" : "Upload APK"}</h3>
         <p id={`${inputId}-help`} className="text-xs text-muted-foreground">
           Select one .apk file, up to {formatBytes(MAX_APK_BYTES)}. The saved download changes after
-          the upload is verified.
+          the upload is verified. Replaced APK files are permanently deleted; keep your own backups.
+          For a draft, choose Make current after upload to retire older releases.
         </p>
       </div>
 

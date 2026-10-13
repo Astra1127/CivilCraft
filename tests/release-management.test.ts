@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 import { handlePlayFabAdminRequest } from "../src/lib/playfab/admin-api.server.ts";
 import { releaseRequest } from "../src/lib/cms/releases.server.ts";
+import { releaseWriteLock } from "../src/lib/cms/release-write-lock.server.ts";
+const originalLock = releaseWriteLock.run;
 import { getAdminAuthConfig } from "../src/lib/admin-auth/config.server.ts";
 import { issueAdminSession, cookieName } from "../src/lib/admin-auth/session.server.ts";
 import { hashAdminPassword } from "../src/lib/admin-auth/password.server.ts";
@@ -62,6 +64,7 @@ const release = {
 const configKey = "civilcraft.website.v1.release-config";
 const prefix = "civilcraft.website.v1.releases.";
 beforeEach(() => {
+  releaseWriteLock.run = async (task) => task();
   for (const key of keys) delete process.env[key];
   Object.assign(process.env, env);
   records = {
@@ -94,6 +97,7 @@ beforeEach(() => {
   };
 });
 after(() => {
+  releaseWriteLock.run = originalLock;
   globalThis.fetch = originalFetch;
   for (const [key, value] of Object.entries(previous)) {
     if (value === undefined) delete process.env[key];

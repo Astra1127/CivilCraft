@@ -254,13 +254,14 @@ test("collapsing a backup preserves its selected APK and unsaved build edits", a
   assert.deepEqual(state.uploads, []);
 });
 
-test("delete confirmation explains removed notes and retained APK; cancel performs no mutation", async (t) => {
+test("delete confirmation explains permanent APK removal; cancel performs no mutation", async (t) => {
   const { renderer, state } = await mountRoute(t);
   await act(() => deleteButton(renderer, "backup").props.onClick());
   const confirmation = openDialog(renderer, "Delete build");
   assert.match(confirmation.props.description, /notes/i);
   assert.match(confirmation.props.description, /APK/i);
-  assert.match(confirmation.props.description, /retain|keep|remain|preserv/i);
+  assert.match(confirmation.props.description, /permanently deleted/i);
+  assert.match(confirmation.props.description, /backup/i);
   assert.deepEqual(state.mutations, []);
   await act(() => confirmation.props.onOpenChange(false));
   assert.equal(dialog(renderer, "Delete build").props.open, false);

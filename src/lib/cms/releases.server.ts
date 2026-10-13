@@ -8,6 +8,7 @@ import { apkStorage } from "./apk-storage.server.ts";
 import { validateApkArchive } from "./apk-validation.server.ts";
 import { apkPathSchema, createApkUploadTicket, readApkUploadTicket } from "./apk-ticket.server.ts";
 import type { HandleUploadPresignedBody } from "@vercel/blob/client";
+import { releaseWriteLock } from "./release-write-lock.server.ts";
 import {
   createVersionAnnouncement,
   dispatchVersionNotifications,
@@ -145,10 +146,100 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { "Cache-Control": "no-store, private", Vary: "Cookie" },
   });
+async function cleanupOldApks(keepId: string, previousPath?: string) {
+  let deletedFiles = 0;
+  const deadline = Date.now() + 20000;
+  const checkBudget = () => {
+    if (Date.now() >= deadline) throw new Error("Cleanup batch needs another request");
+  };
+  try {
+    const fresh = await data();
+    const current = read(fresh).releases.find((r) => r.id === readConfig(fresh).currentId);
+    if (!current?.apk || current.id !== keepId) throw new Error("Current APK changed");
+    const live = await apkStorage.head(current.apk.storagePath);
+    if (
+      live.pathname !== current.apk.storagePath ||
+      live.etag !== current.apk.etag ||
+      live.size !== current.apk.fileSizeBytes
+    )
+      throw new Error("Current APK unavailable");
+    const paths = new Set<string>();
+    if (previousPath) paths.add(apkPathSchema.parse(previousPath));
+    {
+      // Persist irreversible retirement BEFORE removing bytes. Old tickets/saves
+      // cannot restore a retired build. Every writer holds the distributed lock.
+      for (const [key, raw] of Object.entries(fresh)) {
+        checkBudget();
+        if (!key.startsWith(prefix) || raw == null) continue;
+        const old = schema.parse(JSON.parse(String(raw)));
+        if (old.id === current.id) continue;
+        if (key !== prefix + old.id) throw new Error("Release identity mismatch");
+        if (old.apk && !old.apk.storagePath.startsWith(`civilcraft/releases/${old.id}/`))
+          throw new Error("APK identity mismatch");
+        if (!isDeleted(fresh, old.id))
+          await save(deletedPrefix + old.id, { id: old.id, deletedAt: new Date().toISOString() });
+        if (old.apk) paths.add(old.apk.storagePath);
+      }
+      // Old unattached/replaced uploads also consume space. Allow at least an hour
+      // for in-flight 30-minute upload tickets; never sweep gallery/email objects.
+      for (const blob of await apkStorage.listReleases()) {
+        if (
+          apkPathSchema.safeParse(blob.pathname).success &&
+          blob.uploadedAt.getTime() < Date.now() - 60 * 60 * 1000
+        )
+          paths.add(blob.pathname);
+      }
+    }
+    paths.delete(current.apk.storagePath);
+    for (const path of paths) {
+      checkBudget();
+      await apkStorage.remove(path);
+      deletedFiles++;
+    }
+    return {
+      status: "complete",
+      deletedFiles,
+      message: "Old APK files removed. Keep your own backups.",
+    };
+  } catch {
+    return {
+      status: "pending",
+      deletedFiles,
+      message:
+        "The saved release is unchanged, but APK cleanup is incomplete. Use Clean old APKs to retry; do not upload the same file again.",
+    };
+  }
+}
 /** Admin writes are called only through the existing staff session/origin gate. */
 export async function releaseRequest(
   request: Request,
   admin = false,
+  actor?: AdminUser,
+): Promise<Response | null> {
+  if (
+    admin &&
+    request.method === "POST" &&
+    new URL(request.url).pathname.startsWith("/api/admin/releases")
+  ) {
+    try {
+      return await releaseWriteLock.run(() => unlockedReleaseRequest(request, admin, actor));
+    } catch (error) {
+      return json(
+        {
+          error:
+            error instanceof AdminApiError
+              ? error.message
+              : "Release editing is temporarily unavailable.",
+        },
+        503,
+      );
+    }
+  }
+  return unlockedReleaseRequest(request, admin, actor);
+}
+async function unlockedReleaseRequest(
+  request: Request,
+  admin: boolean,
   actor?: AdminUser,
 ): Promise<Response | null> {
   const path = new URL(request.url).pathname;
@@ -261,7 +352,28 @@ export async function releaseRequest(
           fileUrl: `/api/releases/${ticket.releaseId}/download`,
         };
         await save(prefix + latest.id, updated);
-        return json({ success: true, release: publicRelease(updated) });
+        const cleanup =
+          latest.status === "current"
+            ? await cleanupOldApks(latest.id, ticket.previousStoragePath ?? undefined)
+            : undefined;
+        // Replacement on a draft is not public yet; remove only its superseded attachment.
+        let replacementCleanup = cleanup;
+        if (latest.status !== "current" && ticket.previousStoragePath) {
+          try {
+            await apkStorage.remove(ticket.previousStoragePath);
+          } catch {
+            replacementCleanup = {
+              status: "pending",
+              deletedFiles: 0,
+              message: "APK saved; previous attachment cleanup needs retry after publication.",
+            };
+          }
+        }
+        return json({
+          success: true,
+          release: publicRelease(updated),
+          cleanup: replacementCleanup,
+        });
       }
       return json({ error: "Endpoint not found." }, 404);
     }
@@ -311,7 +423,11 @@ export async function releaseRequest(
       });
     } else {
       if (!state.initialized) throw new AdminApiError(409, "Import existing releases first.");
-      if (body["action"] === "current") {
+      if (body["action"] === "cleanup") {
+        const config = readConfig(await data());
+        if (!config.currentId) throw new AdminApiError(409, "No current APK to preserve.");
+        return json({ success: true, cleanup: await cleanupOldApks(config.currentId) });
+      } else if (body["action"] === "current") {
         const id = idSchema.parse(body["id"]);
         const fresh = await data();
         const latest = read(fresh);
@@ -324,6 +440,18 @@ export async function releaseRequest(
             "Attach an APK or download link before making this build current.",
           );
         const active = latest.releases.find((r) => r.status === "current");
+        if (chosen.apk) {
+          const blob = await apkStorage.head(chosen.apk.storagePath);
+          if (
+            blob.pathname !== chosen.apk.storagePath ||
+            blob.etag !== chosen.apk.etag ||
+            blob.size !== chosen.apk.fileSizeBytes
+          )
+            throw new AdminApiError(
+              409,
+              "Selected APK is unavailable or changed. The current download was preserved.",
+            );
+        }
         const archivedIds = [
           ...new Set([
             ...(config.archivedIds ?? []).filter(
@@ -356,6 +484,7 @@ export async function releaseRequest(
         });
         return json({
           success: true,
+          cleanup: chosen.apk ? await cleanupOldApks(id) : undefined,
           notification:
             changed && notification
               ? await announceVersion(notification)
@@ -376,8 +505,21 @@ export async function releaseRequest(
             "The active build cannot be deleted. Make another build current first.",
           );
         // A separate durable tombstone prevents stale saves/uploads from restoring
-        // a deleted record. Retain the private metadata and APK for recovery.
+        // a deleted record. Retain small private metadata, not the APK bytes.
         await save(deletedPrefix + id, { id, deletedAt: new Date().toISOString() });
+        if (chosen.apk) {
+          try {
+            await apkStorage.remove(chosen.apk.storagePath);
+          } catch {
+            return json({
+              success: true,
+              cleanup: {
+                status: "pending",
+                message: "Build removed; APK deletion is pending. Use Clean old APKs to retry.",
+              },
+            });
+          }
+        }
       } else if (body["action"] === "save") {
         if (Object.hasOwn(object(body["release"]), "apk"))
           throw new AdminApiError(400, "APK storage references cannot be supplied by the browser.");

@@ -36,6 +36,7 @@ function AdminReleases() {
   const [expandedBuilds, setExpandedBuilds] = useState<Record<string, boolean>>({});
   const [deleteTarget, setDeleteTarget] = useState<Release | null>(null);
   const [currentTarget, setCurrentTarget] = useState<Release | null>(null);
+  const [cleanupConfirm, setCleanupConfirm] = useState(false);
   const [emailResult, setEmailResult] = useState<ReleaseNotificationResult | null>(null);
   const installSteps = useCms((s) => s.settings.installSteps);
   const [steps, setSteps] = useState(installSteps.join("\n"));
@@ -52,7 +53,7 @@ function AdminReleases() {
     {
       id: "archived",
       title: "Backups",
-      description: "Previous downloads kept for reference or rollback.",
+      description: "Old builds awaiting permanent storage cleanup. Keep backups outside Vercel.",
       releases: releases.filter((r) => r.status === "archived").sort(byDate),
     },
     {
@@ -98,6 +99,7 @@ function AdminReleases() {
       }
       const result = await query.mutate({ action: "current", id: release.id });
       if (result?.notification) setEmailResult(result.notification);
+      if (result?.cleanup?.status === "pending") toast.error(result.cleanup.message);
       setCurrentTarget(null);
       toast.success(`v${release.version} is now the public build`);
     } catch (error) {
@@ -114,7 +116,8 @@ function AdminReleases() {
     if (!release || busy || release.id === current?.id) return;
     setBusy(true);
     try {
-      await query.mutate({ action: "delete", id: release.id });
+      const result = await query.mutate({ action: "delete", id: release.id });
+      if (result?.cleanup?.status === "pending") toast.error(result.cleanup.message);
       clearPatch(release.id);
       setExpandedBuilds((prev) => {
         const next = { ...prev };
@@ -155,7 +158,8 @@ function AdminReleases() {
         const { fileName, fileUrl, fileSizeBytes, apkHosted, ...metadata } = patch;
         if (Object.keys(metadata).length) await save({ ...release, ...metadata });
       }
-      await query.uploadApk(release.id, file, onProgress);
+      const result = await query.uploadApk(release.id, file, onProgress);
+      if (result?.cleanup?.status === "pending") toast.error(result.cleanup.message);
       clearPatch(release.id);
       toast.success("APK uploaded and attached to the build");
     } finally {
@@ -321,6 +325,17 @@ function AdminReleases() {
       </Panel>
 
       <Panel title="Create draft build" icon={Package} bodyClassName="p-4 space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Only the current APK is retained after publication. Making a new build current permanently
+          removes older builds and their APK files. Save your own backups first.
+        </p>
+        <Button
+          disabled={busy || !current?.apkHosted}
+          variant="outline"
+          onClick={() => setCleanupConfirm(true)}
+        >
+          Clean old APKs
+        </Button>
         <p className="text-sm text-muted-foreground">
           Create a build record, then upload its APK. Use Make current when it is ready for the
           public Download page. Release notes are managed in What's New.
@@ -628,7 +643,7 @@ function AdminReleases() {
             ? `Delete v${deleteTarget.version} build ${deleteTarget.build}?`
             : "Delete build?"
         }
-        description={`The build record and its ${deleteTarget?.published ? "published " : ""}release notes will be removed${deleteTarget?.published ? " from What's New" : ""}. Any uploaded APK file is retained in storage. The active download stays available.`}
+        description={`The build record and its ${deleteTarget?.published ? "published " : ""}release notes will be removed${deleteTarget?.published ? " from What's New" : ""}. Its uploaded APK will be permanently deleted from storage. Save your own backup first. The active download stays available.`}
         confirmLabel="Delete build"
         onConfirm={() => void deleteBuild()}
       />
@@ -642,11 +657,33 @@ function AdminReleases() {
             ? `Make v${currentTarget.version} build ${currentTarget.build} current?`
             : "Make build current?"
         }
-        description={`This replaces the active download with the selected build.${currentTarget && current?.version.trim() !== currentTarget.version.trim() ? " Players who opted in and confirmed their contact email will be queued for a version update when email delivery is configured." : " The version is unchanged, so no new version email is queued."}`}
+        description={`This replaces the active download with the selected build. For hosted APKs, all other builds and their APK files are permanently deleted after the new download is verified. Save backups yourself first.${currentTarget && current?.version.trim() !== currentTarget.version.trim() ? " Players who opted in and confirmed their contact email will be queued for a version update when email delivery is configured." : " The version is unchanged, so no new version email is queued."}`}
         confirmLabel="Make current"
         destructive={false}
         onConfirm={() => {
           if (currentTarget) void makeCurrent(currentTarget);
+        }}
+      />
+      <ConfirmDialog
+        open={cleanupConfirm}
+        onOpenChange={setCleanupConfirm}
+        title="Permanently delete old APKs?"
+        description="Keep only the current APK. Other release records and APKs will be permanently removed; gallery files and the current download are protected. Keep your own backups. Recent unfinished uploads are skipped for one hour; retry cleanup later for those files."
+        confirmLabel="Delete old APKs"
+        onConfirm={() => {
+          if (busy) return;
+          setBusy(true);
+          void query
+            .mutate({ action: "cleanup" })
+            .then((result) => {
+              if (result.cleanup?.status === "pending") toast.error(result.cleanup.message);
+              else toast.success(result.cleanup?.message ?? "Old APK cleanup complete");
+              setCleanupConfirm(false);
+            })
+            .catch((error) =>
+              toast.error(error instanceof Error ? error.message : "Cleanup failed"),
+            )
+            .finally(() => setBusy(false));
         }}
       />
     </AdminPage>

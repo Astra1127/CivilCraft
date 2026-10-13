@@ -1,4 +1,14 @@
-import { get, head, issueSignedToken, presignUrl, getDownloadUrl } from "@vercel/blob";
+import {
+  get,
+  head,
+  list,
+  del,
+  BlobNotFoundError,
+  issueSignedToken,
+  presignUrl,
+  getDownloadUrl,
+} from "@vercel/blob";
+import { apkPathSchema } from "./apk-ticket.server.ts";
 import { handleUploadPresigned, type HandleUploadPresignedBody } from "@vercel/blob/client";
 import { AdminApiError } from "../playfab/admin-client.server.ts";
 import { APK_CONTENT_TYPE, MAX_APK_BYTES } from "./apk.ts";
@@ -6,6 +16,35 @@ import type { ApkUploadTicket } from "./apk-ticket.server.ts";
 
 /** APK-only adapter. Gallery/other stores keep their existing credentials and behavior. */
 export const apkStorage = {
+  async listReleases() {
+    const blobs: { pathname: string; uploadedAt: Date; size: number }[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await list({
+        prefix: "civilcraft/releases/",
+        limit: 1000,
+        ...(cursor ? { cursor } : {}),
+        abortSignal: AbortSignal.timeout(12000),
+      });
+      blobs.push(...page.blobs);
+      if (blobs.length > 5000)
+        throw new AdminApiError(503, "Too many APK objects; request an operator storage review.");
+      cursor = page.hasMore ? page.cursor : undefined;
+      if (page.hasMore && !cursor) throw new Error("Incomplete Blob inventory");
+    } while (cursor);
+    return blobs;
+  },
+  async remove(path: string) {
+    apkPathSchema.parse(path); // No arbitrary URLs, gallery paths or directory deletion.
+    try {
+      const metadata = await head(path, { abortSignal: AbortSignal.timeout(12000) });
+      if (metadata.pathname !== path || !metadata.etag) throw new Error("APK identity changed");
+      await del(path, { ifMatch: metadata.etag, abortSignal: AbortSignal.timeout(12000) });
+    } catch (error) {
+      if (error instanceof BlobNotFoundError) return;
+      throw error;
+    }
+  },
   async head(path: string) {
     const value = await head(path, { abortSignal: AbortSignal.timeout(12000) });
     return {

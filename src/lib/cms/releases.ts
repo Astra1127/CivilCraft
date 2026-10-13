@@ -12,7 +12,11 @@ export type ReleaseNotificationResult = {
   status: "queued" | "not-configured" | "unchanged";
   message: string;
 };
-export type ReleaseMutationResult = { success: boolean; notification?: ReleaseNotificationResult };
+export type ReleaseMutationResult = {
+  success: boolean;
+  notification?: ReleaseNotificationResult;
+  cleanup?: { status: string; message: string; deletedFiles?: number };
+};
 export type ReleaseEmailReadiness = { configured: boolean; provider: string; message: string };
 export function useReleasePosts() {
   return useQuery({
@@ -74,12 +78,16 @@ export function useAdminReleases() {
     if (result.pathname !== prepared.pathname)
       throw new Error("Upload did not match the selected build.");
     onProgress?.(100);
-    await contentFetch("/api/admin/releases/apk/finalize", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ticket: prepared.ticket }),
-    });
+    const finalized = await contentFetch<ReleaseMutationResult>(
+      "/api/admin/releases/apk/finalize",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket: prepared.ticket }),
+      },
+    );
     await client.invalidateQueries({ queryKey: ["releases"] });
+    return finalized;
   };
   return { ...query, mutate, uploadApk };
 }

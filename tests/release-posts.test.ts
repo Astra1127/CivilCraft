@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 import { releaseRequest } from "../src/lib/cms/releases.server.ts";
+import { releaseWriteLock } from "../src/lib/cms/release-write-lock.server.ts";
+const originalLock = releaseWriteLock.run;
 import { handlePlayFabAdminRequest } from "../src/lib/playfab/admin-api.server.ts";
 import { getAdminAuthConfig } from "../src/lib/admin-auth/config.server.ts";
 import { cookieName, issueAdminSession } from "../src/lib/admin-auth/session.server.ts";
@@ -24,6 +26,7 @@ const previous = Object.fromEntries(Object.keys(env).map((k) => [k, process.env[
 const originalFetch = globalThis.fetch;
 let records: Record<string, string> = {};
 beforeEach(() => {
+  releaseWriteLock.run = async (task) => task();
   Object.assign(process.env, env);
   records = {};
   globalThis.fetch = async (_url, init) => {
@@ -33,6 +36,7 @@ beforeEach(() => {
   };
 });
 after(() => {
+  releaseWriteLock.run = originalLock;
   globalThis.fetch = originalFetch;
   for (const [k, v] of Object.entries(previous)) {
     if (v === undefined) delete process.env[k];

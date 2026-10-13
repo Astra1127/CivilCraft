@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, afterEach, beforeEach, test } from "node:test";
 import { releaseRequest } from "../src/lib/cms/releases.server.ts";
 import { apkStorage } from "../src/lib/cms/apk-storage.server.ts";
+import { releaseWriteLock } from "../src/lib/cms/release-write-lock.server.ts";
 import { APK_CONTENT_TYPE, MAX_APK_BYTES } from "../src/lib/cms/apk.ts";
 import { handlePlayFabAdminRequest } from "../src/lib/playfab/admin-api.server.ts";
 import { getAdminAuthConfig } from "../src/lib/admin-auth/config.server.ts";
@@ -25,6 +26,7 @@ const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.
 const originalFetch = globalThis.fetch;
 const originalDateNow = Date.now;
 const originalStorage = { ...apkStorage };
+const originalLock = releaseWriteLock.run;
 const uploadResult = {
   type: "blob.generate-presigned-url" as const,
   presignedUrlPayload: {
@@ -40,6 +42,12 @@ let storageReads: [string, number, number][] = [];
 let uploadCalls = 0;
 
 beforeEach(() => {
+  releaseWriteLock.run = async (task) => task();
+  apkStorage.listReleases = async () =>
+    [...blobs].map(([pathname, b]) => ({ pathname, size: b.bytes.length, uploadedAt: new Date() }));
+  apkStorage.remove = async (pathname) => {
+    blobs.delete(pathname);
+  };
   Object.assign(process.env, env);
   records = {};
   blobs = new Map();
@@ -78,6 +86,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  releaseWriteLock.run = originalLock;
   globalThis.fetch = originalFetch;
   Date.now = originalDateNow;
   Object.assign(apkStorage, originalStorage);
@@ -507,7 +516,6 @@ test("public downloads expose only the configured current APK and never draft or
     );
     await attach(apk(), id, id + ".apk");
   }
-  await admin("/api/admin/releases", { action: "current", id: "archived-build" });
   await admin("/api/admin/releases", { action: "current", id: base.id });
   for (const id of ["draft-build", "archived-build", "missing"]) {
     for (const method of ["GET", "HEAD"]) {
@@ -521,6 +529,68 @@ test("public downloads expose only the configured current APK and never draft or
   const data = await publicData();
   assert.equal(data.current.id, base.id);
   assert.equal(data.latest, null);
+});
+
+test("activation deletes retired APKs, protects the new current, and rejects stale tickets", async () => {
+  await initialize();
+  const old = await attach();
+  const stale = await prepare(apk());
+  blobs.set(stale.pathname, { bytes: apk() });
+  await admin("/api/admin/releases", {
+    action: "save",
+    release: { ...base, id: "next", status: "draft", fileUrl: null },
+  });
+  const next = await attach(apk(), "next");
+  assert.ok(blobs.has(old.pathname), "draft upload must not remove current");
+  const activated = await admin("/api/admin/releases", { action: "current", id: "next" });
+  assert.equal((await activated.json()).cleanup.status, "complete");
+  assert.equal(blobs.has(old.pathname), false);
+  assert.ok(blobs.has(next.pathname));
+  assert.equal((await publicData()).current.id, "next");
+  assert.equal((await finalize(stale)).status, 404);
+});
+
+test("failed cleanup is retryable and sweeps only expired APK orphans", async () => {
+  await initialize();
+  const old = await attach();
+  const remove = apkStorage.remove;
+  apkStorage.remove = async () => {
+    throw new Error("storage unavailable");
+  };
+  const prepared = await prepare(apk(), base.id, "new.apk");
+  blobs.set(prepared.pathname, { bytes: apk() });
+  assert.equal((await (await finalize(prepared)).json()).cleanup.status, "pending");
+  assert.ok(blobs.has(old.pathname));
+  assert.equal(rawRelease().apk.storagePath, prepared.pathname);
+  const recent = `civilcraft/releases/r1/11111111-1111-1111-1111-111111111111/recent.apk`;
+  const gallery = "civilcraft/gallery/picture.png";
+  blobs.set(recent, { bytes: apk() });
+  blobs.set(gallery, { bytes: Buffer.from("picture") });
+  apkStorage.listReleases = async () =>
+    [...blobs].map(([pathname, b]) => ({
+      pathname,
+      size: b.bytes.length,
+      uploadedAt: pathname === recent ? new Date() : new Date(0),
+    }));
+  apkStorage.remove = remove;
+  const response = await admin("/api/admin/releases", { action: "cleanup" });
+  assert.equal((await response.json()).cleanup.status, "complete");
+  assert.equal(blobs.has(old.pathname), false);
+  assert.ok(blobs.has(prepared.pathname));
+  assert.ok(blobs.has(recent));
+  assert.ok(blobs.has(gallery));
+});
+
+test("cleanup refuses deletion when current APK cannot be verified", async () => {
+  await initialize();
+  await attach();
+  const before = [...blobs.keys()];
+  apkStorage.head = async () => {
+    throw new Error("offline");
+  };
+  const response = await admin("/api/admin/releases", { action: "cleanup" });
+  assert.equal((await response.json()).cleanup.status, "pending");
+  assert.deepEqual([...blobs.keys()], before);
 });
 
 test("staff can preview a draft APK through the admin download route while public access stays closed", async () => {
