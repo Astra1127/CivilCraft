@@ -16,6 +16,7 @@ import { getAdminPlayer, lookupPlayer, mapBans } from "./admin-players.server.ts
 import type { AdminIntegrationStatus, PlayerSearchKind } from "./admin-types.ts";
 import type { Transaction } from "./types.ts";
 import { listOrders } from "../payments/orders.server.ts";
+import { adminTransaction } from "../payments/admin-transactions.ts";
 import { currencyLabel, normalizeOrderReward } from "../payments/products.ts";
 import {
   listAllProducts,
@@ -104,6 +105,8 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     }
     if (path === "/api/admin/transactions" && request.method === "GET") {
       if (!adminGameConfig().secret) return json({ configured: false, records: [] });
+      if (url.searchParams.get("view") === "simulation")
+        return json({ configured: true, records: (await listOrders()).map(adminTransaction) });
       // Reuse the administrative access probe. Current inventory is not a ledger,
       // and Civil Craft has no global transaction-history source implemented yet.
       await playFabAdmin("Admin/GetAllSegments");

@@ -5,7 +5,7 @@ import type {
   AdminPlayerPage,
   PlayerSearchKind,
 } from "./admin-types";
-import type { Transaction } from "./types";
+import type { AdminTransaction } from "../payments/admin-transactions";
 export async function request<T>(path: string, body?: Record<string, unknown>): Promise<T> {
   let response: Response;
   try {
@@ -61,7 +61,8 @@ export const adminPlayerService = {
     });
   },
   getTransactions() {
-    return request<{ configured: boolean; records: Transaction[] }>("transactions");
-    return request<{ configured: boolean; records: Transaction[] }>("transactions?orders=1");
+    return request<{ configured: boolean; records: AdminTransaction[] }>(
+      "transactions?view=simulation",
+    );
   },
 };

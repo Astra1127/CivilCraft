@@ -371,6 +371,41 @@ test("integration configuration reports safe statuses without exposing service c
     });
   }
 });
+test("simulation transactions are staff-only, read-only and exclude private payment fields", async () => {
+  const path = "/api/admin/transactions?view=simulation";
+  assert.equal((await request(path)).status, 401);
+  assert.equal(calls.length, 0);
+  reports["civilcraft.website.v1.payment-orders.ORDER1"] = JSON.stringify({
+    orderId: "ORDER1",
+    playFabId: "ABC123",
+    productId: "coins",
+    expectedCoins: 500,
+    expectedAmount: 4900,
+    currency: "PHP",
+    status: "paid",
+    createdAt: "2026-10-14T00:00:00Z",
+    paidAt: "2026-10-14T01:00:00Z",
+    fulfilledAt: null,
+    PayMongoReferenceNumber: "REF1",
+    checkoutUrl: "secret-checkout",
+    error: "secret-error",
+  });
+  const cookie = await session();
+  const response = await request(path, cookie);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.records.length, 1);
+  assert.equal(body.records[0].checkout, "Completed");
+  assert.equal(body.records[0].delivery, "Needs review");
+  assert.doesNotMatch(JSON.stringify(body), /secret-checkout|secret-error/);
+  assert.deepEqual(
+    calls.map((c) => c.operation),
+    ["Admin/GetTitleInternalData"],
+  );
+  failOperation = "Admin/GetTitleInternalData";
+  assert.equal((await request(path, cookie)).status, 503);
+});
+
 test("transactions distinguish missing access, empty history and provider failure", async () => {
   const cookie = await session();
   delete process.env["PLAYFAB_SECRET_KEY"];

@@ -17,7 +17,7 @@
     "test:reset": "node --test tests/reset-password.test.ts tests/reset-password-ui.test.mjs",
     "test:payments": "node --test tests/paymongo.test.ts",
     "test:coin-beta": "node --test tests/coin-beta-policy.test.ts tests/coin-beta-fulfillment.test.mjs tests/coin-beta-two-account-integration.test.mjs tests/postgres-payment-integration.test.mjs",
-    "test:transactions": "node --test tests/dashboard-transactions-layout.test.mjs",
+    "test:transactions": "node --test tests/dashboard-transactions-layout.test.mjs tests/admin-transactions.test.ts tests/admin-transactions-ui.test.mjs",
     "test:migration": "node --test tests/game-wallet-backend.test.mjs tests/game-wallet-sql.test.mjs tests/game-wallet-catalog.test.ts tests/game-wallet-receipt-authority.test.mjs tests/game-wallet-postgres-wire.test.mjs tests/game-wallet-coverage-upgrade.test.mjs tests/game-wallet-entity-review-collector.test.mjs tests/game-wallet-verifier.test.mjs tests/game-wallet-import-boundaries.test.mjs tests/game-wallet-migration-preparation.test.mjs tests/cloudscript-wallet-scope.test.mjs tests/game-wallet-test-order-exclusions.test.mjs",
     "test:apk": "node --test tests/apk-validation.test.ts tests/apk-releases.test.ts tests/apk-storage.test.ts tests/apk-upload-ui.test.mjs tests/release-write-lock.test.ts",
     "test:releases": "node --test tests/release-posts.test.ts tests/release-posts-ui.test.mjs tests/release-management.test.ts tests/release-management-ui.test.mjs tests/release-emails.test.ts",
