@@ -87,10 +87,25 @@ test("import preserves APK and current selection, keeps old notes private and is
   assert.equal(data.current.fileUrl, base.fileUrl);
   assert.equal(data.current.id, base.id);
   assert.equal(data.current.notes, "");
+  assert.equal(data.current.androidVersionCode, null);
   assert.equal(data.latest, null);
   assert.equal((await (await admin()).json()).releases[0].notes, base.notes);
   await admin({ action: "initialize", releases: [{ ...base, version: "overwritten" }] });
   assert.equal((await (await admin()).json()).releases[0].version, base.version);
+});
+test("import retains explicit Android version codes and rejects invalid codes without writes", async () => {
+  assert.equal(
+    (await admin({ action: "initialize", releases: [{ ...base, androidVersionCode: 101 }] }))
+      .status,
+    200,
+  );
+  assert.equal((await (await publicRead()).json()).current.androidVersionCode, 101);
+  records = {};
+  assert.equal(
+    (await admin({ action: "initialize", releases: [{ ...base, androidVersionCode: 0 }] })).status,
+    400,
+  );
+  assert.deepEqual(records, {});
 });
 test("create draft, edit, publish and unpublish independently of current APK", async () => {
   await initialize();

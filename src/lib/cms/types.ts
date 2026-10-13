@@ -81,6 +81,8 @@ export interface Release {
   id: string;
   version: string;
   build: string;
+  /** APK package version code; absent/null on legacy records means update status is unknown. */
+  androidVersionCode?: number | null;
   title?: string;
   platform: string;
   fileName: string | null;

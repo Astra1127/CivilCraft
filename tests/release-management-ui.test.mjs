@@ -85,6 +85,7 @@ const deferred = () => {
 };
 
 const validation = load("lib/cms/apk.ts");
+const androidVersion = load("lib/cms/android-version.ts");
 const { ApkUpload } = load("components/admin/ApkUpload.tsx", {
   "lucide-react": icons,
   "@/components/ui/button": { Button: element("button") },
@@ -182,6 +183,7 @@ async function mountRoute(t, overrides = {}) {
     "@/components/admin/ReleasePosts": { ReleasePosts: element("ReleasePosts") },
     "@/components/admin/ApkUpload": { ApkUpload },
     "@/lib/cms/releases": { useAdminReleases: () => query },
+    "@/lib/cms/android-version": androidVersion,
     "@/components/common/States": primitives,
     "@tanstack/react-router": { createFileRoute: () => (config) => config },
     "lucide-react": icons,
@@ -228,6 +230,104 @@ test("current build appears first and remains expanded while other builds collap
     await act(() => toggle(renderer, id).props.onClick());
     assert.equal(details(renderer, id).props.hidden, false);
     assert.equal(toggle(renderer, id).props["aria-expanded"], true);
+  }
+});
+
+test("Android version code is editable on active, draft and backup builds with APK guidance", async (t) => {
+  const { renderer, state } = await mountRoute(t, {
+    releases: [{ ...current(), androidVersionCode: 100 }, draft(), publishedBackup()],
+  });
+  assert.ok(text(renderer.root).includes("Unity Bundle Version Code"));
+  assert.ok(text(renderer.root).includes("increase it for each new build"));
+  for (const [id, code] of [
+    ["active", 110],
+    ["draft", 210],
+    ["backup", 90],
+  ]) {
+    const input = field(card(renderer, id), `android-version-code-${id}`);
+    assert.equal(input.props.type, "number");
+    assert.equal(input.props.min, 1);
+    assert.equal(input.props.max, 2_100_000_000);
+    assert.equal(input.props.step, 1);
+    await act(() => input.props.onChange({ target: { value: String(code) } }));
+    await act(async () => button(card(renderer, id), "Save build").props.onClick());
+    assert.equal(state.mutations.at(-1).release.androidVersionCode, code);
+    assert.equal(state.mutations.at(-1).release.fileUrl, `/api/releases/${id}/download`);
+  }
+  await act(() =>
+    field(card(renderer, "active"), "android-version-code-active").props.onChange({
+      target: { value: "" },
+    }),
+  );
+  await act(async () => button(card(renderer, "active"), "Save build").props.onClick());
+  assert.equal(state.mutations.at(-1).release.androidVersionCode, null);
+});
+
+test("invalid Android codes do not save or activate a build", async (t) => {
+  const { renderer, state } = await mountRoute(t);
+  for (const value of ["0", "-1", "1.5", "2100000001", "junk"]) {
+    await act(() =>
+      field(card(renderer, "draft"), "android-version-code-draft").props.onChange({
+        target: { value },
+      }),
+    );
+    await act(async () => button(card(renderer, "draft"), "Save build").props.onClick());
+    assert.deepEqual(state.mutations, []);
+  }
+  await act(() => button(card(renderer, "draft"), "Make current").props.onClick());
+  await act(async () => openDialog(renderer, "Make current").props.onConfirm());
+  assert.deepEqual(state.mutations, []);
+  assert.ok(
+    state.toasts.some((item) => item.kind === "error" && /Android version code/.test(item.message)),
+  );
+});
+
+test("new drafts save an independent Android code and blank defaults to unknown", async (t) => {
+  for (const [entered, expected] of [
+    ["250", 250],
+    ["", null],
+  ]) {
+    await t.test(entered || "unknown", async (subtest) => {
+      const { renderer, state } = await mountRoute(subtest);
+      await act(() =>
+        field(renderer.root, "draft-build-version").props.onChange({ target: { value: "2.5" } }),
+      );
+      await act(() =>
+        field(renderer.root, "draft-build-number").props.onChange({
+          target: { value: "Label 25" },
+        }),
+      );
+      await act(() =>
+        field(renderer.root, "draft-android-version-code").props.onChange({
+          target: { value: entered },
+        }),
+      );
+      await act(async () =>
+        renderer.root.findByType("form").props.onSubmit({ preventDefault() {} }),
+      );
+      assert.equal(state.mutations.length, 1);
+      assert.equal(state.mutations[0].release.androidVersionCode, expected);
+      assert.equal(state.mutations[0].release.build, "Label 25");
+      assert.equal(state.mutations[0].release.status, "draft");
+      assert.equal(field(renderer.root, "draft-android-version-code").props.value, "");
+    });
+  }
+});
+
+test("invalid new-draft Android codes do not initialize or create records", async (t) => {
+  const { renderer, state } = await mountRoute(t, { initialized: false });
+  await act(() =>
+    field(renderer.root, "draft-build-version").props.onChange({ target: { value: "2.0" } }),
+  );
+  await act(() =>
+    field(renderer.root, "draft-build-number").props.onChange({ target: { value: "20" } }),
+  );
+  for (const value of ["0", "-1", "1.5", "2100000001", "junk"]) {
+    await act(() =>
+      field(renderer.root, "draft-android-version-code").props.onChange({ target: { value } }),
+    );
+    await act(async () => renderer.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+    assert.deepEqual(state.mutations, []);
   }
 });
 

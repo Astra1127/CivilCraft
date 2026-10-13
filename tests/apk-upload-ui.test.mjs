@@ -27,6 +27,7 @@ function load(file, modules = {}, globals = {}) {
 }
 
 const validation = load("lib/cms/apk.ts");
+const androidVersion = load("lib/cms/android-version.ts");
 const element =
   (tag) =>
   ({ children, ...props }) =>
@@ -378,6 +379,7 @@ async function mountRoute(t, overrides = {}) {
       "@/components/admin/ReleasePosts": { ReleasePosts: element("ReleasePosts") },
       "@/components/admin/ApkUpload": { ApkUpload: element("ApkUpload") },
       "@/lib/cms/releases": { useAdminReleases: () => query },
+      "@/lib/cms/android-version": androidVersion,
       "@/components/common/States": primitives,
       "@tanstack/react-router": { createFileRoute: () => (config) => config },
       "lucide-react": icons,

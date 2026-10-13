@@ -7,6 +7,10 @@ const originalLock = releaseWriteLock.run;
 import { getAdminAuthConfig } from "../src/lib/admin-auth/config.server.ts";
 import { issueAdminSession, cookieName } from "../src/lib/admin-auth/session.server.ts";
 import { hashAdminPassword } from "../src/lib/admin-auth/password.server.ts";
+import {
+  MAX_ANDROID_VERSION_CODE,
+  parseAndroidVersionCode,
+} from "../src/lib/cms/android-version.ts";
 
 const origin = "https://release-management.test";
 const keys = [
@@ -123,6 +127,84 @@ async function admin(body?: unknown, auth = true, trustedOrigin = origin) {
 async function publicData() {
   return (await releaseRequest(new Request(origin + "/api/releases")))!.json();
 }
+
+test("Android version codes are nullable legacy metadata, independent of display version and build", async () => {
+  assert.equal((await publicData()).current.androidVersionCode, null);
+  for (const code of [1, 140, MAX_ANDROID_VERSION_CODE]) {
+    assert.equal(
+      (await admin({ action: "save", release: { ...release, androidVersionCode: code } })).status,
+      200,
+    );
+    const saved = JSON.parse(records[prefix + "active"]!);
+    const current = (await publicData()).current;
+    assert.equal(saved.androidVersionCode, code);
+    assert.equal(current.androidVersionCode, code);
+    assert.equal(current.version, release.version);
+    assert.equal(current.build, release.build);
+    assert.deepEqual(JSON.parse(records[configKey]!), { currentId: "active" });
+  }
+});
+
+test("older clients' notes saves preserve the Android code, explicit null clears it", async () => {
+  await admin({ action: "save", release: { ...release, androidVersionCode: 150 } });
+  await admin({ action: "save", release: { ...release, notes: "Unrelated notes edit" } });
+  assert.equal((await publicData()).current.androidVersionCode, 150);
+  assert.equal(JSON.parse(records[prefix + "active"]!).notes, "Unrelated notes edit");
+  await admin({ action: "save", release: { ...release, androidVersionCode: null } });
+  assert.equal((await publicData()).current.androidVersionCode, null);
+});
+
+test("Android version code rejects invalid values before saving or changing public content", async () => {
+  const before = { ...records };
+  for (const code of [0, -1, 1.5, MAX_ANDROID_VERSION_CODE + 1, "150", "", true, {}]) {
+    const response = await admin({
+      action: "save",
+      release: { ...release, androidVersionCode: code },
+    });
+    assert.equal(response.status, 400, `Invalid code ${JSON.stringify(code)} must fail`);
+    assert.match((await response.json()).error, /Android version code/);
+    assert.deepEqual(records, before);
+  }
+});
+
+test("publishing a newer announcement never replaces the downloadable build's Android code", async () => {
+  await admin({ action: "save", release: { ...release, androidVersionCode: 150 } });
+  await admin({
+    action: "save",
+    release: {
+      ...release,
+      id: "announcement",
+      status: "draft",
+      releaseDate: "2026-10-14",
+      androidVersionCode: 999,
+      fileUrl: null,
+    },
+  });
+  const result = await publicData();
+  assert.equal(result.latest.id, "announcement");
+  assert.equal(result.latest.androidVersionCode, undefined);
+  assert.equal(result.current.id, "active");
+  assert.equal(result.current.androidVersionCode, 150);
+});
+
+test("Android code input accepts blanks and valid integers without coercing invalid values to unknown", () => {
+  for (const value of [null, undefined, "", "   "])
+    assert.equal(parseAndroidVersionCode(value), null);
+  assert.equal(parseAndroidVersionCode(" 0150 "), 150);
+  assert.equal(parseAndroidVersionCode(MAX_ANDROID_VERSION_CODE), MAX_ANDROID_VERSION_CODE);
+  for (const value of [
+    0,
+    -1,
+    1.5,
+    NaN,
+    Infinity,
+    MAX_ANDROID_VERSION_CODE + 1,
+    "1.5",
+    "1e2",
+    "junk",
+  ])
+    assert.throws(() => parseAndroidVersionCode(value), /Android version code/);
+});
 
 test("delete drafts and published backups without changing the current build or removing APK metadata", async () => {
   const active = records[prefix + "active"];

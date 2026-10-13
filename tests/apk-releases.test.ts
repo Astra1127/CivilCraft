@@ -323,6 +323,26 @@ test("finalize verifies the private blob then returns stable URLs without exposi
   assert.equal(await head.text(), "");
 });
 
+test("APK completion rereads and preserves an Android version code edited during upload", async () => {
+  await initialize();
+  const bytes = apk();
+  const prepared = await prepare(bytes);
+  assert.equal(
+    (
+      await admin("/api/admin/releases", {
+        action: "save",
+        release: { ...base, androidVersionCode: 123 },
+      })
+    ).status,
+    200,
+  );
+  blobs.set(prepared.pathname, { bytes });
+  assert.equal((await finalize(prepared)).status, 200);
+  assert.equal(rawRelease().androidVersionCode, 123);
+  assert.equal((await publicData()).current.androidVersionCode, 123);
+  assert.equal((await publicData()).current.notes, "");
+});
+
 test("invalid binary XML, object size and content type leave the old current APK untouched", async () => {
   await initialize();
   const before = { ...records };

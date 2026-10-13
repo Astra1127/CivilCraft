@@ -9,6 +9,7 @@ import { validateApkArchive } from "./apk-validation.server.ts";
 import { apkPathSchema, createApkUploadTicket, readApkUploadTicket } from "./apk-ticket.server.ts";
 import type { HandleUploadPresignedBody } from "@vercel/blob/client";
 import { releaseWriteLock } from "./release-write-lock.server.ts";
+import { MAX_ANDROID_VERSION_CODE } from "./android-version.ts";
 import {
   createVersionAnnouncement,
   dispatchVersionNotifications,
@@ -34,6 +35,13 @@ const schema = z
     title: z.string().trim().max(160).default(""),
     version: z.string().trim().min(1).max(40),
     build: z.string().trim().min(1).max(40),
+    androidVersionCode: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_ANDROID_VERSION_CODE)
+      .nullable()
+      .default(null),
     notes: z.string().trim().max(5000),
     releaseDate: z.string().date(),
     published: z.boolean().default(false),
@@ -60,6 +68,11 @@ const releaseConfigSchema = z
     notification: versionAnnouncementSchema.optional(),
   })
   .passthrough();
+/** Operator maintenance validates existing metadata without normalizing/dropping unknown fields. */
+export function validateReleaseMetadataSnapshot(config: unknown, release: unknown): void {
+  releaseConfigSchema.parse(config);
+  schema.parse(release);
+}
 function readConfig(saved: Record<string, unknown>) {
   return releaseConfigSchema.parse(JSON.parse(String(saved[configKey])));
 }
@@ -521,7 +534,8 @@ async function unlockedReleaseRequest(
           }
         }
       } else if (body["action"] === "save") {
-        if (Object.hasOwn(object(body["release"]), "apk"))
+        const input = object(body["release"]);
+        if (Object.hasOwn(input, "apk"))
           throw new AdminApiError(400, "APK storage references cannot be supplied by the browser.");
         const release = schema.parse(body["release"]);
         const fresh = await data();
@@ -533,6 +547,11 @@ async function unlockedReleaseRequest(
         const previous = read(fresh).releases.find((r) => r.id === release.id);
         await save(prefix + release.id, {
           ...release,
+          // Older clients may edit notes without understanding this new field.
+          // Only an explicitly supplied null clears a previously verified code.
+          androidVersionCode: Object.hasOwn(input, "androidVersionCode")
+            ? release.androidVersionCode
+            : (previous?.androidVersionCode ?? null),
           status: previous?.status ?? "draft",
           ...(previous?.apk
             ? {
@@ -606,7 +625,10 @@ async function unlockedReleaseRequest(
     return json({ success: true });
   } catch (error) {
     if (error instanceof z.ZodError)
-      return json({ error: "Check title, version, build, date and release notes." }, 400);
+      return json(
+        { error: "Check title, version, build, Android version code, date and release notes." },
+        400,
+      );
     return json(
       {
         error:

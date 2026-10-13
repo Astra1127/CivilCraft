@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBytes, formatDate, logActivity, setCmsState, useCms } from "@/lib/cms/store";
 import type { Release } from "@/lib/cms/types";
+import { MAX_ANDROID_VERSION_CODE, parseAndroidVersionCode } from "@/lib/cms/android-version";
 
 export const Route = createFileRoute("/admin/releases")({
   component: AdminReleases,
@@ -33,6 +34,7 @@ function AdminReleases() {
   const [busy, setBusy] = useState(false);
   const [draftVersion, setDraftVersion] = useState("");
   const [draftBuild, setDraftBuild] = useState("");
+  const [draftAndroidVersionCode, setDraftAndroidVersionCode] = useState("");
   const [expandedBuilds, setExpandedBuilds] = useState<Record<string, boolean>>({});
   const [deleteTarget, setDeleteTarget] = useState<Release | null>(null);
   const [currentTarget, setCurrentTarget] = useState<Release | null>(null);
@@ -67,6 +69,8 @@ function AdminReleases() {
   const update = (id: string, patch: Partial<Release>) =>
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   const save = async (release: Release) => {
+    // Check before JSON serialization: NaN must not silently turn into a null code.
+    parseAndroidVersionCode(release.androidVersionCode);
     const result = await query.mutate({ action: "save", release });
     if (result?.notification) setEmailResult(result.notification);
   };
@@ -176,6 +180,7 @@ function AdminReleases() {
     }
     setBusy(true);
     try {
+      const androidVersionCode = parseAndroidVersionCode(draftAndroidVersionCode);
       await ensureInitialized();
       const today = new Date();
       const releaseDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -184,6 +189,7 @@ function AdminReleases() {
         id,
         version,
         build,
+        androidVersionCode,
         title: "",
         platform: "Android",
         minAndroid: current?.minAndroid ?? "",
@@ -201,6 +207,7 @@ function AdminReleases() {
       setExpandedBuilds((prev) => ({ ...prev, [id]: true }));
       setDraftVersion("");
       setDraftBuild("");
+      setDraftAndroidVersionCode("");
       toast.success("Draft build created. Upload its APK below.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not create draft build.");
@@ -257,6 +264,11 @@ function AdminReleases() {
         <div className="grid gap-x-6 sm:grid-cols-2">
           <DataRow tone="blueprint" label="Version" value={current?.version ?? "—"} />
           <DataRow tone="blueprint" label="Build" value={current?.build ?? "—"} />
+          <DataRow
+            tone="blueprint"
+            label="Android version code"
+            value={current?.androidVersionCode ?? "Unknown"}
+          />
           <DataRow tone="blueprint" label="Platform" value={current?.platform ?? "—"} />
           <DataRow tone="blueprint" label="Minimum Android" value={current?.minAndroid ?? "—"} />
           <DataRow tone="blueprint" label="File" value={current?.fileName ?? "No file"} />
@@ -348,7 +360,7 @@ function AdminReleases() {
         >
           <fieldset
             disabled={busy}
-            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end"
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end"
           >
             <div className="min-w-0 space-y-1.5">
               <Label htmlFor="draft-build-version">Version</Label>
@@ -372,11 +384,29 @@ function AdminReleases() {
                 onChange={(event) => setDraftBuild(event.target.value)}
               />
             </div>
+            <div className="min-w-0 space-y-1.5">
+              <Label htmlFor="draft-android-version-code">Android version code</Label>
+              <Input
+                id="draft-android-version-code"
+                type="number"
+                min={1}
+                max={MAX_ANDROID_VERSION_CODE}
+                step={1}
+                value={draftAndroidVersionCode}
+                placeholder="Unknown (optional)"
+                aria-describedby="draft-android-version-code-help"
+                onChange={(event) => setDraftAndroidVersionCode(event.target.value)}
+              />
+            </div>
             <Button type="submit" variant="gold" className="sm:col-span-2 lg:col-span-1">
               Create draft build
             </Button>
           </fieldset>
         </form>
+        <p id="draft-android-version-code-help" className="text-xs text-muted-foreground">
+          Match the APK's Unity Bundle Version Code and increase it for each new build. Leave blank
+          if unverified; the game will show update status as unknown.
+        </p>
       </Panel>
 
       <ul className="space-y-3">
@@ -515,6 +545,34 @@ function AdminReleases() {
                           onChange={(e) => update(r.id, { fileName: e.target.value || null })}
                         />
                       </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`android-version-code-${r.id}`}>Android version code</Label>
+                      <Input
+                        id={`android-version-code-${r.id}`}
+                        type="number"
+                        min={1}
+                        max={MAX_ANDROID_VERSION_CODE}
+                        step={1}
+                        value={r.androidVersionCode ?? ""}
+                        placeholder="Unknown (optional)"
+                        aria-describedby={`android-version-code-help-${r.id}`}
+                        onChange={(e) =>
+                          update(r.id, {
+                            androidVersionCode:
+                              e.target.value === "" ? null : Number(e.target.value),
+                          })
+                        }
+                      />
+                      <p
+                        id={`android-version-code-help-${r.id}`}
+                        className="text-xs text-muted-foreground"
+                      >
+                        Match the APK's Unity Bundle Version Code and increase it for each new
+                        build. Leave blank if unverified; do not copy the display build label unless
+                        it matches the APK.
+                      </p>
                     </div>
 
                     <div className="space-y-1.5">

@@ -12,6 +12,45 @@ The public Download page uses `GET /api/releases`, through React Query with no-s
 
 Staff use `GET/POST /api/admin/releases` behind the existing administrator session and origin checks. No authentication changes were made. Server credentials are not exposed to public JavaScript.
 
+## Android update detection in the game
+
+Release records now support nullable `androidVersionCode`, exposed on public
+`GET /api/releases` under `current.androidVersionCode`. Legacy records are read
+as `null`; version/build display labels are unchanged and are never used to infer
+the numeric code. `latest` remains the latest published notes, independent of the
+downloadable build; draft notes stay private even when their APK is current.
+
+The Game & Download new-draft form and all build editors have **Android version
+code**. Enter a whole number from 1 to 2,100,000,000 matching the actual APK's
+Unity **Bundle Version Code**; increase it for each new build. Leave it blank
+when unverified (the game reports unknown update status). Verify the active APK
+before populating its code; do not simply copy the visible build number. The API
+rejects invalid supplied codes. Omitting the field on an older client's notes or
+metadata save preserves an existing value; explicitly sending `null` clears it.
+APK upload finalization also preserves concurrent metadata edits. Code-only edits
+do not queue version emails or change which installer is active.
+
+Deploy this backward-compatible website change before shipping the game's
+Updates button. The Unity client compares the installed Android package's code
+with the downloadable `current` code, never with an announcement's display
+version. No new environment variables, database migration or client secrets are
+needed for this public read-only endpoint.
+
+When the admin browser is unavailable, approved operators can use
+`scripts/set-release-android-version-code.mjs` with the main website's existing
+private server environment and fresh production Blob OIDC. Run `--help` for its
+arguments. It defaults to dry-run; `--apply` is an explicit metadata write.
+Supply the expected current release ID, verified Android code, and either the
+SHA256 of the APK whose code was inspected or its absolute local `.apk` proof
+path. The script streams/hashes the actual private current APK, holds the same
+distributed lock as admin writers during an apply, rereads fresh metadata and
+merges only the code. It refuses another existing code, inactive/deleted builds,
+unverified bytes, malformed metadata, and changed APKs. Unknown fields and all
+other metadata remain intact; no staff session is synthesized and no emails,
+installer retention or active-pointer changes are invoked. Credentials/private
+URLs are never printed. A lost write response is resolved by rereading, not a
+blind retry; if verification fails, inspect the current record before repeating.
+
 ## Build management
 
 The active build is first and stays expanded. Drafts and backups start collapsed;
