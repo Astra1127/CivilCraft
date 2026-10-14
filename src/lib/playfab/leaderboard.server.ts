@@ -1,5 +1,9 @@
 import { bridgeStatistic, decodeBridgeScore } from "./leaderboard-config.server.ts";
 import { multiplayerLeaderboardPage } from "./multiplayer-leaderboard.server.ts";
+import {
+  getLeaderboardVisibility,
+  requireVisibleLeaderboardContract,
+} from "./leaderboard-visibility.server.ts";
 import { getAdminAuthConfig } from "../admin-auth/config.server.ts";
 import { isAuthorizedStaff, readAdminSession } from "../admin-auth/session.server.ts";
 import {
@@ -149,6 +153,11 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
   try {
     configured = !!adminGameConfig().secret;
     if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+    if (url.pathname === "/api/leaderboard/contracts") {
+      if (url.searchParams.size)
+        throw new AdminApiError(400, "Contract selection does not accept query parameters.");
+      return json(await getLeaderboardVisibility());
+    }
     // Anonymous access is limited to the explicit, field-whitelisted endpoints.
     // Existing player/admin endpoints below retain their authentication checks.
     if (url.pathname === "/api/leaderboard/public/multiplayer") {
@@ -169,6 +178,7 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
       const contract = url.searchParams.get("contractId") ?? DEFAULT_CONTRACT;
       const mode = url.searchParams.get("mode") ?? DEFAULT_MODE;
       bridgeStatistic(contract, mode);
+      await requireVisibleLeaderboardContract(contract);
       const pageSize = integer("pageSize", LEADERBOARD_PAGE_SIZE)!;
       if (![10, 20, 50].includes(pageSize))
         throw new AdminApiError(400, "Choose 10, 20 or 50 entries per page.");
@@ -223,6 +233,7 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
     const contract = url.searchParams.get("contractId") ?? DEFAULT_CONTRACT;
     const mode = url.searchParams.get("mode") ?? DEFAULT_MODE;
     bridgeStatistic(contract, mode);
+    await requireVisibleLeaderboardContract(contract);
     const version = integer("version");
     const period = url.searchParams.get("period") ?? "all-time";
     if (period !== "weekly" && period !== "all-time")

@@ -3,6 +3,16 @@ import type {
   LeaderboardMode,
   MultiplayerLeaderboardPage,
 } from "./leaderboard-shared";
+import { parseLeaderboardVisibility } from "./leaderboard-visibility";
+
+export async function getLeaderboardContracts() {
+  const response = await fetch("/api/leaderboard/contracts", {
+    credentials: "omit",
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error("Leaderboard contracts are temporarily unavailable.");
+  return parseLeaderboardVisibility(await response.json());
+}
 
 export interface PublicLeaderboardPage {
   entries: { rank: number; displayName: string; cost: number; peakStress: number }[];

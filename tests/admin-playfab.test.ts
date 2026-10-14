@@ -3,6 +3,8 @@ import { imageStorage } from "../src/lib/cms/images.server.ts";
 const originalBlobConfiguration = imageStorage.configuration;
 import { mapIdentity } from "../src/lib/playfab/admin-players.server.ts";
 import { handleLeaderboardRequest, mapLeaderboard } from "../src/lib/playfab/leaderboard.server.ts";
+import { LEADERBOARD_CONTRACTS } from "../src/lib/playfab/leaderboard-shared.ts";
+import { LEADERBOARD_VISIBILITY_KEY } from "../src/lib/playfab/leaderboard-visibility.server.ts";
 import { handlePlayerBugRequest } from "../src/lib/playfab/bug-reports.server.ts";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
@@ -39,6 +41,7 @@ let data: Record<string, unknown> = {},
   stats: unknown[] = [],
   bans: unknown[] = [];
 let reports: Record<string, unknown> = {};
+let titleDataOverride: unknown = undefined;
 let rankingRows: Record<string, unknown>[] = [];
 let failOperation = "",
   exportPending = false,
@@ -61,6 +64,7 @@ beforeEach(() => {
   Object.assign(process.env, env);
   calls = [];
   reports = {};
+  titleDataOverride = undefined;
   rankingRows = [];
   data = {};
   stats = [];
@@ -146,7 +150,7 @@ beforeEach(() => {
           : { IsSessionTicketExpired: true };
         break;
       case "Admin/GetTitleInternalData":
-        result = { Data: { ...reports } };
+        result = titleDataOverride === undefined ? { Data: { ...reports } } : titleDataOverride;
         break;
       case "Admin/SetTitleInternalData":
         if (body["Value"] === null) delete reports[String(body["Key"])];
@@ -256,6 +260,7 @@ test("all privileged paths reject guests, player tickets, forged cookies before 
     "/api/admin/playfab/status",
     "/api/admin/transactions",
     "/api/admin/products",
+    "/api/admin/leaderboard-contracts",
     "/api/admin/players/ABC123",
     "/api/admin/players/ABC123/ban",
     "/api/admin/unknown",
@@ -806,7 +811,7 @@ test("public leaderboard allows anonymous reads and whitelists only public measu
   });
   assert.deepEqual(
     calls.map((call) => call.operation),
-    ["Server/GetLeaderboard"],
+    ["Admin/GetTitleInternalData", "Server/GetLeaderboard"],
   );
   assert.equal((await board())!.status, 401);
   assert.equal((await board("/me"))!.status, 401);
@@ -824,6 +829,114 @@ test("public leaderboard validates paging and statistics and sanitizes failures"
   const response = await board("/public");
   assert.equal(response!.status, 503);
   assert.deepEqual(await response!.json(), { error: "Unable to load the leaderboard." });
+});
+
+test("shared contract configuration preserves absent defaults, canonicalizes checks and permits hiding all", async () => {
+  const absent = await board("/contracts");
+  assert.equal(absent!.status, 200);
+  assert.deepEqual(await absent!.json(), {
+    schemaVersion: 1,
+    contractIds: [...LEADERBOARD_CONTRACTS],
+  });
+  const cookie = await session();
+  const selection = { schemaVersion: 1, contractIds: ["VancesContract", "ShopKeeper"] };
+  const saved = await request("/api/admin/leaderboard-contracts", cookie, selection);
+  assert.equal(saved.status, 200);
+  const expected = { schemaVersion: 1, contractIds: ["ShopKeeper", "VancesContract"] };
+  assert.deepEqual(await saved.json(), expected);
+  assert.deepEqual(JSON.parse(String(reports[LEADERBOARD_VISIBILITY_KEY])), expected);
+  assert.deepEqual(await (await board("/contracts"))!.json(), expected);
+  assert.deepEqual(
+    await (await request("/api/admin/leaderboard-contracts", cookie)).json(),
+    expected,
+  );
+  await request("/api/admin/leaderboard-contracts", cookie, { schemaVersion: 1, contractIds: [] });
+  assert.deepEqual(await (await board("/contracts"))!.json(), {
+    schemaVersion: 1,
+    contractIds: [],
+  });
+});
+
+test("contract settings reject forged writes, unknown or duplicate IDs, unsupported schema and oversized selections", async () => {
+  const cookie = await session();
+  const valid = { schemaVersion: 1, contractIds: ["ShopKeeper"] };
+  assert.equal((await request("/api/admin/leaderboard-contracts", "", valid)).status, 401);
+  assert.equal(
+    (await request("/api/admin/leaderboard-contracts", cookie, valid, "https://evil.test")).status,
+    403,
+  );
+  for (const invalid of [
+    {},
+    { schemaVersion: 2, contractIds: [] },
+    { schemaVersion: 1, contractIds: ["unknown"] },
+    { schemaVersion: 1, contractIds: ["ShopKeeper", "ShopKeeper"] },
+    { schemaVersion: 1, contractIds: [null] },
+    { schemaVersion: 1, contractIds: "ShopKeeper" },
+    { schemaVersion: 1, contractIds: Array(10).fill("ShopKeeper") },
+    { ...valid, extra: true },
+  ])
+    assert.equal((await request("/api/admin/leaderboard-contracts", cookie, invalid)).status, 400);
+  assert.equal(calls.length, 0, "Invalid settings never reach PlayFab");
+  assert.equal(
+    (await handleLeaderboardRequest(
+      new Request(origin + "/api/leaderboard/contracts", { method: "POST" }),
+    ))!.status,
+    405,
+  );
+  assert.equal((await board("/contracts?private=1"))!.status, 400);
+});
+
+test("hidden contracts cannot be requested through public, player, standing or admin ranking paths", async () => {
+  reports[LEADERBOARD_VISIBILITY_KEY] = JSON.stringify({
+    schemaVersion: 1,
+    contractIds: ["ReedsContract"],
+  });
+  const cookie = await session();
+  for (const [path, ticket, staff] of [
+    ["/public?contractId=ShopKeeper", "", ""],
+    ["?contractId=ShopKeeper", "valid-player", ""],
+    ["/me?contractId=ShopKeeper", "valid-player", ""],
+    ["/standing?contractId=ShopKeeper", "valid-player", ""],
+    ["?contractId=ShopKeeper", "", cookie],
+  ]) {
+    const response = await board(path, ticket, staff);
+    assert.equal(response!.status, 400);
+    assert.match(await response!.text(), /not currently displayed/);
+  }
+  assert.ok(!calls.some((call) => call.operation.startsWith("Server/GetLeaderboard")));
+  assert.equal((await board("/public?contractId=ReedsContract"))!.status, 200);
+});
+
+test("malformed contract settings and provider failures never publish default choices or false success", async () => {
+  const cookie = await session();
+  for (const value of [
+    "broken-json",
+    JSON.stringify({ schemaVersion: 1, contractIds: ["wrong"] }),
+  ]) {
+    reports[LEADERBOARD_VISIBILITY_KEY] = value;
+    const response = await board("/contracts");
+    assert.equal(response!.status, 502);
+    assert.equal((await board("/public"))!.status, 502);
+    assert.equal((await request("/api/admin/leaderboard-contracts", cookie)).status, 502);
+  }
+  reports = {};
+  for (const value of [{}, { Data: null }, { Data: [] }]) {
+    titleDataOverride = value;
+    assert.equal((await board("/contracts"))!.status, 502);
+    assert.equal((await board("/public"))!.status, 502);
+  }
+  titleDataOverride = undefined;
+  failOperation = "Admin/GetTitleInternalData";
+  assert.equal((await board("/contracts"))!.status, 503);
+  assert.equal((await board("/public"))!.status, 503);
+  failOperation = "Admin/SetTitleInternalData";
+  const response = await request("/api/admin/leaderboard-contracts", cookie, {
+    schemaVersion: 1,
+    contractIds: [],
+  });
+  assert.equal(response.status, 503);
+  assert.ok(!(await response.text()).includes(env.PLAYFAB_SECRET_KEY));
+  assert.deepEqual(reports, {});
 });
 test("personal standing uses only the verified player identity and exposes measurements", async () => {
   rankingRows = [

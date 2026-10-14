@@ -14,6 +14,7 @@ import {
   Mail,
   Package,
   Receipt,
+  Trophy,
   Settings,
   Users,
 } from "lucide-react";
@@ -51,6 +52,7 @@ const items: DashboardNavItem[] = [
   { to: "/admin/releases", label: "Game & Download", icon: Package, section: "Game" },
   { to: "/admin/products", label: "Coin Products", icon: Coins, section: "Game" },
   { to: "/admin/transactions", label: "Transactions", icon: Receipt, section: "Game" },
+  { to: "/admin/leaderboard", label: "Leaderboard Contracts", icon: Trophy, section: "Game" },
   { to: "/admin/gallery", label: "Gallery", icon: Image, section: "Content" },
   { to: "/admin/faq", label: "FAQ", icon: HelpCircle, section: "Content" },
   { to: "/admin/messages", label: "Messages", icon: Mail, section: "Communication" },

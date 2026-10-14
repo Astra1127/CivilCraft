@@ -4,13 +4,9 @@ import { Button } from "@/components/ui/button";
 import { PlayerName } from "@/components/common/PlayerName";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MultiplayerLeaderboard } from "./MultiplayerLeaderboard";
-import {
-  DEFAULT_CONTRACT,
-  DEFAULT_MODE,
-  LEADERBOARD_CONTRACTS,
-} from "@/lib/playfab/leaderboard-shared";
+import { DEFAULT_CONTRACT, DEFAULT_MODE } from "@/lib/playfab/leaderboard-shared";
 import type { LeaderboardContract, LeaderboardMode } from "@/lib/playfab/leaderboard-shared";
-import { getPublicLeaderboard } from "@/lib/playfab/public-leaderboard";
+import { getLeaderboardContracts, getPublicLeaderboard } from "@/lib/playfab/public-leaderboard";
 
 export function PublicLeaderboard() {
   return (
@@ -30,8 +26,47 @@ export function PublicLeaderboard() {
 }
 
 function BridgeLeaderboard() {
-  const [contract, setContract] = useState<LeaderboardContract>(DEFAULT_CONTRACT);
+  const [selection, setContract] = useState<LeaderboardContract>(DEFAULT_CONTRACT);
   const [mode, setMode] = useState<LeaderboardMode>(DEFAULT_MODE);
+  const contracts = useQuery({
+    queryKey: ["leaderboard-contracts"],
+    queryFn: getLeaderboardContracts,
+    retry: false,
+  });
+  if (contracts.isPending)
+    return (
+      <div className="panel p-5">
+        <p role="status">Loading contracts…</p>
+      </div>
+    );
+  if (contracts.isError)
+    return (
+      <div className="panel space-y-3 p-5">
+        <p role="alert">Unable to load leaderboard contracts. Please try again.</p>
+        <Button
+          variant="outline"
+          disabled={contracts.isFetching}
+          onClick={() => void contracts.refetch()}
+        >
+          Retry
+        </Button>
+      </div>
+    );
+  const contractIds = contracts.data.contractIds;
+  const contract = contractIds.includes(selection) ? selection : contractIds[0];
+  if (!contract)
+    return (
+      <div className="panel space-y-3 p-5">
+        <p>No contract leaderboards are currently displayed.</p>
+        <Button
+          variant="outline"
+          disabled={contracts.isFetching}
+          onClick={() => void contracts.refetch()}
+        >
+          Refresh contracts
+        </Button>
+      </div>
+    );
   return (
     <div className="space-y-6">
       <div className="panel flex flex-wrap gap-4 p-5">
@@ -42,7 +77,7 @@ function BridgeLeaderboard() {
             value={contract}
             onChange={(e) => setContract(e.target.value as LeaderboardContract)}
           >
-            {LEADERBOARD_CONTRACTS.map((value) => (
+            {contractIds.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
@@ -60,6 +95,14 @@ function BridgeLeaderboard() {
             <option value="strongest">Strongest</option>
           </select>
         </label>
+        <Button
+          variant="outline"
+          className="self-end"
+          disabled={contracts.isFetching}
+          onClick={() => void contracts.refetch()}
+        >
+          Refresh contracts
+        </Button>
       </div>
       <Rankings key={`${contract}:${mode}`} contract={contract} mode={mode} />
     </div>

@@ -3,22 +3,27 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { getOwnStanding } from "@/lib/playfab/leaderboard";
-import {
-  DEFAULT_CONTRACT,
-  DEFAULT_MODE,
-  LEADERBOARD_CONTRACTS,
-} from "@/lib/playfab/leaderboard-shared";
+import { DEFAULT_CONTRACT, DEFAULT_MODE } from "@/lib/playfab/leaderboard-shared";
 import type { LeaderboardContract, LeaderboardMode } from "@/lib/playfab/leaderboard-shared";
 import { Button } from "@/components/ui/button";
+import { getLeaderboardContracts } from "@/lib/playfab/public-leaderboard";
 
 export function YourRanking() {
   const { player, isAuthenticated } = useAuth();
-  const [contract, setContract] = useState<LeaderboardContract>(DEFAULT_CONTRACT);
+  const [selection, setContract] = useState<LeaderboardContract>(DEFAULT_CONTRACT);
   const [mode, setMode] = useState<LeaderboardMode>(DEFAULT_MODE);
+  const contracts = useQuery({
+    queryKey: ["leaderboard-contracts"],
+    queryFn: getLeaderboardContracts,
+    enabled: isAuthenticated && !!player?.playFabId,
+    retry: false,
+  });
+  const contractIds = contracts.isError ? [] : (contracts.data?.contractIds ?? []);
+  const contract = contractIds.includes(selection) ? selection : contractIds[0];
   const ranking = useQuery({
     queryKey: ["player-standing", player?.playFabId, contract, mode],
-    queryFn: () => getOwnStanding(contract, mode),
-    enabled: isAuthenticated && !!player?.playFabId,
+    queryFn: () => getOwnStanding(contract!, mode),
+    enabled: isAuthenticated && !!player?.playFabId && contracts.isSuccess && !!contract,
     refetchOnMount: "always",
   });
   return (
@@ -27,35 +32,59 @@ export function YourRanking() {
         <h2 id="your-ranking-title" className="text-xl">
           Your Ranking
         </h2>
-        <div className="flex max-w-full flex-wrap gap-3">
-          <label className="flex min-w-0 flex-col gap-1 text-xs font-bold">
-            Contract
-            <select
-              className="max-w-full rounded-md border-2 border-border bg-card p-2 text-sm"
-              value={contract}
-              onChange={(e) => setContract(e.target.value as LeaderboardContract)}
-            >
-              {LEADERBOARD_CONTRACTS.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs font-bold">
-            Ranking
-            <select
-              className="rounded-md border-2 border-border bg-card p-2 text-sm"
-              value={mode}
-              onChange={(e) => setMode(e.target.value as LeaderboardMode)}
-            >
-              <option value="efficient">Most efficient</option>
-              <option value="strongest">Strongest</option>
-            </select>
-          </label>
-        </div>
+        {contract && (
+          <div className="flex max-w-full flex-wrap gap-3">
+            <label className="flex min-w-0 flex-col gap-1 text-xs font-bold">
+              Contract
+              <select
+                className="max-w-full rounded-md border-2 border-border bg-card p-2 text-sm"
+                value={contract}
+                onChange={(e) => setContract(e.target.value as LeaderboardContract)}
+              >
+                {contractIds.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-bold">
+              Ranking
+              <select
+                className="rounded-md border-2 border-border bg-card p-2 text-sm"
+                value={mode}
+                onChange={(e) => setMode(e.target.value as LeaderboardMode)}
+              >
+                <option value="efficient">Most efficient</option>
+                <option value="strongest">Strongest</option>
+              </select>
+            </label>
+          </div>
+        )}
       </div>
-      {ranking.isPending ? (
+      {contracts.isError ? (
+        <div role="alert" className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Leaderboard contracts are currently unavailable.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={contracts.isFetching}
+            onClick={() => void contracts.refetch()}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : contracts.isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading ranking…
+        </p>
+      ) : !contract ? (
+        <p className="text-sm text-muted-foreground">
+          No contract leaderboards are currently displayed.
+        </p>
+      ) : ranking.isPending ? (
         <p role="status" className="text-sm text-muted-foreground">
           Loading ranking…
         </p>

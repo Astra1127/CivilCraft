@@ -12,7 +12,16 @@ import * as shared from "../src/lib/playfab/leaderboard-shared.ts";
 const require = createRequire(import.meta.url);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-for (const state of ["ranked", "empty", "error", "loading", "guest"]) {
+for (const state of [
+  "ranked",
+  "empty",
+  "error",
+  "loading",
+  "guest",
+  "contracts-empty",
+  "contracts-error",
+  "visible-only",
+]) {
   test(`Your Ranking handles ${state} without a full table or fabricated measurements`, async () => {
     const calls = [],
       exports = {};
@@ -39,6 +48,21 @@ for (const state of ["ranked", "empty", "error", "loading", "guest"]) {
             }),
           };
         if (name.endsWith("/leaderboard-shared")) return shared;
+        if (name.endsWith("/public-leaderboard"))
+          return {
+            getLeaderboardContracts: async () => {
+              if (state === "contracts-error") throw new Error("private contract error");
+              return {
+                schemaVersion: 1,
+                contractIds:
+                  state === "contracts-empty"
+                    ? []
+                    : state === "visible-only"
+                      ? ["ReedsContract"]
+                      : [...shared.LEADERBOARD_CONTRACTS],
+              };
+            },
+          };
         if (name.endsWith("/leaderboard"))
           return {
             getOwnStanding: async (...args) => {
@@ -75,7 +99,7 @@ for (const state of ["ranked", "empty", "error", "loading", "guest"]) {
       assert.equal(renderer.root.findAllByType("table").length, 0);
       assert.equal(renderer.root.findByType("a").props.to, "/leaderboard");
       assert.doesNotMatch(content, /ABC123|private internal error/);
-      if (state === "ranked") {
+      if (state === "ranked" || state === "visible-only") {
         assert.match(content, /12345|12,345/);
         assert.match(content, /58.2/);
         await act(async () =>
@@ -84,19 +108,35 @@ for (const state of ["ranked", "empty", "error", "loading", "guest"]) {
             .props.onChange({ target: { value: "strongest" } }),
         );
         await settle();
-        assert.deepEqual(calls.at(-1), [shared.DEFAULT_CONTRACT, "strongest"]);
+        assert.deepEqual(calls.at(-1), [
+          state === "visible-only" ? "ReedsContract" : shared.DEFAULT_CONTRACT,
+          "strongest",
+        ]);
+        if (state === "visible-only")
+          assert.deepEqual(
+            renderer.root
+              .findAllByType("select")[0]
+              .findAllByType("option")
+              .map((node) => node.props.value),
+            ["ReedsContract"],
+          );
       } else {
         assert.doesNotMatch(content, /Construction Cost|Peak Stress/);
         assert.match(
           content,
-          state === "empty"
-            ? /Not ranked yet/
-            : state === "error"
-              ? /Ranking currently unavailable/
-              : /Loading ranking/,
+          state === "contracts-empty"
+            ? /No contract leaderboards/
+            : state === "contracts-error"
+              ? /Leaderboard contracts are currently unavailable/
+              : state === "empty"
+                ? /Not ranked yet/
+                : state === "error"
+                  ? /Ranking currently unavailable/
+                  : /Loading ranking/,
         );
       }
-      if (state === "guest") assert.equal(calls.length, 0);
+      if (["guest", "contracts-empty", "contracts-error"].includes(state))
+        assert.equal(calls.length, 0);
     } finally {
       await act(async () => renderer?.unmount());
       client.clear();

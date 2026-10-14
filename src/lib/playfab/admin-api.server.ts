@@ -1,4 +1,8 @@
 import { contactSettingsRequest } from "../cms/contact-settings.server.ts";
+import {
+  getLeaderboardVisibility,
+  saveLeaderboardVisibility,
+} from "./leaderboard-visibility.server.ts";
 import { adminPlayerMessages } from "./player-messages.server.ts";
 import { integrationServices } from "./integration-status.server.ts";
 import { releaseRequest } from "../cms/releases.server.ts";
@@ -61,6 +65,12 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     )
       return json({ error: "This request is not permitted." }, 403);
 
+    if (path === "/api/admin/leaderboard-contracts")
+      return json(
+        request.method === "GET"
+          ? await getLeaderboardVisibility()
+          : await saveLeaderboardVisibility(await smallBody(request)),
+      );
     const privateMessages = await adminPlayerMessages(request);
     if (privateMessages) return json(privateMessages);
     const releasesResponse = await releaseRequest(request, true, session.user);

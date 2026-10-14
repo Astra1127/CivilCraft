@@ -63,10 +63,19 @@ function compile(path, imports) {
   return exports;
 }
 
-function fixture(multiplayerState = "populated") {
+function fixture(
+  multiplayerState = "populated",
+  initialContractIds = [...shared.LEADERBOARD_CONTRACTS],
+) {
   const bridgeCalls = [],
     multiplayerCalls = [];
+  let contractIds = initialContractIds;
   const api = {
+    getLeaderboardContracts: async () => {
+      if (contractIds === "error") throw new Error("private contract failure");
+      if (contractIds === "loading") return new Promise(() => {});
+      return { schemaVersion: 1, contractIds };
+    },
     getPublicLeaderboard: async (...args) => {
       bridgeCalls.push(args);
       return {
@@ -121,6 +130,9 @@ function fixture(multiplayerState = "populated") {
   return {
     bridgeCalls,
     multiplayerCalls,
+    setContractIds(ids) {
+      contractIds = ids;
+    },
     get renderer() {
       return renderer;
     },
@@ -272,6 +284,64 @@ test("returning from multiplayer resets single-player page and pinned version", 
     await f.dispose();
   }
 });
+
+test("contract selector shows enabled choices and refresh replaces a hidden selection without stale scores", async () => {
+  const f = fixture("populated", ["ShopKeeper", "ReedsContract"]);
+  try {
+    await f.mount();
+    const contractSelect = () => f.renderer.root.findAllByType("select")[0];
+    assert.deepEqual(
+      contractSelect()
+        .findAllByType("option")
+        .map((node) => node.props.value),
+      ["ShopKeeper", "ReedsContract"],
+    );
+    await act(async () => button(f.renderer, "Next").props.onClick());
+    await settle();
+    f.setContractIds(["VancesContract"]);
+    await act(async () => button(f.renderer, "Refresh contracts").props.onClick());
+    await settle();
+    assert.equal(contractSelect().props.value, "VancesContract");
+    assert.deepEqual(f.bridgeCalls.at(-1), ["VancesContract", shared.DEFAULT_MODE, 0, undefined]);
+    assert.equal(button(f.renderer, "Previous").props.disabled, true);
+    f.setContractIds([]);
+    const previousCalls = f.bridgeCalls.length;
+    await act(async () => button(f.renderer, "Refresh contracts").props.onClick());
+    await settle();
+    assert.equal(f.renderer.root.findAllByType("table").length, 0);
+    assert.equal(f.renderer.root.findAllByType("select").length, 0);
+    assert.equal(f.bridgeCalls.length, previousCalls);
+    assert.match(JSON.stringify(f.renderer.toJSON()), /No contract leaderboards/);
+  } finally {
+    await f.dispose();
+  }
+});
+
+for (const state of ["loading", "error"]) {
+  test(`contract ${state} does not request rankings and multiplayer remains usable`, async () => {
+    const f = fixture("populated", state);
+    try {
+      await f.mount();
+      assert.equal(f.bridgeCalls.length, 0);
+      assert.equal(f.renderer.root.findAllByType("select").length, 0);
+      assert.equal(
+        f.renderer.root.findAllByProps({ role: state === "loading" ? "status" : "alert" }).length,
+        1,
+      );
+      assert.doesNotMatch(JSON.stringify(f.renderer.toJSON()), /private contract failure/);
+      if (state === "error") {
+        f.setContractIds(["ReedsContract"]);
+        await act(async () => button(f.renderer, "Retry").props.onClick());
+        await settle();
+        assert.equal(f.bridgeCalls[0][0], "ReedsContract");
+      }
+      await f.selectTab("Multiplayer");
+      assert.equal(f.multiplayerCalls.length, 1);
+    } finally {
+      await f.dispose();
+    }
+  });
+}
 
 for (const state of ["empty", "error", "loading"]) {
   test(`multiplayer ${state} state is distinct and does not invent rows`, async () => {
