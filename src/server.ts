@@ -1,4 +1,5 @@
 import { contactSettingsRequest } from "./lib/cms/contact-settings.server";
+import { handlePlayerMessages } from "./lib/playfab/player-messages.server";
 import { handleCharacterPortrait } from "./lib/playfab/character-portrait.server";
 import { releaseRequest } from "./lib/cms/releases.server";
 import { messageRequest } from "./lib/cms/messages.server";
@@ -61,6 +62,8 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const messages = await handlePlayerMessages(request);
+      if (messages) return messages;
       const gameWalletResponse = await handleGameWalletRequest(request);
       if (gameWalletResponse) return gameWalletResponse;
       const portraitResponse = await handleCharacterPortrait(request);

@@ -12,7 +12,7 @@
     "format": "prettier --write .",
     "test:auth": "node --test tests/admin-auth.test.ts",
     "admin:hash-password": "node scripts/admin-hash-password.mjs",
-    "test:admin": "node --test tests/admin-playfab.test.ts",
+    "test:admin": "node --test tests/admin-playfab.test.ts tests/player-messages.test.ts tests/player-messages-ui.test.mjs",
     "test:content": "node --test tests/public-content.test.ts",
     "test:reset": "node --test tests/reset-password.test.ts tests/reset-password-ui.test.mjs",
     "test:payments": "node --test tests/paymongo.test.ts tests/checkout-preflight.test.ts",

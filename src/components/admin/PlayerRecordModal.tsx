@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PlayerMessages } from "./PlayerMessages";
 import { playerActivity } from "@/lib/playfab/directory-filters";
 import { Ban, ShieldCheck, UserRound } from "lucide-react";
 import { DataRow, SectionLabel, StatusPill } from "@/components/admin/ui";
@@ -236,7 +237,8 @@ export function PlayerRecordModal({
                   <section className="rounded-xl border-2 border-border bg-background p-3">
                     <SectionLabel>Moderation</SectionLabel>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Account access only. Moderation never changes game progression.
+                      Manage account access and private messages. Moderation never changes game
+                      progression.
                     </p>
                     {player.bans
                       ?.filter((b) => b.active)
@@ -282,6 +284,7 @@ export function PlayerRecordModal({
                         </p>
                       )}
                     </div>
+                    <PlayerMessages key={player.playFabId} playerId={player.playFabId} />
                   </section>
                 ) : (
                   <p className="text-xs text-muted-foreground">

@@ -1,4 +1,5 @@
 import { contactSettingsRequest } from "../cms/contact-settings.server.ts";
+import { adminPlayerMessages } from "./player-messages.server.ts";
 import { integrationServices } from "./integration-status.server.ts";
 import { releaseRequest } from "../cms/releases.server.ts";
 import { messageRequest } from "../cms/messages.server.ts";
@@ -60,6 +61,8 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     )
       return json({ error: "This request is not permitted." }, 403);
 
+    const privateMessages = await adminPlayerMessages(request);
+    if (privateMessages) return json(privateMessages);
     const releasesResponse = await releaseRequest(request, true, session.user);
     if (releasesResponse) return releasesResponse;
     const contactSettingsResponse = await contactSettingsRequest(request, true);
