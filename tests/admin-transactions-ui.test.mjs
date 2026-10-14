@@ -10,6 +10,7 @@ import {
   adminTransaction,
   filterTransactions,
   transactionCharts,
+  simulatedRevenue,
 } from "../src/lib/payments/admin-transactions.ts";
 const require = createRequire(import.meta.url);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -35,7 +36,11 @@ async function mount(state) {
     "@/components/common/States": primitives,
     "@/components/ui/button": { Button: primitive("button") },
     "@/lib/playfab": { adminPlayerService: {} },
-    "@/lib/payments/admin-transactions": { filterTransactions, transactionCharts },
+    "@/lib/payments/admin-transactions": {
+      filterTransactions,
+      transactionCharts,
+      simulatedRevenue,
+    },
     recharts: primitives,
     "lucide-react": primitives,
   };
@@ -77,6 +82,8 @@ test("graphs and table follow filters and pagination without mutation controls",
     refetch: () => {},
   });
   assert.equal(renderer.root.findAllByType("LineChart").length, 1);
+  assert.match(text(renderer.toJSON()), /Total simulated revenue/);
+  assert.match(text(renderer.toJSON()), /1,029\.00/);
   assert.equal(renderer.root.findAllByType("tbody")[0].findAllByType("tr").length, 20);
   const buttons = renderer.root.findAllByType("button");
   assert.deepEqual(buttons.map(text), ["Refresh", "Previous", "Next"]);
@@ -87,6 +94,10 @@ test("graphs and table follow filters and pagination without mutation controls",
   );
   assert.equal(renderer.root.findByType("BarChart").props.data[0].orders, 1);
   assert.match(text(renderer.toJSON()), /PLAYER-20/);
+  const revenueCard = renderer.root
+    .findAllByType("section")
+    .find((s) => text(s).includes("Total simulated revenue"));
+  assert.match(text(revenueCard), /49\.00/);
   await act(() =>
     renderer.root.findByType("input").props.onChange({ target: { value: "no-match" } }),
   );
@@ -99,5 +110,6 @@ test("provider failure hides charts and totals rather than fabricating zero acti
   assert.equal(renderer.root.findAllByType("ErrorState").length, 1);
   assert.equal(renderer.root.findAllByType("LineChart").length, 0);
   assert.doesNotMatch(text(renderer.toJSON()), /Total orders/);
+  assert.doesNotMatch(text(renderer.toJSON()), /Total simulated revenue/);
   await act(() => renderer.unmount());
 });

@@ -19,7 +19,11 @@ import { AdminHeading, AdminPage, Panel, StatusPill } from "@/components/admin/u
 import { ErrorState, LoadingState, EmptyState } from "@/components/common/States";
 import { Button } from "@/components/ui/button";
 import { adminPlayerService } from "@/lib/playfab";
-import { filterTransactions, transactionCharts } from "@/lib/payments/admin-transactions";
+import {
+  filterTransactions,
+  transactionCharts,
+  simulatedRevenue,
+} from "@/lib/payments/admin-transactions";
 
 export const Route = createFileRoute("/admin/transactions")({ component: AdminTransactions });
 const colors = ["#54845d", "#c78a40", "#a19b90", "#bd652d"];
@@ -53,6 +57,7 @@ function AdminTransactions() {
   });
   const rows = filterTransactions(query.data?.records ?? [], search, currency, status, days);
   const charts = transactionCharts(rows);
+  const revenue = simulatedRevenue(rows);
   const currentPage = Math.min(page, Math.max(0, Math.ceil(rows.length / 20) - 1));
   const selectClass = "rounded-xl border-2 border-border bg-card px-3 py-2 text-sm";
   const totals = [
@@ -171,6 +176,21 @@ function AdminTransactions() {
               </Panel>
             ))}
           </div>
+          <Panel bodyClassName="p-4 sm:p-5">
+            <p className="text-sm font-semibold text-muted-foreground">Total simulated revenue</p>
+            <p className="mt-1 break-words font-display text-3xl" aria-live="polite">
+              {revenue === null
+                ? "Unavailable"
+                : revenue.length
+                  ? revenue.map((total) => price(total.amount, total.currency)).join(" · ")
+                  : price(0, "PHP")}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Test money only — no real income. Gross value of completed checkouts matching the
+              filters, including paid orders awaiting delivery. Unpaid checkouts are excluded.
+              Select All time and clear other filters for the full history.
+            </p>
+          </Panel>
           {rows.length === 0 ? (
             <EmptyState
               title="No matching transactions"

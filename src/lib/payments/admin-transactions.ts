@@ -106,3 +106,24 @@ export function transactionCharts(rows: AdminTransaction[]) {
     delivery: Object.entries(delivery).map(([name, orders]) => ({ name, orders })),
   };
 }
+
+/** Gross simulated checkout value, not delivered currency or real revenue. */
+export function simulatedRevenue(rows: AdminTransaction[]) {
+  const totals = new Map<string, number>();
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (row.checkout !== "Completed" || seen.has(row.orderId)) continue;
+    seen.add(row.orderId);
+    const minor = Math.round(row.price * 100);
+    if (!Number.isFinite(row.price) || row.price < 0 || !Number.isSafeInteger(minor)) return null;
+    const total = (totals.get(row.currency) ?? 0) + minor;
+    if (!Number.isSafeInteger(total)) return null;
+    totals.set(row.currency, total);
+  }
+  return [...totals]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([currency, minor]) => ({
+      currency,
+      amount: minor / 100,
+    }));
+}

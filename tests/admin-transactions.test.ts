@@ -4,6 +4,7 @@ import {
   adminTransaction,
   filterTransactions,
   transactionCharts,
+  simulatedRevenue,
 } from "../src/lib/payments/admin-transactions.ts";
 import type { PaymentOrder } from "../src/lib/payments/types.ts";
 const base: PaymentOrder = {
@@ -21,6 +22,35 @@ const base: PaymentOrder = {
   fulfilledAt: null,
   webhookEventId: null,
 };
+test("simulated revenue counts completed orders once, not unpaid orders or reward units", () => {
+  const paid = adminTransaction({ ...base, status: "paid", expectedAmount: 5010 });
+  const credited = adminTransaction({
+    ...base,
+    orderId: "two",
+    status: "fulfilled",
+    expectedAmount: 5020,
+  });
+  const unpaid = ["pending", "failed", "cancelled"].map((status) =>
+    adminTransaction({
+      ...base,
+      orderId: status,
+      status: status as PaymentOrder["status"],
+    }),
+  );
+  assert.deepEqual(simulatedRevenue([paid, credited, paid, ...unpaid]), [
+    { currency: "PHP", amount: 100.3 },
+  ]);
+  assert.deepEqual(simulatedRevenue([]), []);
+  assert.deepEqual(simulatedRevenue([paid, { ...credited, currency: "USD" }]), [
+    { currency: "PHP", amount: 50.1 },
+    { currency: "USD", amount: 50.2 },
+  ]);
+  assert.equal(simulatedRevenue([{ ...paid, price: NaN }]), null);
+  assert.equal(simulatedRevenue([{ ...paid, price: -1 }]), null);
+  assert.deepEqual(simulatedRevenue(filterTransactions([paid, credited], "two", "All", "All", 0)), [
+    { currency: "PHP", amount: 50.2 },
+  ]);
+});
 test("checkout and delivery remain independent; cancelled is never refunded", () => {
   for (const status of ["pending", "paid", "fulfilled", "failed", "cancelled"] as const) {
     const r = adminTransaction({ ...base, status });
