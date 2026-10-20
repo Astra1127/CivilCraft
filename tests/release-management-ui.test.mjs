@@ -183,6 +183,15 @@ async function mountRoute(t, overrides = {}) {
     "@/components/admin/ReleasePosts": { ReleasePosts: element("ReleasePosts") },
     "@/components/admin/ApkUpload": { ApkUpload },
     "@/lib/cms/releases": { useAdminReleases: () => query },
+    "@/lib/cms/download-stats": {
+      useReleaseDownloadStats: () => ({
+        data: { available: true, total: 0, byRelease: {}, trackingSince: null },
+        isPending: false,
+        isError: false,
+        isFetching: false,
+        refetch: async () => {},
+      }),
+    },
     "@/lib/cms/android-version": androidVersion,
     "@/components/common/States": primitives,
     "@tanstack/react-router": { createFileRoute: () => (config) => config },

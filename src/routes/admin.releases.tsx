@@ -1,9 +1,10 @@
 import { ReleasePosts } from "@/components/admin/ReleasePosts";
 import { ApkUpload } from "@/components/admin/ApkUpload";
 import { useAdminReleases, type ReleaseNotificationResult } from "@/lib/cms/releases";
+import { useReleaseDownloadStats } from "@/lib/cms/download-stats";
 import { ErrorState, LoadingState } from "@/components/common/States";
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronRight, ListChecks, Mail, Package, Trash2 } from "lucide-react";
+import { ChevronRight, ListChecks, Mail, Package, RefreshCw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -29,6 +30,9 @@ export const Route = createFileRoute("/admin/releases")({
 function AdminReleases() {
   const localReleases = useCms((s) => s.releases);
   const query = useAdminReleases();
+  const downloads = useReleaseDownloadStats();
+  const downloadStats = !downloads.isError && downloads.data?.available ? downloads.data : null;
+  const unavailableCount = downloads.isPending ? "—" : "Unknown";
   const releases = query.data?.initialized ? query.data.releases : localReleases;
   const [patches, setPatches] = useState<Record<string, Partial<Release>>>({});
   const [busy, setBusy] = useState(false);
@@ -285,8 +289,56 @@ function AdminReleases() {
           <DataRow
             tone="blueprint"
             label="Downloads"
-            value={(current?.downloads ?? 0).toLocaleString()}
+            value={
+              !current
+                ? "—"
+                : !current.apkHosted
+                  ? "Not tracked"
+                  : downloadStats
+                    ? (Object.hasOwn(downloadStats.byRelease, current.id)
+                        ? (downloadStats.byRelease[current.id] ?? 0)
+                        : 0
+                      ).toLocaleString()
+                    : unavailableCount
+            }
           />
+          <DataRow
+            tone="blueprint"
+            label="Total downloads"
+            value={downloadStats ? downloadStats.total.toLocaleString() : unavailableCount}
+          />
+        </div>
+        <div className="mt-3 space-y-2 border-t border-white/15 pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="min-w-0 text-xs text-white/80" role="status" aria-live="polite">
+              {downloads.isPending
+                ? "Loading download counts…"
+                : !downloadStats
+                  ? "Download counts are unavailable. Try refreshing."
+                  : downloadStats.trackingSince
+                    ? `Tracking since ${new Date(downloadStats.trackingSince).toLocaleString()}. Total includes previously removed builds.`
+                    : "No download requests recorded yet. Previous downloads cannot be backfilled."}
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={downloads.isFetching}
+              className="shrink-0 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"
+              onClick={() => void downloads.refetch()}
+            >
+              <RefreshCw
+                aria-hidden="true"
+                className={downloads.isFetching ? "animate-spin" : undefined}
+              />
+              Refresh counts
+            </Button>
+          </div>
+          <p className="text-xs leading-relaxed text-white/70">
+            Download requests, not completed downloads or installs. Repeat requests can count; staff
+            preview links and HEAD requests are excluded. Counts start when tracking is first
+            recorded.
+          </p>
         </div>
       </Panel>
 

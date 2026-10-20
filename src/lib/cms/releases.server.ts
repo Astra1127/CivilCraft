@@ -9,6 +9,10 @@ import { validateApkArchive } from "./apk-validation.server.ts";
 import { apkPathSchema, createApkUploadTicket, readApkUploadTicket } from "./apk-ticket.server.ts";
 import type { HandleUploadPresignedBody } from "@vercel/blob/client";
 import { releaseWriteLock } from "./release-write-lock.server.ts";
+import {
+  releaseDownloadStats,
+  shouldCountReleaseDownload,
+} from "./release-download-stats.server.ts";
 import { MAX_ANDROID_VERSION_CODE } from "./android-version.ts";
 import {
   createVersionAnnouncement,
@@ -259,6 +263,14 @@ async function unlockedReleaseRequest(
   const root = admin ? "/api/admin/releases" : "/api/releases";
   if (path !== root && !path.startsWith(root + "/")) return null;
   try {
+    if (admin && path === root + "/download-stats") {
+      if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+      try {
+        return json({ available: true, ...(await releaseDownloadStats.read()) });
+      } catch {
+        return json({ available: false, total: null, byRelease: {}, trackingSince: null });
+      }
+    }
     const saved = await data();
     const state = read(saved);
     const download = path.match(/^\/api\/(?:admin\/)?releases\/([a-zA-Z0-9-]{1,64})\/download$/);
@@ -281,6 +293,14 @@ async function unlockedReleaseRequest(
         return new Response(null, { headers });
       }
       headers.set("Location", await apkStorage.downloadUrl(release.apk.storagePath));
+      if (shouldCountReleaseDownload(request, admin)) {
+        try {
+          await releaseDownloadStats.record(release.id);
+        } catch {
+          // Analytics must never stop an otherwise valid APK download.
+          console.warn("[Release downloads] A download request could not be recorded.");
+        }
+      }
       return new Response(null, { status: 307, headers });
     }
     if (path !== root) {

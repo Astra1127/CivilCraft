@@ -3,6 +3,7 @@ import { after, afterEach, beforeEach, test } from "node:test";
 import { releaseRequest } from "../src/lib/cms/releases.server.ts";
 import { apkStorage } from "../src/lib/cms/apk-storage.server.ts";
 import { releaseWriteLock } from "../src/lib/cms/release-write-lock.server.ts";
+import { releaseDownloadStats } from "../src/lib/cms/release-download-stats.server.ts";
 import { APK_CONTENT_TYPE, MAX_APK_BYTES } from "../src/lib/cms/apk.ts";
 import { handlePlayFabAdminRequest } from "../src/lib/playfab/admin-api.server.ts";
 import { getAdminAuthConfig } from "../src/lib/admin-auth/config.server.ts";
@@ -27,6 +28,7 @@ const originalFetch = globalThis.fetch;
 const originalDateNow = Date.now;
 const originalStorage = { ...apkStorage };
 const originalLock = releaseWriteLock.run;
+const originalDownloadRecord = releaseDownloadStats.record;
 const uploadResult = {
   type: "blob.generate-presigned-url" as const,
   presignedUrlPayload: {
@@ -43,6 +45,7 @@ let uploadCalls = 0;
 
 beforeEach(() => {
   releaseWriteLock.run = async (task) => task();
+  releaseDownloadStats.record = async () => undefined;
   apkStorage.listReleases = async () =>
     [...blobs].map(([pathname, b]) => ({ pathname, size: b.bytes.length, uploadedAt: new Date() }));
   apkStorage.remove = async (pathname) => {
@@ -87,6 +90,7 @@ beforeEach(() => {
 
 afterEach(() => {
   releaseWriteLock.run = originalLock;
+  releaseDownloadStats.record = originalDownloadRecord;
   globalThis.fetch = originalFetch;
   Date.now = originalDateNow;
   Object.assign(apkStorage, originalStorage);
