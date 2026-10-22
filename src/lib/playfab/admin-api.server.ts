@@ -16,7 +16,7 @@ import { getAdminPlayer, lookupPlayer, mapBans } from "./admin-players.server.ts
 import type { AdminIntegrationStatus, PlayerSearchKind } from "./admin-types.ts";
 import type { Transaction } from "./types.ts";
 import { listOrders } from "../payments/orders.server.ts";
-import { getProduct } from "../payments/products.ts";
+import { currencyLabel, normalizeOrderReward } from "../payments/products.ts";
 import {
   listAllProducts,
   saveProduct,
@@ -24,6 +24,7 @@ import {
   toggleProductActive,
   reorderProducts,
   getProductById,
+  seedMissingDefaultProducts,
 } from "../payments/products.server.ts";
 
 const headers = {
@@ -108,24 +109,28 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
       await playFabAdmin("Admin/GetAllSegments");
       if (url.searchParams.get("orders") === "1" || url.searchParams.get("all") === "1") {
         const orders = await listOrders();
-        const records: Transaction[] = orders.map((o) => ({
-          transactionId: o.orderId,
-          playerId: o.playFabId,
-          itemId: o.productId,
-          itemName: getProduct(o.productId)?.name || (o.productId === "coins_500" ? "500 Civil Craft Coins" : o.productId),
-          itemCategory: "Currency",
-          amount: o.expectedAmount / 100,
-          currency: o.currency,
-          type: "purchase" as const,
-          status:
-            o.status === "fulfilled"
-              ? ("completed" as const)
-              : o.status === "failed" || o.status === "cancelled"
-                ? ("refunded" as const)
-                : ("pending" as const),
-          paymentMethod: "PayMongo",
-          createdAt: o.createdAt,
-        }));
+        const records: Transaction[] = orders.map((o) => {
+          const reward = normalizeOrderReward(o);
+          return {
+            transactionId: o.orderId,
+            playerId: o.playFabId,
+            itemId: o.productId,
+            itemName: `${reward.rewardAmount.toLocaleString()} Civil Craft ${currencyLabel(reward.rewardCurrency)}`,
+            itemCategory: "Currency",
+            ...reward,
+            amount: o.expectedAmount / 100,
+            currency: o.currency,
+            type: "purchase" as const,
+            status:
+              o.status === "fulfilled"
+                ? ("completed" as const)
+                : o.status === "failed" || o.status === "cancelled"
+                  ? ("refunded" as const)
+                  : ("pending" as const),
+            paymentMethod: "PayMongo",
+            createdAt: o.createdAt,
+          };
+        });
         return json({ configured: true, records });
       }
       return json({ configured: true, records: [] });
@@ -138,6 +143,15 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
       if (request.method === "POST") {
         const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
         const action = typeof body["action"] === "string" ? body["action"] : "save";
+
+        if (action === "seed-missing-defaults") {
+          const products = await seedMissingDefaultProducts();
+          return json({
+            success: true,
+            message: "Missing default packages added. Existing products were preserved.",
+            products,
+          });
+        }
 
         if (action === "delete") {
           const id = typeof body["id"] === "string" ? body["id"] : "";

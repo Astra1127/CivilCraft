@@ -9,6 +9,7 @@ The existing authenticated endpoints, player-session validation, staff cookies a
 The UI offers the nine exact contract IDs and Efficient/Strongest selectors. All-Time remains the default; Weekly remains disabled. Changing selection remounts the selected view, resetting pagination, filters and pinned version. Query cache keys include both selections. Refresh fetches the current version. Each mode displays its own run's construction cost and peak stress; the modes are never merged.
 
 For packed = 2147483647 - score:
+
 - Efficient: cost = floor(packed / 1001); peak stress = (packed % 1001) / 10.
 - Strongest: cost = packed % 1000001; peak stress = floor(packed / 1000001) / 10.
 - Integer scores and decoded cost 0..1000000 / stress 0..100 are validated. Invalid stored values fail closed.
@@ -19,20 +20,26 @@ TotalScore remains only as a legacy profile/directory field, not as a bridge lea
 
 ## Live read-only verification
 
+The results in this section are a historical snapshot, not current availability.
+An October 9, 2026 read-only website check returned a ShopKeeper/Efficient entry
+and two VancesContract entries in each ranking mode. The missing dashboard link
+was a navigation issue, not evidence that PlayFab had lost those scores. See
+`multiplayer-leaderboard.md` for the restored dashboard page and new tabs.
+
 The local website configuration and available Unity Main Menu scene both select title 17FA03. Production deployment configuration and the running Unity binary still need confirmation.
 
 A successful Admin/GetPlayerStatisticDefinitions read of title 17FA03 verified all 18 allowlisted statistics exist, with AggregationMethod Max, VersionChangeInterval Never, CurrentVersion 0, and no deletion in progress. No configuration changes were made. Max retains the largest encoded value; Never matches the All-Time UI. API reference: https://learn.microsoft.com/en-us/rest/api/playfab/admin/player-data-management/get-player-statistic-definitions
 
 The updated server functions read the first row of all 18 live leaderboards. For every populated board, Server/GetPlayerStatistics matched its raw score and leaderboardRank matched its score/rank in the same version:
 
-| Contract | Mode | Construction cost (peso) | Peak stress (%) | Rank |
-| --- | --- | ---: | ---: | ---: |
-| VancesContract | Efficient | 92329 | 90.1 | 1 |
-| VancesContract | Strongest | 104651 | 68.9 | 1 |
-| SilasMainContract | Efficient | 127285 | 33.9 | 1 |
-| SilasMainContract | Strongest | 127285 | 33.9 | 1 |
-| MainContractSilas | Efficient | 134265 | 71.4 | 1 |
-| MainContractSilas | Strongest | 134265 | 71.4 | 1 |
+| Contract          | Mode      | Construction cost (peso) | Peak stress (%) | Rank |
+| ----------------- | --------- | -----------------------: | --------------: | ---: |
+| VancesContract    | Efficient |                    92329 |            90.1 |    1 |
+| VancesContract    | Strongest |                   104651 |            68.9 |    1 |
+| SilasMainContract | Efficient |                   127285 |            33.9 |    1 |
+| SilasMainContract | Strongest |                   127285 |            33.9 |    1 |
+| MainContractSilas | Efficient |                   134265 |            71.4 |    1 |
+| MainContractSilas | Strongest |                   134265 |            71.4 |    1 |
 
 The other twelve boards returned no entries. Empty ShopKeeper results are therefore expected until that contract has a published run. Select VancesContract to inspect existing data. No player identifiers or credentials are recorded here.
 

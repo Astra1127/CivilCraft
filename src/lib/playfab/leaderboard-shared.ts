@@ -14,6 +14,18 @@ export interface LeaderboardPage {
   nextStart: number | null;
 }
 
+export interface MultiplayerLeaderboardEntry {
+  rank: number;
+  displayName: string;
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+export interface MultiplayerLeaderboardPage {
+  entries: MultiplayerLeaderboardEntry[];
+}
+
 export const LEADERBOARD_CONTRACTS = [
   "ShopKeeper",
   "TUT_CONTRACT1",

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Receipt } from "lucide-react";
+import { Coins, Diamond, Receipt } from "lucide-react";
 import { useState } from "react";
 import { AdminHeading, AdminPage, FilterChips, Panel, StatusPill } from "@/components/admin/ui";
 import { ErrorState, LoadingState } from "@/components/common/States";
@@ -79,7 +79,16 @@ function AdminTransactions() {
               <tbody>
                 {rows.map((t) => (
                   <tr key={t.transactionId} className="border-b border-border/70 last:border-0">
-                    <td className="px-4 py-2 font-bold">{t.itemName}</td>
+                    <td className="px-4 py-2 font-bold">
+                      <span className="flex items-center gap-2">
+                        {t.rewardCurrency === "DI" ? (
+                          <Diamond className="h-4 w-4 shrink-0 text-gold" aria-hidden="true" />
+                        ) : t.rewardCurrency === "CO" ? (
+                          <Coins className="h-4 w-4 shrink-0 text-gold" aria-hidden="true" />
+                        ) : null}
+                        {t.itemName}
+                      </span>
+                    </td>
                     <td className="px-4 py-2 text-muted-foreground">{t.playerId}</td>
                     <td className="px-4 py-2 capitalize text-muted-foreground">{t.type}</td>
                     <td className="px-4 py-2">{amount(t)}</td>

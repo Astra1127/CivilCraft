@@ -14,7 +14,7 @@ export async function fetchAdminProducts(): Promise<PaymentProduct[]> {
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data.error || "Failed to load coin products");
+    throw new Error(data.error || "Failed to load currency products");
   }
   const data = (await res.json()) as AdminProductsResponse;
   return data.products || [];
@@ -24,7 +24,6 @@ export async function saveAdminProduct(
   product: Partial<PaymentProduct> & {
     id?: string;
     name: string;
-    rewardCoins: number;
     amount: number;
     description: string;
   },
@@ -42,6 +41,19 @@ export async function saveAdminProduct(
   if (!res.ok) {
     throw new Error(data.error || "Failed to save product");
   }
+  return data.products || [];
+}
+
+/** Explicit migration only; catalogue GET requests never write defaults. */
+export async function seedMissingAdminProducts(): Promise<PaymentProduct[]> {
+  const res = await fetch("/api/admin/products", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ action: "seed-missing-defaults" }),
+  });
+  const data = (await res.json()) as AdminProductsResponse;
+  if (!res.ok) throw new Error(data.error || "Failed to add missing default packages");
   return data.products || [];
 }
 

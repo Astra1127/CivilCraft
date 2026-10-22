@@ -15,6 +15,7 @@ import { renderErrorPage } from "./lib/error-page";
 import { handleAdminRequest } from "./lib/admin-auth/http.server";
 import { handlePlayFabAdminRequest } from "./lib/playfab/admin-api.server";
 import { handlePaymentsRequest } from "./lib/payments/api.server";
+import { handleGameWalletRequest } from "./lib/game-wallet/index.server";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -60,6 +61,8 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const gameWalletResponse = await handleGameWalletRequest(request);
+      if (gameWalletResponse) return gameWalletResponse;
       const portraitResponse = await handleCharacterPortrait(request);
       if (portraitResponse) return portraitResponse;
       const releasesResponse = await releaseRequest(request);

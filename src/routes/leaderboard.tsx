@@ -6,7 +6,10 @@ export const Route = createFileRoute("/leaderboard")({
   head: () => ({
     meta: [
       { title: "Leaderboard — Civil Craft" },
-      { name: "description", content: "Explore Civil Craft engineering rankings by contract." },
+      {
+        name: "description",
+        content: "Explore Civil Craft bridge rankings and multiplayer match records.",
+      },
     ],
   }),
   component: LeaderboardPage,
@@ -23,7 +26,7 @@ function LeaderboardPage() {
             </p>
             <h1 className="mt-3 text-4xl sm:text-5xl">Leaderboard</h1>
             <p className="mt-4 text-muted-foreground">
-              Discover the most efficient and strongest bridges built by Civil Craft engineers.
+              Discover the most efficient and strongest bridges, and compare multiplayer wins.
             </p>
           </header>
           <PublicLeaderboard />

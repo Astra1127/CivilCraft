@@ -15,7 +15,10 @@
     "test:admin": "node --test tests/admin-playfab.test.ts",
     "test:content": "node --test tests/public-content.test.ts",
     "test:reset": "node --test tests/reset-password.test.ts tests/reset-password-ui.test.mjs",
-    "test:payments": "node --test tests/paymongo.test.ts"
+    "test:payments": "node --test tests/paymongo.test.ts",
+    "test:transactions": "node --test tests/dashboard-transactions-layout.test.mjs",
+    "test:currencies": "node --test tests/paymongo.test.ts tests/paymongo-webhook-envelopes.test.mjs tests/premium-wallet.test.ts tests/entity-diamond-wallet.test.mjs tests/currency-products.test.ts tests/diamonds-setup.test.mjs tests/diamond-shop-ui.test.mjs tests/shop-navigation-ui.test.mjs tests/diamond-dev-config.test.mjs tests/coin-receipts.test.mjs tests/coins-setup.test.mjs tests/currency-database.test.mjs tests/currency-database-sql.test.mjs tests/currency-database-setup.test.mjs tests/postgres-coin-receipts.test.mjs tests/postgres-payment-integration.test.mjs",
+    "verify:currencies": "node --env-file=.env scripts/verify-currency-database.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -63,6 +66,7 @@
     "jose": "^6.2.12",
     "lucide-react": "^0.575.0",
     "nodemailer": "^10.0.10",
+    "postgres": "3.4.9",
     "react": "^19.2.0",
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.0",
@@ -79,6 +83,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@eslint/js": "^9.32.0",
     "@types/node": "^22.16.5",
     "@types/nodemailer": "^8.0.2",

@@ -1,24 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertCircle,
-  ArrowUpDown,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Coins,
-  Edit2,
-  HelpCircle,
-  Loader2,
-  Plus,
-  RefreshCw,
-  Sparkles,
-  Tag,
-  Trash2,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Coins, Diamond, Edit2, Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { AdminHeading, AdminPage, ConfirmDialog, FilterChips, Panel, StatusPill } from "@/components/admin/ui";
+import {
+  AdminHeading,
+  AdminPage,
+  ConfirmDialog,
+  FilterChips,
+  Panel,
+  StatusPill,
+} from "@/components/admin/ui";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/States";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,23 +26,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { formatProductPrice, type PaymentProduct } from "@/lib/payments/products";
+import {
+  currencyLabel,
+  DEFAULT_PRODUCTS,
+  formatProductPrice,
+  normalizeProductReward,
+  type PaymentProduct,
+  type RewardCurrency,
+} from "@/lib/payments/products";
 import {
   deleteAdminProduct,
   fetchAdminProducts,
   reorderAdminProducts,
   saveAdminProduct,
+  seedMissingAdminProducts,
   toggleAdminProduct,
 } from "@/lib/payments/products-admin";
 
 export const Route = createFileRoute("/admin/products")({
   head: () => ({
     meta: [
-      { title: "Coin Products — Admin Dashboard" },
+      { title: "Currency Products — Admin Dashboard" },
       { name: "robots", content: "noindex" },
       {
         name: "description",
-        content: "Manage coin packages available for purchase in the Civil Craft Coin Shop.",
+        content: "Manage Coin and Diamond packages available in the Civil Craft shop.",
       },
     ],
   }),
@@ -63,7 +63,8 @@ type Filter = (typeof filters)[number];
 interface ProductFormData {
   id?: string;
   name: string;
-  rewardCoins: number | string;
+  rewardCurrency: RewardCurrency;
+  rewardAmount: number | string;
   pricePhp: number | string;
   description: string;
   badge?: string;
@@ -73,7 +74,8 @@ interface ProductFormData {
 
 const emptyForm: ProductFormData = {
   name: "",
-  rewardCoins: 500,
+  rewardCurrency: "CO",
+  rewardAmount: 500,
   pricePhp: 50,
   description: "",
   badge: "",
@@ -84,6 +86,7 @@ const emptyForm: ProductFormData = {
 function AdminProductsPage() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("All");
+  const [currencyFilter, setCurrencyFilter] = useState<"All" | "Coins" | "Diamonds">("All");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<PaymentProduct | null>(null);
   const [formData, setFormData] = useState<ProductFormData>(emptyForm);
@@ -97,28 +100,41 @@ function AdminProductsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
-      const rewardCoins = Number(data.rewardCoins);
+      const rewardAmount = Number(data.rewardAmount);
       const pricePhp = Number(data.pricePhp);
-      if (isNaN(rewardCoins) || rewardCoins <= 0) {
-        throw new Error("Coin amount must be a positive integer.");
+      if (!Number.isSafeInteger(rewardAmount) || rewardAmount <= 0) {
+        throw new Error("Reward amount must be a positive integer.");
       }
-      if (isNaN(pricePhp) || pricePhp <= 0) {
+      if (!Number.isFinite(pricePhp) || pricePhp <= 0) {
         throw new Error("Price in PHP must be greater than zero.");
       }
 
       // Convert PHP to centavos (₱50.00 -> 5000 centavos)
       const amount = Math.round(pricePhp * 100);
+      if (!Number.isSafeInteger(amount) || Math.abs(amount / 100 - pricePhp) > 0.00000001) {
+        throw new Error("Price must use at most two decimal places.");
+      }
 
       // Generate clean ID from name/coins if new
       const id =
-        data.id ||
-        `coins_${rewardCoins}`.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+        data.id || `${data.rewardCurrency === "DI" ? "diamonds" : "coins"}_${rewardAmount}`;
+      const cleanId = id.trim().toLowerCase();
+      if (!/^[a-z0-9_-]{2,64}$/.test(cleanId)) {
+        throw new Error("Product ID must contain only letters, numbers, underscores, and hyphens.");
+      }
+      if (!editingProduct && (query.data || []).some((p) => p.id === cleanId)) {
+        throw new Error(
+          "That product ID already exists. Edit the existing package or choose a different ID.",
+        );
+      }
 
       return await saveAdminProduct({
-        id,
+        id: cleanId,
         name: data.name.trim(),
         description: data.description.trim(),
-        rewardCoins,
+        rewardCurrency: data.rewardCurrency,
+        rewardAmount,
+        rewardCoins: data.rewardCurrency === "CO" ? rewardAmount : 0,
         amount,
         currency: "PHP",
         category: "currency",
@@ -154,6 +170,17 @@ function AdminProductsPage() {
     },
   });
 
+  const seedMutation = useMutation({
+    mutationFn: seedMissingAdminProducts,
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["admin", "products"], updated);
+      queryClient.invalidateQueries({ queryKey: ["shop-products"] });
+      toast.success("Missing default packages added. Existing products were preserved.");
+    },
+    onError: (err) =>
+      toast.error(err instanceof Error ? err.message : "Failed to add missing packages."),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       return await deleteAdminProduct(id);
@@ -185,7 +212,7 @@ function AdminProductsPage() {
 
   const openCreateDialog = () => {
     setEditingProduct(null);
-    setFormData(emptyForm);
+    setFormData({ ...emptyForm, rewardCurrency: currencyFilter === "Diamonds" ? "DI" : "CO" });
     setDialogOpen(true);
   };
 
@@ -194,7 +221,7 @@ function AdminProductsPage() {
     setFormData({
       id: product.id,
       name: product.name,
-      rewardCoins: product.rewardCoins,
+      ...normalizeProductReward(product),
       pricePhp: (product.amount / 100).toFixed(2),
       description: product.description,
       badge: product.badge || "",
@@ -204,14 +231,17 @@ function AdminProductsPage() {
     setDialogOpen(true);
   };
 
-  const handleMove = (index: number, direction: -1 | 1) => {
+  const handleMove = (id: string, direction: -1 | 1) => {
     const list = [...(query.data || [])];
-    const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= list.length) return;
-
-    const [moved] = list.splice(index, 1);
-    if (!moved) return;
-    list.splice(targetIndex, 0, moved);
+    const visibleIndex = filteredProducts.findIndex((p) => p.id === id);
+    const target = filteredProducts[visibleIndex + direction];
+    if (!target) return;
+    const index = list.findIndex((p) => p.id === id);
+    const targetIndex = list.findIndex((p) => p.id === target.id);
+    const moved = list[index];
+    if (!moved || targetIndex < 0) return;
+    list[index] = target;
+    list[targetIndex] = moved;
 
     const orderedIds = list.map((p) => p.id);
     reorderMutation.mutate(orderedIds);
@@ -219,6 +249,11 @@ function AdminProductsPage() {
 
   const products = query.data || [];
   const filteredProducts = products.filter((p) => {
+    if (
+      currencyFilter !== "All" &&
+      currencyLabel(normalizeProductReward(p).rewardCurrency) !== currencyFilter
+    )
+      return false;
     if (filter === "Active") return p.active !== false;
     if (filter === "Disabled") return p.active === false;
     return true;
@@ -226,76 +261,125 @@ function AdminProductsPage() {
 
   const activeCount = products.filter((p) => p.active !== false).length;
   const totalCoins = products
-    .filter((p) => p.active !== false)
-    .reduce((sum, p) => sum + p.rewardCoins, 0);
+    .filter((p) => p.active !== false && normalizeProductReward(p).rewardCurrency === "CO")
+    .reduce((sum, p) => sum + normalizeProductReward(p).rewardAmount, 0);
+  const totalDiamonds = products
+    .filter((p) => p.active !== false && normalizeProductReward(p).rewardCurrency === "DI")
+    .reduce((sum, p) => sum + normalizeProductReward(p).rewardAmount, 0);
+  const missingDefaults = DEFAULT_PRODUCTS.some(
+    (p) => !products.some((stored) => stored.id === p.id),
+  );
 
   return (
     <AdminPage>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <AdminHeading
-          title="Coin Products"
-          description="Manage Civil Craft coin packages. Configured products immediately sync with the Player Coin Shop and PayMongo checkout."
+          title="Currency Products"
+          description="Manage separate Coin and Diamond packages. Diamond checkout stays unavailable until the premium wallet is configured and verified."
         />
         <Button onClick={openCreateDialog} variant="gold" className="shrink-0 font-bold">
-          <Plus className="mr-1.5 h-4 w-4" /> Add Coin Product
+          <Plus className="mr-1.5 h-4 w-4" /> Add Currency Product
         </Button>
       </div>
 
       {/* Summary KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border-2 border-border bg-card p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Total Products
           </p>
-          <p className="mt-1 text-2xl font-extrabold text-foreground">{products.length}</p>
+          <p className="mt-1 text-2xl font-extrabold text-foreground">
+            {query.data ? products.length : "—"}
+          </p>
           <p className="mt-1 text-xs text-muted-foreground">Configured in Title Internal Data</p>
         </div>
         <div className="rounded-xl border-2 border-border bg-card p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Active in Shop
           </p>
-          <p className="mt-1 text-2xl font-extrabold text-gold">{activeCount}</p>
+          <p className="mt-1 text-2xl font-extrabold text-gold">{query.data ? activeCount : "—"}</p>
           <p className="mt-1 text-xs text-muted-foreground">Available to players right now</p>
         </div>
         <div className="rounded-xl border-2 border-border bg-card p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Active Coin Vault
+            Active Coin Packages
           </p>
           <p className="mt-1 text-2xl font-extrabold text-foreground">
-            {totalCoins.toLocaleString()} CO
+            {query.data ? totalCoins.toLocaleString() : "—"} CO
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Sum of active packages</p>
         </div>
+        <div className="rounded-xl border-2 border-border bg-card p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Active Diamond Packages
+          </p>
+          <p className="mt-1 text-2xl font-extrabold text-foreground">
+            {query.data ? totalDiamonds.toLocaleString() : "—"} DI
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Separate from Coins and game gold</p>
+        </div>
       </div>
 
-      <FilterChips options={filters} value={filter} onChange={setFilter} />
+      <div className="flex flex-wrap gap-3">
+        <FilterChips
+          options={["All", "Coins", "Diamonds"] as const}
+          value={currencyFilter}
+          onChange={setCurrencyFilter}
+        />
+        <FilterChips options={filters} value={filter} onChange={setFilter} />
+      </div>
+      {query.isSuccess && missingDefaults && (
+        <div className="flex flex-col gap-3 rounded-xl border-2 border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Add missing starter packages without changing existing prices, quantities, or disabled
+            products. Catalogue reads never restore defaults automatically.
+          </p>
+          <Button
+            variant="outline"
+            className="min-h-11 shrink-0"
+            disabled={seedMutation.isPending}
+            onClick={() => seedMutation.mutate()}
+          >
+            {seedMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="mr-2 h-4 w-4" />
+            )}
+            Add Missing Defaults
+          </Button>
+        </div>
+      )}
 
       {query.isPending ? (
-        <LoadingState label="Loading coin products catalog…" rows={3} />
+        <LoadingState label="Loading currency products catalog…" rows={3} />
       ) : query.isError ? (
         <ErrorState
-          title="Unable to load coin products"
+          title="Unable to load currency products"
           description={(query.error as Error).message}
           onRetry={() => query.refetch()}
         />
       ) : filteredProducts.length === 0 ? (
         <EmptyState
-          title="No coin products found"
+          title="No currency products found"
           description={
             filter === "All"
-              ? "No coin packages configured yet. Click '+ Add Coin Product' above to create one."
+              ? "No packages match this currency. Add a currency product or use Add Missing Defaults."
               : `No products match the filter '${filter}'.`
           }
         />
       ) : (
-        <Panel title={`Products Catalog (${filteredProducts.length})`} icon={Coins} bodyClassName="p-0">
+        <Panel
+          title={`Products Catalog (${filteredProducts.length})`}
+          icon={Coins}
+          bodyClassName="p-0"
+        >
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead className="border-b-2 border-border bg-secondary/40 text-left">
                 <tr className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-muted-foreground">
                   <th className="px-4 py-2.5 w-12 text-center">Order</th>
                   <th className="px-4 py-2.5">Product & ID</th>
-                  <th className="px-4 py-2.5">Coins</th>
+                  <th className="px-4 py-2.5">Reward</th>
                   <th className="px-4 py-2.5">Price</th>
                   <th className="px-4 py-2.5">Description</th>
                   <th className="px-4 py-2.5">Status</th>
@@ -305,16 +389,20 @@ function AdminProductsPage() {
               <tbody>
                 {filteredProducts.map((p, index) => {
                   const isActive = p.active !== false;
+                  const reward = normalizeProductReward(p);
                   return (
-                    <tr key={p.id} className="border-b border-border/70 last:border-0 hover:bg-muted/30">
+                    <tr
+                      key={p.id}
+                      className="border-b border-border/70 last:border-0 hover:bg-muted/30"
+                    >
                       <td className="px-4 py-3 text-center">
                         <div className="flex flex-col items-center gap-0.5">
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-6 w-6"
+                            className="h-11 w-11"
                             disabled={index === 0 || reorderMutation.isPending}
-                            onClick={() => handleMove(index, -1)}
+                            onClick={() => handleMove(p.id, -1)}
                             aria-label="Move up"
                           >
                             <ChevronUp className="h-3.5 w-3.5" />
@@ -322,9 +410,11 @@ function AdminProductsPage() {
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="h-6 w-6"
-                            disabled={index === filteredProducts.length - 1 || reorderMutation.isPending}
-                            onClick={() => handleMove(index, 1)}
+                            className="h-11 w-11"
+                            disabled={
+                              index === filteredProducts.length - 1 || reorderMutation.isPending
+                            }
+                            onClick={() => handleMove(p.id, 1)}
                             aria-label="Move down"
                           >
                             <ChevronDown className="h-3.5 w-3.5" />
@@ -335,12 +425,18 @@ function AdminProductsPage() {
                         <div className="flex items-center gap-2">
                           <span className="font-extrabold text-foreground">{p.name}</span>
                           {p.badge && (
-                            <Badge variant="outline" className="text-xs border-gold text-gold font-bold">
+                            <Badge
+                              variant="outline"
+                              className="text-xs border-gold text-gold font-bold"
+                            >
                               {p.badge}
                             </Badge>
                           )}
                           {p.popular && (
-                            <Badge variant="default" className="text-xs bg-gold text-gold-foreground font-bold">
+                            <Badge
+                              variant="default"
+                              className="text-xs bg-gold text-gold-foreground font-bold"
+                            >
                               Popular
                             </Badge>
                           )}
@@ -350,7 +446,17 @@ function AdminProductsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 font-bold text-gold">
-                        {p.rewardCoins.toLocaleString()} CO
+                        <span className="flex items-center gap-1.5">
+                          {reward.rewardCurrency === "DI" ? (
+                            <Diamond className="h-4 w-4 text-sky-500" />
+                          ) : (
+                            <Coins className="h-4 w-4" />
+                          )}
+                          {reward.rewardAmount.toLocaleString()} {reward.rewardCurrency}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {currencyLabel(reward.rewardCurrency)}
+                        </span>
                       </td>
                       <td className="px-4 py-3 font-semibold text-foreground">
                         {formatProductPrice(p.amount, p.currency)}
@@ -368,10 +474,8 @@ function AdminProductsPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-8 px-2 font-semibold"
-                            onClick={() =>
-                              toggleMutation.mutate({ id: p.id, active: !isActive })
-                            }
+                            className="min-h-11 px-2 font-semibold"
+                            onClick={() => toggleMutation.mutate({ id: p.id, active: !isActive })}
                             disabled={toggleMutation.isPending}
                           >
                             {isActive ? "Disable" : "Enable"}
@@ -379,7 +483,7 @@ function AdminProductsPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-8 px-2"
+                            className="min-h-11 px-2"
                             onClick={() => openEditDialog(p)}
                           >
                             <Edit2 className="h-3.5 w-3.5 mr-1" /> Edit
@@ -387,7 +491,8 @@ function AdminProductsPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            className="min-h-11 min-w-11 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                            aria-label={`Delete ${p.name}`}
                             onClick={() => setDeleteCandidate(p)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -405,15 +510,15 @@ function AdminProductsPage() {
 
       {/* Add / Edit Product Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-display">
-              {editingProduct ? "Edit Coin Product" : "Add New Coin Product"}
+              {editingProduct ? "Edit Currency Product" : "Add New Currency Product"}
             </DialogTitle>
             <DialogDescription>
               {editingProduct
                 ? "Update product details, pricing, and display settings."
-                : "Create a new coin package. It will immediately appear in the Player Coin Shop."}
+                : "Create a Coin or Diamond package. Checkout availability also depends on server payment and wallet configuration."}
             </DialogDescription>
           </DialogHeader>
 
@@ -431,20 +536,36 @@ function AdminProductsPage() {
                 required
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="e.g. 5,000 Civil Craft Coins"
+                placeholder={`e.g. 5,000 Civil Craft ${currencyLabel(formData.rewardCurrency)}`}
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="prod-currency">Reward Currency *</Label>
+              <select
+                id="prod-currency"
+                value={formData.rewardCurrency}
+                className="flex min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                onChange={(e) =>
+                  setFormData({ ...formData, rewardCurrency: e.target.value as RewardCurrency })
+                }
+              >
+                <option value="CO">Coins (CO)</option>
+                <option value="DI">Diamonds (DI)</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="prod-coins">Coin Reward (CO) *</Label>
+                <Label htmlFor="prod-reward">
+                  {currencyLabel(formData.rewardCurrency)} Reward ({formData.rewardCurrency}) *
+                </Label>
                 <Input
-                  id="prod-coins"
+                  id="prod-reward"
                   type="number"
                   min="1"
                   required
-                  value={formData.rewardCoins}
-                  onChange={(e) => setFormData({ ...formData, rewardCoins: e.target.value })}
+                  value={formData.rewardAmount}
+                  onChange={(e) => setFormData({ ...formData, rewardAmount: e.target.value })}
                   placeholder="5000"
                 />
               </div>
@@ -476,7 +597,7 @@ function AdminProductsPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="prod-badge">Badge / Ribbon (Optional)</Label>
                 <Input
@@ -488,7 +609,9 @@ function AdminProductsPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="prod-id">Product ID {editingProduct ? "(Read-only)" : "(Optional)"}</Label>
+                <Label htmlFor="prod-id">
+                  Product ID {editingProduct ? "(Read-only)" : "(Optional)"}
+                </Label>
                 <Input
                   id="prod-id"
                   disabled={!!editingProduct}
@@ -518,7 +641,7 @@ function AdminProductsPage() {
             <div className="flex items-center justify-between rounded-lg border border-border p-3">
               <div className="space-y-0.5">
                 <Label htmlFor="prod-active" className="font-bold text-sm">
-                  Active in Coin Shop
+                  Active in Currency Shop
                 </Label>
                 <p className="text-xs text-muted-foreground">
                   When disabled, players cannot purchase this package
@@ -563,7 +686,7 @@ function AdminProductsPage() {
           if (!open) setDeleteCandidate(null);
         }}
         title={`Delete Product '${deleteCandidate?.name}'?`}
-        description="Are you sure you want to permanently delete this coin package? If transaction records exist for this product, deletion will be blocked and you can set it to Inactive instead."
+        description="Permanently delete this currency package? If transaction records exist, deletion is blocked. Disable the package to hide it instead."
         confirmLabel="Delete Product"
         destructive={true}
         onConfirm={() => {

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { PlayerName } from "@/components/common/PlayerName";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MultiplayerLeaderboard } from "./MultiplayerLeaderboard";
 import {
   DEFAULT_CONTRACT,
   DEFAULT_MODE,
@@ -11,6 +13,23 @@ import type { LeaderboardContract, LeaderboardMode } from "@/lib/playfab/leaderb
 import { getPublicLeaderboard } from "@/lib/playfab/public-leaderboard";
 
 export function PublicLeaderboard() {
+  return (
+    <Tabs defaultValue="single-player" className="space-y-6">
+      <TabsList aria-label="Leaderboard game mode" className="h-auto flex-wrap">
+        <TabsTrigger value="single-player">Single-player</TabsTrigger>
+        <TabsTrigger value="multiplayer">Multiplayer</TabsTrigger>
+      </TabsList>
+      <TabsContent value="single-player">
+        <BridgeLeaderboard />
+      </TabsContent>
+      <TabsContent value="multiplayer">
+        <MultiplayerLeaderboard />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function BridgeLeaderboard() {
   const [contract, setContract] = useState<LeaderboardContract>(DEFAULT_CONTRACT);
   const [mode, setMode] = useState<LeaderboardMode>(DEFAULT_MODE);
   return (

@@ -111,7 +111,7 @@ export async function playerFetch(path: string, init: RequestInit = {}): Promise
   const ticket = new Headers(init.headers).get("Authorization")?.match(/^Bearer (\S+)$/)?.[1];
   const response = await fetch(path, init);
   const playerPath =
-    /^\/api\/(?:player\/|leaderboard(?:\?|\/|$)|contact(?:\?|$)|payments\/paymongo\/(?:create-checkout|player-orders)(?:\?|$))/.test(
+    /^\/api\/(?:player\/|leaderboard(?:\?|\/|$)|contact(?:\?|$)|payments\/paymongo\/(?:create-checkout|player-orders|order)(?:\?|$))/.test(
       path,
     );
   if (ticket && playerPath && response.status === 401) {

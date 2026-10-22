@@ -21,8 +21,33 @@ export function getPayMongoConfig(): PayMongoConfig {
 }
 
 export function isPayMongoConfigured(): boolean {
-  const { secretKey } = getPayMongoConfig();
-  return Boolean(secretKey && secretKey.startsWith("sk_test_"));
+  try {
+    requirePayMongoCheckoutReady();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A hosted payment cannot start without a verified callback and explicit return origin. */
+export function requirePayMongoCheckoutReady(): PayMongoConfig {
+  const config = getPayMongoConfig();
+  if (!config.secretKey.startsWith("sk_test_"))
+    throw new Error("PayMongo live keys are not permitted; a test key is required.");
+  if (!config.webhookSecret)
+    throw new Error("PayMongo test webhook verification is not configured.");
+  if (!["PUBLIC_APP_URL", "PUBLIC_SITE_URL", "SITE_URL"].some((key) => process.env[key]?.trim())) {
+    throw new Error("Payment return URL must be explicitly configured.");
+  }
+  const url = new URL(config.appUrl);
+  const developmentLoopback =
+    process.env["NODE_ENV"] !== "production" &&
+    url.protocol === "http:" &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if ((url.protocol !== "https:" && !developmentLoopback) || url.username || url.password) {
+    throw new Error("Payment return URL is not configured safely.");
+  }
+  return config;
 }
 
 export interface CreateCheckoutInput {
@@ -38,10 +63,35 @@ export interface CreateCheckoutResult {
   referenceNumber: string;
 }
 
+/** Missing webhook evidence is resolved from the bound session, never from the browser. */
+export async function retrievePayMongoCheckout(checkoutId: string): Promise<unknown> {
+  const { secretKey } = getPayMongoConfig();
+  if (!secretKey.startsWith("sk_test_") || !/^cs_[a-z0-9_-]{1,120}$/i.test(checkoutId)) {
+    throw new Error("Test checkout verification is unavailable.");
+  }
+  const response = await fetch(
+    `https://api.paymongo.com/v1/checkout_sessions/${encodeURIComponent(checkoutId)}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${secretKey}:`).toString("base64")}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(12_000),
+    },
+  );
+  const result = (await response.json().catch(() => null)) as { data?: unknown } | null;
+  if (!response.ok || !result?.data)
+    throw new Error("Payment verification is temporarily unavailable.");
+  return result.data;
+}
+
 export async function createPayMongoCheckout(
   input: CreateCheckoutInput,
 ): Promise<CreateCheckoutResult> {
-  const { secretKey, appUrl } = getPayMongoConfig();
+  const { secretKey, appUrl } = requirePayMongoCheckoutReady();
   if (!secretKey) {
     throw new Error("PayMongo secret key is not configured.");
   }
@@ -68,15 +118,7 @@ export async function createPayMongoCheckout(
             description: input.product.description,
           },
         ],
-        payment_method_types: [
-          "card",
-          "gcash",
-          "paymaya",
-          "grab_pay",
-          "dob",
-          "dob_ubp",
-          "qrph",
-        ],
+        payment_method_types: ["card", "gcash", "paymaya", "grab_pay", "dob", "dob_ubp", "qrph"],
         reference_number: input.orderId,
         description: input.product.name,
         success_url: successUrl,
@@ -99,6 +141,8 @@ export async function createPayMongoCheckout(
       Accept: "application/json",
     },
     body: JSON.stringify(payload),
+    redirect: "error",
+    signal: AbortSignal.timeout(12_000),
   });
 
   const body = (await response.json().catch(() => null)) as {
@@ -112,15 +156,24 @@ export async function createPayMongoCheckout(
     errors?: Array<{ detail?: string; code?: string }>;
   } | null;
 
-  if (!response.ok || !body?.data?.attributes?.checkout_url) {
+  if (!response.ok || !body?.data?.id || !body?.data?.attributes?.checkout_url) {
     const errorMsg =
       body?.errors?.[0]?.detail ||
       `PayMongo checkout session creation failed with status ${response.status}`;
     throw new Error(errorMsg);
   }
 
+  const checkoutUrl = new URL(body.data.attributes.checkout_url);
+  if (
+    checkoutUrl.protocol !== "https:" ||
+    checkoutUrl.hostname !== "checkout.paymongo.com" ||
+    !/^cs_[a-z0-9_-]{1,120}$/i.test(body.data.id)
+  ) {
+    throw new Error("PayMongo returned an invalid checkout session.");
+  }
+
   return {
-    checkoutId: body.data.id || "",
+    checkoutId: body.data.id,
     checkoutUrl: body.data.attributes.checkout_url,
     referenceNumber: body.data.attributes.reference_number || input.orderId,
   };
@@ -128,7 +181,10 @@ export async function createPayMongoCheckout(
 
 export type SignatureVerificationResult =
   | { valid: true; timestamp: number }
-  | { valid: false; reason: "missing_signature" | "invalid_timestamp" | "stale_timestamp" | "signature_mismatch" };
+  | {
+      valid: false;
+      reason: "missing_signature" | "invalid_timestamp" | "stale_timestamp" | "signature_mismatch";
+    };
 
 export function verifyPayMongoSignature(params: {
   signatureHeader: string | null | undefined;
@@ -164,7 +220,7 @@ export function verifyPayMongoSignature(params: {
     return { valid: false, reason: "missing_signature" };
   }
 
-  const timestamp = parseInt(t, 10);
+  const timestamp = /^\d{1,12}$/.test(t) ? Number(t) : NaN;
   if (Number.isNaN(timestamp) || timestamp <= 0) {
     return { valid: false, reason: "invalid_timestamp" };
   }
