@@ -82,6 +82,8 @@ export interface PlayerProgress {
 }
 
 export interface Achievement {
+  /** False when the parser had to generate an array-position ID. */
+  stableId?: boolean;
   id: string;
   name: string;
   description: string;
@@ -197,6 +199,7 @@ export interface PlayerLevelCompletion {
 
 /** Level content: game-owned structure, website-owned educational annotation. */
 export interface AlmanacLevel {
+  stableId?: boolean;
   levelId: string;
   regionId: string;
   /** Absent while the level is still hidden by the game. */
@@ -238,6 +241,7 @@ export type NotificationKind = "achievement" | "level" | "cosmetic" | "release" 
 export interface PlayerNotification {
   id: string;
   kind: NotificationKind;
+  target?: { achievementId: string } | { levelId: string; regionId: string };
   title: string;
   description?: string;
   createdAt: string;

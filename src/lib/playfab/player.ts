@@ -227,6 +227,9 @@ export function parseAchievementProgress(raw: string | undefined): Achievement[]
 
         return {
           id,
+          stableId: [item["id"], item["Id"], item["achievementId"]].some(
+            (v) => typeof v === "string" && v.length > 0,
+          ),
           name,
           description,
           icon,

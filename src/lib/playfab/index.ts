@@ -282,12 +282,19 @@ export const transactionService = {
 
 /* -------------------------------------------------------- notifications */
 
-const NOTIFICATION_READ_KEY = "civilcraft.notifications.read.v1";
+const notificationReadKey = () => {
+  const id = getStoredPlayer()?.playFabId;
+  return id ? `civilcraft.notifications.read.v1:${id}` : null;
+};
 
 function readIds(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    return new Set(JSON.parse(window.localStorage.getItem(NOTIFICATION_READ_KEY) ?? "[]"));
+    const key = notificationReadKey();
+    const values: unknown = key ? JSON.parse(window.localStorage.getItem(key) ?? "[]") : [];
+    return new Set(
+      Array.isArray(values) ? values.filter((v): v is string => typeof v === "string") : [],
+    );
   } catch {
     return new Set();
   }
@@ -296,7 +303,8 @@ function readIds(): Set<string> {
 function writeIds(ids: Set<string>) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(NOTIFICATION_READ_KEY, JSON.stringify([...ids]));
+    const key = notificationReadKey();
+    if (key) window.localStorage.setItem(key, JSON.stringify([...ids]));
   } catch {
     /* quota / private mode */
   }
@@ -317,6 +325,7 @@ export const notificationService = {
       .filter((a) => a.unlocked && a.unlockedAt)
       .map((a) => ({
         id: `ach-${a.id}`,
+        ...(a.stableId !== false ? { target: { achievementId: a.id } } : {}),
         kind: "achievement" as const,
         title: "Achievement unlocked",
         description: a.name,
@@ -328,6 +337,7 @@ export const notificationService = {
       .filter((l) => l.completion)
       .map((l) => ({
         id: `lvl-${l.levelId}`,
+        ...(l.stableId !== false ? { target: { levelId: l.levelId, regionId: l.regionId } } : {}),
         kind: "level" as const,
         title: "Level completed",
         description: l.levelName ?? "A Civil Craft level",
@@ -338,7 +348,8 @@ export const notificationService = {
       .map((n) => ({ ...n, read: read.has(n.id) }))
       .sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
   },
-  async markRead(ids: string[]): Promise<void> {
+  async markRead(ids: string[], expectedPlayerId?: string): Promise<void> {
+    if (expectedPlayerId && getStoredPlayer()?.playFabId !== expectedPlayerId) return;
     const set = readIds();
     for (const id of ids) set.add(id);
     writeIds(set);

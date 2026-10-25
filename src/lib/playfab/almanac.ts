@@ -115,6 +115,13 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
 
         return {
           levelId,
+          stableId:
+            [lobj["levelId"], lobj["LevelId"], lobj["id"]].some(
+              (v) => typeof v === "string" && v.length > 0,
+            ) &&
+            [robj["regionId"], robj["RegionId"], robj["id"]].some(
+              (v) => typeof v === "string" && v.length > 0,
+            ),
           regionId,
           ...(levelName ? { levelName } : {}),
           order,

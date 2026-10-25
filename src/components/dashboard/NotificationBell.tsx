@@ -1,3 +1,7 @@
+import { useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useAuth } from "@/lib/auth";
+import { notificationDestination } from "@/lib/playfab/notification-navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, CheckCheck, Medal, Package, Megaphone, Shirt, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -6,6 +10,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuLabel,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -37,20 +42,27 @@ function timeAgo(iso: string) {
  */
 export function NotificationBell() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { player } = useAuth();
+  const playerId = player?.playFabId;
+  const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const navigating = useRef(false);
   const q = useQuery({
-    queryKey: ["notifications"],
+    queryKey: ["notifications", playerId],
+    enabled: !!playerId,
     queryFn: notificationService.getNotifications,
   });
   const items = q.data ?? [];
   const unread = items.filter((n) => !n.read);
 
   const mark = useMutation({
-    mutationFn: (ids: string[]) => notificationService.markRead(ids),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+    mutationFn: (ids: string[]) => notificationService.markRead(ids, playerId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications", playerId] }),
   });
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
@@ -66,7 +78,14 @@ export function NotificationBell() {
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 border-2 border-border bg-card">
+      <DropdownMenuContent
+        onCloseAutoFocus={(event) => {
+          if (navigating.current) event.preventDefault();
+          navigating.current = false;
+        }}
+        align="end"
+        className="w-80 max-w-[calc(100vw-1rem)] border-2 border-border bg-card"
+      >
         <div className="flex items-center justify-between gap-2 pr-1">
           <DropdownMenuLabel className="font-display">Notifications</DropdownMenuLabel>
           {unread.length > 0 ? (
@@ -74,6 +93,7 @@ export function NotificationBell() {
               variant="ghost"
               size="sm"
               className="h-7 text-xs"
+              disabled={mark.isPending}
               onClick={() => mark.mutate(unread.map((n) => n.id))}
             >
               <CheckCheck className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
@@ -82,6 +102,11 @@ export function NotificationBell() {
           ) : null}
         </div>
         <DropdownMenuSeparator />
+        {notice ? (
+          <p role="status" className="px-3 py-2 text-sm">
+            {notice}
+          </p>
+        ) : null}
         {q.isPending ? (
           <p className="px-3 py-4 text-sm text-muted-foreground">Loading notifications…</p>
         ) : items.length === 0 ? (
@@ -98,38 +123,50 @@ export function NotificationBell() {
               const Icon = KIND_ICON[n.kind];
               return (
                 <li key={n.id}>
-                  <button
-                    type="button"
-                    onClick={() => !n.read && mark.mutate([n.id])}
-                    className={cn(
-                      "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-secondary",
-                      n.read ? "opacity-70" : "bg-gold/10",
-                    )}
-                  >
-                    <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 border-border bg-card text-gold">
-                      <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate text-sm font-bold">{n.title}</span>
-                        {!n.read ? (
-                          <span
-                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold"
-                            aria-hidden="true"
-                          />
-                        ) : null}
+                  <DropdownMenuItem asChild onSelect={(event) => event.preventDefault()}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const destination = notificationDestination(n);
+                        if (!destination) {
+                          setNotice("This notification has no available destination.");
+                          return;
+                        }
+                        setNotice("");
+                        navigating.current = true;
+                        setOpen(false);
+                        void navigate(destination);
+                      }}
+                      className={cn(
+                        "flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold",
+                        n.read ? "opacity-70" : "bg-gold/10",
+                      )}
+                    >
+                      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg border-2 border-border bg-card text-gold">
+                        <Icon className="h-3.5 w-3.5" aria-hidden="true" />
                       </span>
-                      {n.description ? (
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {n.description}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-sm font-bold">{n.title}</span>
+                          {!n.read ? (
+                            <span
+                              className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold"
+                              aria-hidden="true"
+                            />
+                          ) : null}
                         </span>
-                      ) : null}
-                      <span className="block text-[11px] text-muted-foreground">
-                        {timeAgo(n.createdAt)}
-                        {n.read ? " · Read" : ""}
+                        {n.description ? (
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {n.description}
+                          </span>
+                        ) : null}
+                        <span className="block text-[11px] text-muted-foreground">
+                          {timeAgo(n.createdAt)}
+                          {n.read ? " · Read" : ""}
+                        </span>
                       </span>
-                    </span>
-                  </button>
+                    </button>
+                  </DropdownMenuItem>
                 </li>
               );
             })}

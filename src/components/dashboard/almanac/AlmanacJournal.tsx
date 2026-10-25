@@ -13,7 +13,7 @@ import {
   Trophy,
   Wrench,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DemoBadge } from "@/components/common/DemoBadge";
 import { PlayerName } from "@/components/common/PlayerName";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/States";
@@ -30,6 +30,9 @@ import { useAuth } from "@/lib/auth";
 import { parsePlayerName } from "@/lib/player-name";
 import { almanacService, profileService, type AlmanacLevel } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
+
+import { findNotificationLevel } from "@/lib/playfab/notification-navigation";
+import { useNotificationRead } from "@/components/dashboard/useNotificationRead";
 
 const materialIcons = {
   wood_beam: Trees,
@@ -52,19 +55,39 @@ const tabs = [
   { value: "materials", label: "Materials" },
 ];
 
-export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string }) {
+export function AlmanacJournal({
+  initialTab = "journey",
+  levelId,
+  regionId,
+  onLevelChange,
+}: {
+  initialTab?: string;
+  levelId?: string | undefined;
+  regionId?: string | undefined;
+  onLevelChange?: (level: AlmanacLevel | null) => void;
+}) {
   const { player } = useAuth();
   const id = player?.playFabId ?? "";
   const journey = useQuery({
     queryKey: ["almanac-journey", id],
     queryFn: almanacService.getJourney,
+    enabled: !!id,
   });
   const profile = useQuery({
     queryKey: ["profile", id],
     queryFn: () => profileService.getProfile(id),
     enabled: !!id,
   });
-  const [selected, setSelected] = useState<AlmanacLevel | null>(null);
+  const [localSelected, setSelected] = useState<AlmanacLevel | null>(null);
+  const [activeTab, setActiveTab] = useState(initialTab);
+  const linkedLevel = journey.data
+    ? findNotificationLevel(journey.data, id, levelId, regionId)
+    : undefined;
+  const selected = onLevelChange ? (linkedLevel ?? null) : localSelected;
+  useNotificationRead(linkedLevel ? `lvl-${linkedLevel.levelId}` : undefined);
+  useEffect(() => {
+    setActiveTab(levelId ? "journey" : initialTab);
+  }, [initialTab, levelId, regionId]);
 
   if (journey.isPending) return <LoadingState label="Opening your field journal…" rows={4} />;
   if (journey.isError)
@@ -95,6 +118,9 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
 
   return (
     <div className="space-y-8">
+      {levelId && !linkedLevel ? (
+        <p role="status">This completed level is unavailable in your synced journal.</p>
+      ) : null}
       {/* -------------------------------------------------- journal header */}
       <header className="paper-panel relative overflow-hidden p-6 pl-6 sm:p-8 sm:pl-14">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -145,7 +171,7 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
         </div>
       </header>
 
-      <Tabs defaultValue={initialTab}>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="-mx-1 min-w-0 max-w-full overflow-x-auto px-1 pb-1">
           <TabsList className="w-max">
             {tabs.map((t) => (
@@ -220,7 +246,10 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
               <ul className="grid gap-4 [&>li]:min-w-0 md:grid-cols-2">
                 {r.levels.map((l) => (
                   <li key={l.levelId}>
-                    <LevelCard level={l} onOpen={() => setSelected(l)} />
+                    <LevelCard
+                      level={l}
+                      onOpen={() => (onLevelChange ? onLevelChange(l) : setSelected(l))}
+                    />
                   </li>
                 ))}
               </ul>
@@ -348,7 +377,12 @@ export function AlmanacJournal({ initialTab = "journey" }: { initialTab?: string
       <LevelEntryDialog
         level={selected}
         open={!!selected}
-        onOpenChange={(v) => !v && setSelected(null)}
+        onOpenChange={(v) => {
+          if (!v) {
+            if (onLevelChange) onLevelChange(null);
+            else setSelected(null);
+          }
+        }}
       />
     </div>
   );

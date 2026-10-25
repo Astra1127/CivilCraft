@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Lock, Medal } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DemoBadge } from "@/components/common/DemoBadge";
 import { SectionHeading } from "@/components/common/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/States";
@@ -9,25 +9,52 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { achievementsService } from "@/lib/playfab";
 
+import { useAuth } from "@/lib/auth";
+import { useNotificationRead } from "@/components/dashboard/useNotificationRead";
+import { findNotificationAchievement, targetSearch } from "@/lib/playfab/notification-navigation";
+
 export const Route = createFileRoute("/dashboard/achievements")({
+  validateSearch: (search: Record<string, unknown>): { achievementId?: string } => {
+    const achievementId = targetSearch(search, "achievementId");
+    return achievementId ? { achievementId } : {};
+  },
   component: AchievementsPage,
 });
 
 const filters = ["All", "Unlocked", "Locked"] as const;
 
 function AchievementsPage() {
-  const q = useQuery({ queryKey: ["achievements"], queryFn: achievementsService.getAchievements });
+  const { player } = useAuth();
+  const { achievementId } = Route.useSearch();
+  const q = useQuery({
+    queryKey: ["achievements", player?.playFabId],
+    queryFn: achievementsService.getAchievements,
+    enabled: !!player,
+  });
+  const target = findNotificationAchievement(q.data ?? [], achievementId);
+  const targetRef = useRef<HTMLLIElement>(null);
+  useNotificationRead(target ? `ach-${target.id}` : undefined);
+  useEffect(() => {
+    if (target) {
+      setFilter("All");
+      targetRef.current?.scrollIntoView({ block: "center" });
+      targetRef.current?.focus({ preventScroll: true });
+    }
+  }, [target, achievementId]);
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
 
   if (q.isPending) return <LoadingState label="Loading achievements…" rows={4} />;
   if (q.isError) return <ErrorState onRetry={q.refetch} description={(q.error as Error).message} />;
 
   const list = q.data.filter((a) =>
-    filter === "All" ? true : filter === "Unlocked" ? a.unlocked : !a.unlocked,
+    a === target || filter === "All" ? true : filter === "Unlocked" ? a.unlocked : !a.unlocked,
   );
 
   return (
     <div className="space-y-6">
+      {achievementId && !target ? (
+        <p role="status">This achievement is unavailable in your synced progress.</p>
+      ) : null}
       <SectionHeading
         title="Achievements"
         description={
@@ -52,7 +79,9 @@ function AchievementsPage() {
 
       {list.length === 0 ? (
         <EmptyState
-          title={q.data.length === 0 ? "No achievements synced yet" : "No achievements match this filter"}
+          title={
+            q.data.length === 0 ? "No achievements synced yet" : "No achievements match this filter"
+          }
           description={
             q.data.length === 0
               ? "Complete challenges and build bridges in Civil Craft to unlock achievements."
@@ -62,7 +91,12 @@ function AchievementsPage() {
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {list.map((a) => (
-            <li key={a.id} className={`panel p-5 ${a.unlocked ? "border-gold/60" : "opacity-80"}`}>
+            <li
+              key={a.id}
+              ref={a === target ? targetRef : undefined}
+              tabIndex={a === target ? -1 : undefined}
+              className={`panel scroll-mt-24 p-5 ${a === target ? "ring-2 ring-gold" : ""} ${a.unlocked ? "border-gold/60" : "opacity-80"}`}
+            >
               <span
                 className={`grid h-10 w-10 place-items-center rounded-xl ${
                   a.unlocked ? "bg-gold/20 text-gold" : "bg-secondary text-muted-foreground"
