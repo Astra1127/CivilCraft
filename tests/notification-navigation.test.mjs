@@ -63,6 +63,7 @@ const baseMocks = {
   "@/components/common/States": { LoadingState: el("p"), ErrorState: el("p"), EmptyState: el("p") },
   "@/components/ui/button": { Button: el("button") },
   "@/components/ui/progress": { Progress: el("progress") },
+  "@/components/dashboard/AchievementDetailsDialog": { AchievementDetailsDialog: el("dialog") },
 };
 const text = (node) =>
   node.root
@@ -220,13 +221,18 @@ test("bell navigates and dismisses; unknown targets remain unread; Mark All Read
 });
 test("achievement deep links focus/highlight real records and survive search/back changes", async () => {
   let search = { achievementId: achievement.id };
+  const navigations = [];
   const read = [];
   let focused = 0,
     scrolled = 0;
   const { Route } = load("src/routes/dashboard.achievements.tsx", {
     ...baseMocks,
     "@tanstack/react-router": {
-      createFileRoute: () => (config) => ({ ...config, useSearch: () => search }),
+      createFileRoute: () => (config) => ({
+        ...config,
+        useSearch: () => search,
+        useNavigate: () => (value) => navigations.push(value),
+      }),
     },
     "@tanstack/react-query": { useQuery: () => ({ data: [achievement] }) },
     "@/lib/playfab": { achievementsService: {} },
@@ -238,7 +244,15 @@ test("achievement deep links focus/highlight real records and survive search/bac
       createNodeMock: () => ({ focus: () => focused++, scrollIntoView: () => scrolled++ }),
     });
   });
-  assert.ok(focused && scrolled);
+  assert.ok(scrolled);
+  assert.equal(view.root.findByType("dialog").props.achievement, achievement);
+  await act(async () => view.root.findByType("dialog").props.onClose());
+  assert.equal(navigations.at(-1).search.achievementId, undefined);
+  await act(async () => view.root.findByType("dialog").props.onRestoreFocus());
+  assert.ok(focused);
+  const card = view.root.findAllByType("button").find((b) => b.props["aria-haspopup"] === "dialog");
+  await act(async () => card.props.onClick({ currentTarget: { focus() {} } }));
+  assert.equal(navigations.at(-1).search.achievementId, achievement.id);
   assert.match(view.root.findByType("li").props.className, /ring-2/);
   assert.equal(read.at(-1), note.id);
   search = { achievementId: "outdated" };
@@ -396,4 +410,148 @@ test("parsers flag position-based fallback IDs rather than treating them as stab
     parse({ regionId: "r1", levels: [{ levelName: "ShopKeeperContract" }] }).stableId,
     false,
   );
+});
+
+test("achievement details use real fields, optional progress and accessible responsive dialog controls", async () => {
+  const calls = [];
+  const dialogMocks = {
+    Dialog: el("dialog"),
+    DialogContent: el("article"),
+    DialogHeader: el("header"),
+    DialogTitle: el("h2"),
+    DialogDescription: el("p"),
+  };
+  const { AchievementDetailsDialog } = load(
+    "src/components/dashboard/AchievementDetailsDialog.tsx",
+    {
+      ...baseMocks,
+      "@/components/ui/dialog": dialogMocks,
+    },
+  );
+  const real = {
+    ...achievement,
+    description: "Finish within the recorded budget.",
+    unlockedAt: "2026-10-01T12:00:00Z",
+    progress: 4,
+    progressTarget: 5,
+  };
+  const props = {
+    achievement: real,
+    onClose: () => calls.push("close"),
+    onRestoreFocus: () => calls.push("focus"),
+  };
+  let view;
+  await act(async () => {
+    view = create(React.createElement(AchievementDetailsDialog, props));
+  });
+  assert.equal(view.root.findByType("h2").children.join(""), real.name);
+  assert.match(text(view), /Finish within the recorded budget/);
+  assert.match(text(view), /Unlocked/);
+  assert.match(text(view), /2026/);
+  assert.match(text(view), /4\s+\/\s+5/);
+  const content = view.root.findByType("article");
+  assert.match(content.props.className, /max-h-\[90dvh\]/);
+  assert.match(content.props.className, /overflow-y-auto/);
+  assert.match(content.props.className, /w-\[calc\(100%-2rem\)\]/);
+  assert.match(content.props.className, /max-w-lg/);
+  await act(async () => view.root.findByType("button").props.onClick());
+  await act(async () => view.root.findByType("dialog").props.onOpenChange(false));
+  let prevented = false;
+  await act(async () =>
+    content.props.onCloseAutoFocus({
+      preventDefault() {
+        prevented = true;
+      },
+    }),
+  );
+  assert.equal(calls.filter((c) => c === "close").length, 2);
+  assert.ok(prevented);
+  assert.equal(calls.at(-1), "focus");
+  await act(async () =>
+    view.update(
+      React.createElement(AchievementDetailsDialog, {
+        ...props,
+        achievement: {
+          ...achievement,
+          description: "Actual description",
+          unlockedAt: "invalid",
+          progressTarget: 10,
+        },
+      }),
+    ),
+  );
+  assert.match(text(view), /Unlock date unavailable/);
+  assert.doesNotMatch(text(view), /Invalid Date|Progress|Rewards/);
+  await act(async () =>
+    view.update(
+      React.createElement(AchievementDetailsDialog, { ...props, achievement: undefined }),
+    ),
+  );
+  assert.equal(view.toJSON(), null);
+  await act(async () => view.unmount());
+});
+
+test("achievement cards open the URL-selected dialog, close, restore on Back and survive refresh", async () => {
+  let search = {};
+  const navigations = [],
+    read = [];
+  const data = [
+    achievement,
+    { ...achievement, id: "locked", name: "Locked achievement", unlocked: false },
+  ];
+  const { Route } = load("src/routes/dashboard.achievements.tsx", {
+    ...baseMocks,
+    "@tanstack/react-router": {
+      createFileRoute: () => (config) => ({
+        ...config,
+        useSearch: () => search,
+        useNavigate: () => (value) => {
+          navigations.push(value);
+          search = value.search;
+        },
+      }),
+    },
+    "@tanstack/react-query": { useQuery: () => ({ data }) },
+    "@/lib/playfab": { achievementsService: {} },
+    "@/components/dashboard/useNotificationRead": { useNotificationRead: (id) => read.push(id) },
+  });
+  let view;
+  await act(async () => {
+    view = create(React.createElement(Route.component), {
+      createNodeMock: () => ({ focus() {}, scrollIntoView() {} }),
+    });
+  });
+  const cards = view.root
+    .findAllByType("button")
+    .filter((b) => b.props["aria-haspopup"] === "dialog");
+  assert.equal(cards[1].props.disabled, true);
+  assert.equal(view.root.findByType("dialog").props.achievement, undefined);
+  await act(async () => {
+    cards[0].props.onClick({ currentTarget: { focus() {} } });
+    view.update(React.createElement(Route.component));
+  });
+  assert.equal(view.root.findByType("dialog").props.achievement, achievement);
+  assert.equal(read.at(-1), note.id);
+  await act(async () => {
+    view.root.findByType("dialog").props.onClose();
+    view.update(React.createElement(Route.component));
+  });
+  assert.equal(view.root.findByType("dialog").props.achievement, undefined);
+  assert.equal(search.achievementId, undefined);
+  search = { achievementId: achievement.id };
+  await act(async () => view.update(React.createElement(Route.component)));
+  assert.equal(view.root.findByType("dialog").props.achievement, achievement);
+  await act(async () => view.unmount());
+  await act(async () => {
+    view = create(React.createElement(Route.component), {
+      createNodeMock: () => ({ focus() {}, scrollIntoView() {} }),
+    });
+  });
+  assert.equal(view.root.findByType("dialog").props.achievement, achievement);
+  search = { achievementId: "locked" };
+  await act(async () => view.update(React.createElement(Route.component)));
+  assert.equal(view.root.findByType("dialog").props.achievement, undefined);
+  assert.equal(read.at(-1), undefined);
+  assert.match(text(view), /unavailable/);
+  await act(async () => view.unmount());
 });

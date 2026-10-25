@@ -7,7 +7,8 @@ import { SectionHeading } from "@/components/common/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/States";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { achievementsService } from "@/lib/playfab";
+import { achievementsService, type Achievement } from "@/lib/playfab";
+import { AchievementDetailsDialog } from "@/components/dashboard/AchievementDetailsDialog";
 
 import { useAuth } from "@/lib/auth";
 import { useNotificationRead } from "@/components/dashboard/useNotificationRead";
@@ -26,6 +27,7 @@ const filters = ["All", "Unlocked", "Locked"] as const;
 function AchievementsPage() {
   const { player } = useAuth();
   const { achievementId } = Route.useSearch();
+  const navigate = Route.useNavigate();
   const q = useQuery({
     queryKey: ["achievements", player?.playFabId],
     queryFn: achievementsService.getAchievements,
@@ -33,12 +35,17 @@ function AchievementsPage() {
   });
   const target = findNotificationAchievement(q.data ?? [], achievementId);
   const targetRef = useRef<HTMLLIElement>(null);
+  const restoreFocusRef = useRef<HTMLButtonElement | null>(null);
+  const [localSelection, setLocalSelection] = useState<Achievement>();
+  const selected = localSelection && q.data?.includes(localSelection) ? localSelection : target;
+  useEffect(() => {
+    setLocalSelection(undefined);
+  }, [achievementId, player?.playFabId]);
   useNotificationRead(target ? `ach-${target.id}` : undefined);
   useEffect(() => {
     if (target) {
       setFilter("All");
       targetRef.current?.scrollIntoView({ block: "center" });
-      targetRef.current?.focus({ preventScroll: true });
     }
   }, [target, achievementId]);
   const [filter, setFilter] = useState<(typeof filters)[number]>("All");
@@ -95,41 +102,76 @@ function AchievementsPage() {
               key={a.id}
               ref={a === target ? targetRef : undefined}
               tabIndex={a === target ? -1 : undefined}
-              className={`panel scroll-mt-24 p-5 ${a === target ? "ring-2 ring-gold" : ""} ${a.unlocked ? "border-gold/60" : "opacity-80"}`}
+              className={`panel scroll-mt-24 ${a === target ? "ring-2 ring-gold" : ""} ${a.unlocked ? "border-gold/60" : "opacity-80"}`}
             >
-              <span
-                className={`grid h-10 w-10 place-items-center rounded-xl ${
-                  a.unlocked ? "bg-gold/20 text-gold" : "bg-secondary text-muted-foreground"
-                }`}
+              <button
+                type="button"
+                disabled={!a.unlocked}
+                aria-label={`View achievement: ${a.name}`}
+                aria-haspopup="dialog"
+                ref={(node) => {
+                  if (node && a === selected) restoreFocusRef.current = node;
+                }}
+                className="h-full w-full rounded-lg p-5 text-left enabled:hover:bg-gold/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
+                onClick={(event) => {
+                  restoreFocusRef.current = event.currentTarget;
+                  if (findNotificationAchievement(q.data, a.id) === a)
+                    void navigate({ search: { achievementId: a.id } });
+                  else setLocalSelection(a);
+                }}
               >
-                {a.unlocked ? (
-                  <Medal className="h-5 w-5" aria-hidden="true" />
-                ) : (
-                  <Lock className="h-5 w-5" aria-hidden="true" />
-                )}
-              </span>
-              <h3 className="mt-3 font-display text-lg">{a.name}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{a.description}</p>
-              {!a.unlocked && a.progressTarget ? (
-                <>
-                  <Progress
-                    value={Math.round(((a.progress ?? 0) / a.progressTarget) * 100)}
-                    className="mt-3"
-                  />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {a.progress ?? 0} / {a.progressTarget}
+                <span
+                  className={`grid h-10 w-10 place-items-center rounded-xl ${
+                    a.unlocked ? "bg-gold/20 text-gold" : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {a.unlocked ? (
+                    <Medal className="h-5 w-5" aria-hidden="true" />
+                  ) : (
+                    <Lock className="h-5 w-5" aria-hidden="true" />
+                  )}
+                </span>
+                <h3 className="mt-3 font-display text-lg">{a.name}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{a.description}</p>
+                {!a.unlocked &&
+                typeof a.progress === "number" &&
+                Number.isFinite(a.progress) &&
+                typeof a.progressTarget === "number" &&
+                Number.isFinite(a.progressTarget) &&
+                a.progressTarget > 0 ? (
+                  <>
+                    <Progress
+                      value={Math.round((a.progress / a.progressTarget) * 100)}
+                      className="mt-3"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {a.progress} / {a.progressTarget}
+                    </p>
+                  </>
+                ) : null}
+                {a.unlocked && a.unlockedAt ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Unlocked{" "}
+                    {Number.isFinite(Date.parse(a.unlockedAt))
+                      ? new Date(a.unlockedAt).toLocaleDateString()
+                      : "— date unavailable"}
                   </p>
-                </>
-              ) : null}
-              {a.unlocked && a.unlockedAt ? (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Unlocked {new Date(a.unlockedAt).toLocaleDateString()}
-                </p>
-              ) : null}
+                ) : null}
+              </button>
             </li>
           ))}
         </ul>
       )}
+      <AchievementDetailsDialog
+        achievement={selected}
+        onClose={() => {
+          setLocalSelection(undefined);
+          if (achievementId) void navigate({ search: {} });
+        }}
+        onRestoreFocus={() => {
+          restoreFocusRef.current?.focus({ preventScroll: true });
+        }}
+      />
     </div>
   );
 }
