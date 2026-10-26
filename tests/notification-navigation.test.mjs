@@ -1,3 +1,4 @@
+import * as levelRecords from "../src/lib/playfab/level-records.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
@@ -16,7 +17,14 @@ const level = {
   order: 4,
   status: "completed",
   engineeringConceptIds: [],
-  completion: { playerId: "player-a", completedAt: "2026-10-01", score: 100 },
+  completion: {
+    playerId: "player-a",
+    levelId: "ShopKeeperContract",
+    regionId: "region-1",
+    status: "success",
+    completedAt: "2026-10-01",
+    score: 100,
+  },
 };
 const journey = {
   regions: [{ regionId: "region-1", levels: [level] }],
@@ -58,6 +66,7 @@ const baseMocks = {
   "@/lib/auth": { useAuth: () => ({ player: { playFabId: "player-a" } }) },
   "@/lib/utils": { cn: (...v) => v.filter(Boolean).join(" ") },
   "@/lib/playfab/notification-navigation": navigation,
+  "@/lib/playfab/level-records": levelRecords,
   "@/components/common/DemoBadge": { DemoBadge: el("span") },
   "@/components/common/PageHeader": { SectionHeading: el("header") },
   "@/components/common/States": { LoadingState: el("p"), ErrorState: el("p"), EmptyState: el("p") },
@@ -135,6 +144,7 @@ test("read storage is player-scoped, merges Mark All Read and ignores stale acco
     }).outputText,
     {
       exports,
+      ...levelRecords,
       getStoredPlayer: () => ({ playFabId: player }),
       window: {
         localStorage: { getItem: (k) => storage.get(k), setItem: (k, v) => storage.set(k, v) },
@@ -554,4 +564,83 @@ test("achievement cards open the URL-selected dialog, close, restore on Back and
   assert.equal(read.at(-1), undefined);
   assert.match(text(view), /unavailable/);
   await act(async () => view.unmount());
+});
+
+test("level notification list rejects stale records but retains verified undated completion and player isolation", async () => {
+  const { parseAlmanacProgress } = await import("../src/lib/playfab/almanac.ts");
+  let player = "player-a";
+  const storage = new Map();
+  const synced = parseAlmanacProgress(
+    JSON.stringify({
+      regions: [
+        {
+          regionId: "region-1",
+          levels: [
+            {
+              levelId: "ShopKeeper",
+              levelName: "ShopKeeperContract",
+              status: "completed",
+              completion: { score: 3, bridgeTypeId: "beam", completedAt: "" },
+            },
+            ...["SilasContract", "Vance\'s Contract", "VanceSideRealignment", "MarshID"].map(
+              (levelId) => ({
+                levelId,
+                status: "locked",
+                completion: { score: 0, bridgeTypeId: "", completedAt: "" },
+              }),
+            ),
+            {
+              levelId: "foreign",
+              status: "completed",
+              completion: { status: "success", playerId: "player-b" },
+            },
+            { levelId: "ambiguous", status: "completed", completion: { status: "success" } },
+            { levelId: "ambiguous", status: "completed", completion: { status: "success" } },
+          ],
+        },
+      ],
+    }),
+  );
+  const file = readFileSync(new URL("../src/lib/playfab/index.ts", import.meta.url), "utf8");
+  const section = file.slice(
+    file.indexOf("const notificationReadKey"),
+    file.indexOf("/* ------------------------------------------------------------- inventory */"),
+  );
+  const exports = {};
+  runInNewContext(
+    ts.transpileModule(section, {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    }).outputText,
+    {
+      exports,
+      ...levelRecords,
+      getStoredPlayer: () => ({ playFabId: player }),
+      window: {
+        localStorage: { getItem: (k) => storage.get(k), setItem: (k, v) => storage.set(k, v) },
+      },
+      demoMode: false,
+      achievementsService: {
+        getAchievements: async () => [{ ...achievement, unlockedAt: "2026-10-01" }],
+      },
+      almanacService: { getJourney: async () => synced },
+    },
+  );
+  const service = exports.notificationService;
+  let notes = await service.getNotifications();
+  assert.equal(notes.filter((n) => n.kind === "level").length, 1);
+  assert.equal(notes.length, 2);
+  const completed = notes.find((n) => n.kind === "level");
+  assert.equal(completed.id, "lvl-ShopKeeper");
+  assert.equal(completed.createdAt, "");
+  assert.match(completed.description, /Level 01/);
+  assert.equal(completed.target.levelId, "ShopKeeper");
+  await service.markRead(
+    notes.map((n) => n.id),
+    "player-a",
+  );
+  assert.ok((await service.getNotifications()).every((n) => n.read));
+  player = "player-b";
+  notes = await service.getNotifications();
+  assert.ok(notes.every((n) => !n.read));
+  assert.ok(notes.some((n) => n.id === "lvl-foreign"));
 });

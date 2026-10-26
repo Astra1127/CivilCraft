@@ -1,4 +1,5 @@
 import type { Achievement, AlmanacJourney, PlayerNotification } from "./types.ts";
+import { verifiedLevelCompletion } from "./level-records.ts";
 
 export function notificationDestination(n: PlayerNotification) {
   if (n.kind === "achievement" && n.target && "achievementId" in n.target)
@@ -26,12 +27,7 @@ export function findNotificationLevel(
     .flatMap((r) => r.levels)
     .filter(
       (l) =>
-        l.levelId === levelId &&
-        l.regionId === regionId &&
-        l.stableId !== false &&
-        l.status === "completed" &&
-        l.completion &&
-        (!l.completion.playerId || l.completion.playerId === playerId),
+        l.levelId === levelId && l.regionId === regionId && verifiedLevelCompletion(l, playerId),
     );
   return matches.length === 1 ? matches[0] : undefined;
 }

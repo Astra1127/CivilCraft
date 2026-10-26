@@ -9,6 +9,7 @@
  * always labelled in the UI.
  */
 import { getJourney as fetchJourney, EMPTY_JOURNEY } from "./almanac";
+import { completionDate, levelStageLabel, verifiedLevelCompletion } from "./level-records";
 import {
   loginPlayer,
   registerPlayer,
@@ -317,9 +318,11 @@ function writeIds(ids: Set<string>) {
  */
 export const notificationService = {
   async getNotifications(): Promise<PlayerNotification[]> {
+    const playerId = getStoredPlayer()?.playFabId;
     const read = readIds();
     const achievements = demoMode ? mockAchievements : await achievementsService.getAchievements();
     const journey = demoMode ? mockJourney : await almanacService.getJourney();
+    if (getStoredPlayer()?.playFabId !== playerId) return [];
 
     const fromAchievements: PlayerNotification[] = achievements
       .filter((a) => a.unlocked && a.unlockedAt)
@@ -334,14 +337,19 @@ export const notificationService = {
       }));
     const fromLevels: PlayerNotification[] = journey.regions
       .flatMap((r) => r.levels)
-      .filter((l) => l.completion)
+      .filter(
+        (l, _, levels) =>
+          verifiedLevelCompletion(l, playerId) &&
+          levels.filter((other) => other.levelId === l.levelId && other.regionId === l.regionId)
+            .length === 1,
+      )
       .map((l) => ({
         id: `lvl-${l.levelId}`,
         ...(l.stableId !== false ? { target: { levelId: l.levelId, regionId: l.regionId } } : {}),
         kind: "level" as const,
         title: "Level completed",
-        description: l.levelName ?? "A Civil Craft level",
-        createdAt: l.completion!.completedAt,
+        description: `${levelStageLabel(l)} — ${l.levelName ?? l.levelId}`,
+        createdAt: completionDate(l.completion!.completedAt),
         read: false,
       }));
     return [...fromAchievements, ...fromLevels]

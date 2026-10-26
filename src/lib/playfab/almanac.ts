@@ -8,6 +8,12 @@
  * completion date and screenshot URL). Absent key = empty journey.
  */
 import { getPlayerData } from "./player.ts";
+import {
+  canonicalStageOrder,
+  completionDate,
+  sortStoryLevels,
+  tutorialNumber,
+} from "./level-records.ts";
 import type {
   AlmanacJourney,
   AlmanacLevel,
@@ -75,8 +81,10 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
         robj["regionId"] ?? robj["RegionId"] ?? robj["id"] ?? `region_${rIdx}`,
       );
       const name = String(robj["name"] ?? robj["Name"] ?? regionId);
-      const rawStatus = robj["status"] ?? robj["Status"] ?? "locked";
-      const status = String(rawStatus).toLowerCase() as AlmanacRegion["status"];
+      const rawStatus = String(robj["status"] ?? robj["Status"] ?? "unknown").toLowerCase();
+      const status = (
+        ["completed", "current", "locked"].includes(rawStatus) ? rawStatus : "unknown"
+      ) as AlmanacRegion["status"];
       const rawLevels = Array.isArray(robj["levels"] ?? robj["Levels"])
         ? ((robj["levels"] ?? robj["Levels"]) as unknown[])
         : [];
@@ -88,27 +96,64 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
         const levelName = typeof rawLevelName === "string" ? rawLevelName : undefined;
         const rawOrder = lobj["order"] ?? lobj["Order"];
         const order = typeof rawOrder === "number" ? rawOrder : lIdx + 1;
-        const rawLStatus = lobj["status"] ?? lobj["Status"] ?? "locked";
-        const lstatus = String(rawLStatus).toLowerCase() as AlmanacLevel["status"];
+        const rawStage = lobj["stageOrder"] ?? lobj["StageOrder"];
+        const stageOrder = tutorialNumber(levelId)
+          ? undefined
+          : (canonicalStageOrder(levelId) ??
+            (typeof rawStage === "number" && Number.isSafeInteger(rawStage) && rawStage > 0
+              ? rawStage
+              : undefined));
+        const rawLStatus = String(lobj["status"] ?? lobj["Status"] ?? "unknown").toLowerCase();
+        const lstatus = (
+          ["completed", "current", "locked"].includes(rawLStatus) ? rawLStatus : "unknown"
+        ) as AlmanacLevel["status"];
         const rawConceptIds = lobj["engineeringConceptIds"] ?? lobj["EngineeringConceptIds"];
         const conceptIds = Array.isArray(rawConceptIds) ? (rawConceptIds as string[]) : [];
 
         const comp = (lobj["completion"] ?? lobj["Completion"]) as
           Record<string, unknown> | undefined;
         let completion: PlayerLevelCompletion | undefined;
-        if (comp && typeof comp === "object") {
+        const completionState =
+          comp && typeof comp === "object" && !Array.isArray(comp)
+            ? (comp["status"] ?? comp["Status"])
+            : undefined;
+        const rawScore = comp?.["score"] ?? comp?.["Score"];
+        const rawBridge = comp?.["bridgeTypeId"] ?? comp?.["BridgeTypeId"];
+        const completedAt = comp?.["completedAt"] ?? comp?.["CompletedAt"];
+        // Completed status plus real payload is required. A missing date does not invalidate a completion.
+        const hasEvidence =
+          completionState === "success" ||
+          (typeof rawScore === "number" &&
+            Number.isFinite(rawScore) &&
+            rawScore > 0 &&
+            typeof rawBridge === "string" &&
+            rawBridge.trim().length > 0) ||
+          (typeof completedAt === "string" && completionDate(completedAt) !== "");
+        const matchingIds =
+          (!comp?.["levelId"] || comp["levelId"] === levelId) &&
+          (!comp?.["LevelId"] || comp["LevelId"] === levelId) &&
+          (!comp?.["regionId"] || comp["regionId"] === regionId) &&
+          (!comp?.["RegionId"] || comp["RegionId"] === regionId);
+        if (
+          comp &&
+          !Array.isArray(comp) &&
+          lstatus === "completed" &&
+          hasEvidence &&
+          matchingIds &&
+          (completionState === undefined || completionState === "success")
+        ) {
           const rawUrl = comp["completionScreenshotUrl"] ?? comp["CompletionScreenshotUrl"];
           const rawAchId = comp["achievementId"] ?? comp["AchievementId"];
           completion = {
             playerId: String(comp["playerId"] ?? comp["PlayerId"] ?? ""),
             levelId,
             regionId,
-            bridgeTypeId: String(comp["bridgeTypeId"] ?? comp["BridgeTypeId"] ?? "beam"),
-            score: Number(comp["score"] ?? comp["Score"] ?? 0),
+            bridgeTypeId: typeof rawBridge === "string" ? rawBridge : "",
+            score: typeof rawScore === "number" && Number.isFinite(rawScore) ? rawScore : 0,
             status: "success",
             completionScreenshotUrl: typeof rawUrl === "string" ? rawUrl : undefined,
             // A read must not invent the date of a game-written completion.
-            completedAt: String(comp["completedAt"] ?? comp["CompletedAt"] ?? ""),
+            completedAt: typeof completedAt === "string" ? completionDate(completedAt) : "",
             achievementId: typeof rawAchId === "string" ? rawAchId : undefined,
           };
         }
@@ -125,6 +170,7 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
           regionId,
           ...(levelName ? { levelName } : {}),
           order,
+          ...(stageOrder ? { stageOrder } : {}),
           status: lstatus,
           engineeringConceptIds: conceptIds,
           ...(completion ? { completion } : {}),
@@ -135,7 +181,7 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
         regionId,
         name,
         status,
-        levels,
+        levels: sortStoryLevels(levels),
       };
     });
 

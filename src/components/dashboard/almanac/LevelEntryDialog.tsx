@@ -1,3 +1,4 @@
+import { levelStageLabel } from "@/lib/playfab/level-records";
 import { BookOpen, Medal } from "lucide-react";
 import { BrandedCover } from "@/components/common/BrandedCover";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +44,7 @@ export function CompletionScreenshot({
       )}
       <figcaption className="flex flex-wrap items-center justify-between gap-2 border-t-4 border-primary bg-card px-3 py-2">
         <span className="font-display text-xs uppercase tracking-[0.16em] text-muted-foreground">
-          Level {String(level.order).padStart(2, "0")}
+          {levelStageLabel(level)}
         </span>
         <span className="stamp text-[10px]">✓ Contract completed</span>
       </figcaption>
@@ -70,7 +71,7 @@ export function LevelEntryDialog({
       <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto border-4 border-primary bg-card">
         <DialogHeader>
           <DialogTitle className="text-center font-display text-xl uppercase tracking-[0.08em]">
-            Level {String(level.order).padStart(2, "0")} — {level.levelName ?? "Unknown"}
+            {levelStageLabel(level)} — {level.levelName ?? "Unknown"}
           </DialogTitle>
           <DialogDescription className="text-center">
             Your Almanac entry for this challenge.

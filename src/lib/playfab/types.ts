@@ -174,7 +174,7 @@ export interface Transaction {
 
 /* ----------------------------------------------------- almanac / journey */
 
-export type LevelStatus = "completed" | "current" | "locked";
+export type LevelStatus = "completed" | "current" | "locked" | "unknown";
 
 /**
  * A player's successful completion of a level. The GAME is the source of
@@ -199,11 +199,14 @@ export interface PlayerLevelCompletion {
 
 /** Level content: game-owned structure, website-owned educational annotation. */
 export interface AlmanacLevel {
+  /** Explicit story stage; never inferred from catalog order or array position. */
+  stageOrder?: number;
   stableId?: boolean;
   levelId: string;
   regionId: string;
   /** Absent while the level is still hidden by the game. */
   levelName?: string | undefined;
+  /** Source catalog position, retained for diagnostics; not the displayed story stage. */
   order: number;
   status: LevelStatus;
   /** Engineering concepts encountered in this level (Almanac/CMS content). */

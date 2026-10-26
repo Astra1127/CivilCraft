@@ -161,7 +161,9 @@ export function NotificationBell() {
                           </span>
                         ) : null}
                         <span className="block text-[11px] text-muted-foreground">
-                          {timeAgo(n.createdAt)}
+                          {n.kind === "level" && !n.createdAt
+                            ? "Synced completion"
+                            : timeAgo(n.createdAt)}
                           {n.read ? " · Read" : ""}
                         </span>
                       </span>

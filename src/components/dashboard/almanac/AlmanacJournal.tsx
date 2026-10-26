@@ -1,3 +1,4 @@
+import { levelStageLabel, verifiedLevelCompletion } from "@/lib/playfab/level-records";
 import { useQuery } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -247,6 +248,7 @@ export function AlmanacJournal({
                 {r.levels.map((l) => (
                   <li key={l.levelId}>
                     <LevelCard
+                      playerId={id}
                       level={l}
                       onOpen={() => (onLevelChange ? onLevelChange(l) : setSelected(l))}
                     />
@@ -388,11 +390,19 @@ export function AlmanacJournal({
   );
 }
 
-function LevelCard({ level, onOpen }: { level: AlmanacLevel; onOpen: () => void }) {
-  const label = `Level ${String(level.order).padStart(2, "0")}`;
+function LevelCard({
+  level,
+  onOpen,
+  playerId,
+}: {
+  level: AlmanacLevel;
+  onOpen: () => void;
+  playerId: string;
+}) {
+  const label = levelStageLabel(level);
   const bridge = getBridgeType(level.completion?.bridgeTypeId);
 
-  if (level.status === "completed") {
+  if (verifiedLevelCompletion(level, playerId)) {
     return (
       <button
         type="button"
@@ -427,6 +437,18 @@ function LevelCard({ level, onOpen }: { level: AlmanacLevel; onOpen: () => void 
       </button>
     );
   }
+
+  if (level.status === "completed" || level.status === "unknown")
+    return (
+      <div className="panel p-5">
+        <p className="font-display text-lg">
+          {label} — {level.levelName ?? level.levelId}
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Progress details are unavailable in your synced journal.
+        </p>
+      </div>
+    );
 
   if (level.status === "current") {
     return (
