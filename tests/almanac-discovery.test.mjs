@@ -10,6 +10,8 @@ import { playerNameDependencies } from "./helpers/player-name-ui.mjs";
 import * as levelRecords from "../src/lib/playfab/level-records.ts";
 import * as education from "../src/lib/playfab/almanac-education.ts";
 import * as navigation from "../src/lib/playfab/notification-navigation.ts";
+import * as playerLevel from "../src/lib/playfab/player-level.ts";
+import * as materialOrder from "../src/lib/almanac/material-order.ts";
 import catalog from "../src/lib/almanac/game-catalog.json" with { type: "json" };
 
 const require = createRequire(import.meta.url);
@@ -29,6 +31,12 @@ function load(path, dependencies = {}, extra = "") {
       dependencies[name] ??
       {
         "./almanac-education.ts": education,
+        "./player-level.ts": playerLevel,
+        "@/lib/almanac/material-order": materialOrder,
+        "./LessonIllustration":
+          name === "./LessonIllustration"
+            ? load("../src/components/dashboard/almanac/LessonIllustration.tsx")
+            : undefined,
         "./level-records.ts": levelRecords,
         "@/lib/playfab/level-records": levelRecords,
         "@/lib/playfab/notification-navigation": navigation,
@@ -149,7 +157,37 @@ const wrap =
     React.createElement(tag, props, children);
 const widgets = new Proxy({}, { get: (_, name) => wrap(name) });
 
-test("game lessons require explicit player records and quiz UI renders actual scores and reviews", async () => {
+test("lesson illustration handles missing and broken assets without broken images", async () => {
+  const { LessonIllustration } = load("../src/components/dashboard/almanac/LessonIllustration.tsx");
+  let view;
+  for (const id of ["What is Tension", "What is Compression", "What is Equilibrium"]) {
+    await act(async () => {
+      view = create(React.createElement(LessonIllustration, { id, title: id }));
+    });
+    assert.equal(view.root.findAllByType("svg").length, 1);
+    assert.match(view.root.findByType("svg").props["aria-label"], /forces|loads/);
+    await act(async () => view.unmount());
+  }
+  await act(async () => {
+    view = create(
+      React.createElement(LessonIllustration, {
+        id: "LESSON002",
+        title: "BEAM BRIDGE",
+        image: "/missing.png",
+      }),
+    );
+  });
+  await act(async () => view.root.findByType("img").props.onError());
+  assert.equal(view.root.findAllByType("img").length, 0);
+  assert.match(JSON.stringify(view.toJSON()), /Illustration unavailable/);
+  await act(async () =>
+    view.update(React.createElement(LessonIllustration, { id: "unknown", title: "Unknown" })),
+  );
+  assert.match(JSON.stringify(view.toJSON()), /Illustration unavailable/);
+  await act(async () => view.unmount());
+});
+
+test("lesson previews do not grant unlocks; full notes need records; quiz results are unchanged", async () => {
   const { GameLessons, QuizRecords } = load(
     "../src/components/dashboard/almanac/GameEducation.tsx",
     {
@@ -161,7 +199,18 @@ test("game lessons require explicit player records and quiz UI renders actual sc
   await act(async () => {
     view = create(React.createElement(GameLessons, { journey: {} }));
   });
-  assert.equal(view.root.findAllByType("img").length, 0);
+  assert.equal(view.root.findAllByType("img").length, 4);
+  assert.equal(view.root.findAllByType("svg").length, 3);
+  assert.equal(view.root.findAllByType("details").length, 0);
+  assert.equal(view.root.findAllByType("h3").length, 7);
+  for (const card of view.root.findAllByType("li")) {
+    const lesson = catalog.lessons.find((l) => l.title === card.findByType("h3").children.join(""));
+    assert.ok(
+      card
+        .findAllByType("p")
+        .some((p) => p.children.join("") === lesson.description.split(/\n|(?<=[.!?])\s+/)[0]),
+    );
+  }
   assert.match(JSON.stringify(view.toJSON()), /Unlock state not synchronized/);
   await act(async () => {
     view.update(
@@ -171,7 +220,8 @@ test("game lessons require explicit player records and quiz UI renders actual sc
     );
   });
   assert.match(JSON.stringify(view.toJSON()), /horizontal beams supported by piers/);
-  assert.equal(view.root.findAllByType("img").length, 1);
+  assert.equal(view.root.findAllByType("img").length, 4);
+  assert.equal(view.root.findAllByType("details").length, 1);
   await act(async () => {
     view.update(React.createElement(QuizRecords, { journey: {} }));
   });

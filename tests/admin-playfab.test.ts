@@ -40,6 +40,7 @@ let calls: { operation: string; body: Record<string, unknown> }[] = [];
 let data: Record<string, unknown> = {},
   stats: unknown[] = [],
   bans: unknown[] = [];
+let dataByPlayer = new Map<string, Record<string, unknown>>();
 let reports: Record<string, unknown> = {};
 let titleDataOverride: unknown = undefined;
 let rankingRows: Record<string, unknown>[] = [];
@@ -67,6 +68,7 @@ beforeEach(() => {
   titleDataOverride = undefined;
   rankingRows = [];
   data = {};
+  dataByPlayer = new Map();
   stats = [];
   bans = [];
   bansByPlayer = new Map();
@@ -194,7 +196,7 @@ beforeEach(() => {
         };
         break;
       case "Server/GetUserData":
-        result = { Data: data };
+        result = { Data: dataByPlayer.get(String(body["PlayFabId"])) ?? data };
         break;
       case "Server/GetPlayerStatistics":
         result = { Statistics: stats };
@@ -513,6 +515,62 @@ test("export pagination returns 20 then 5 without exposing URLs, raw records, or
   assert.equal(calls.filter((c) => c.operation === "Admin/ExportPlayersInSegment").length, 1);
   assert.equal((await request("/api/admin/players?cursor=forged", cookie)).status, 410);
 });
+test("directory levels read each visible player's dashboard key, preserve pagination and scope", async () => {
+  const cookie = await session();
+  dataByPlayer.set("1", { CurrentLevel: { Value: "12" }, XP: { Value: "999" } });
+  dataByPlayer.set("2", { CurrentLevel: { Value: "0" } });
+  dataByPlayer.set("3", { CurrentLevel: { Value: "not-a-level" } });
+  const first = await (await request("/api/admin/players", cookie)).json();
+  assert.equal(first.players.length, 20);
+  assert.equal(first.players[0].level, 12);
+  assert.equal(first.players[1].level, 0);
+  assert.equal(first.players[2].level, null);
+  assert.equal(first.players[3].level, null, "TotalScore must not become player level");
+  assert.equal(first.players[0].xp, null, "Level enrichment does not expose extra UserData");
+  const reads = calls.filter((c) => c.operation === "Server/GetUserData");
+  assert.equal(reads.length, 20);
+  for (const read of reads) assert.deepEqual(read.body["Keys"], ["CurrentLevel"]);
+  assert.deepEqual(
+    reads.map((r) => r.body["PlayFabId"]).sort(),
+    first.players.map((p: { playFabId: string }) => p.playFabId).sort(),
+  );
+  assert.ok(!JSON.stringify(first).includes(env.PLAYFAB_SECRET_KEY));
+  assert.equal((await (await request("/api/admin/players/1", cookie)).json()).level, 12);
+  const next = await (
+    await request(`/api/admin/players?cursor=${encodeURIComponent(first.nextCursor)}`, cookie)
+  ).json();
+  assert.equal(next.players.length, 5);
+  assert.equal(next.nextCursor, null);
+});
+
+test("directory prefers UserData CurrentLevel and retains only the validated named-statistic fallback", async () => {
+  fragmentFiles = [
+    'PlayerId\tDisplayName\tPlayerStatistics\nAA\tA\t[{"Name":"CurrentLevel","StatisticValue":9}]\nBB\tB\t[{"Name":"CurrentLevel","StatisticValue":4}]\nCC\tC\t[{"Name":"CurrentLevel","StatisticValue":-1}]\n',
+  ];
+  dataByPlayer.set("AA", { CurrentLevel: { Value: "15" } });
+  const cookie = await session();
+  const page = await (await request("/api/admin/players", cookie)).json();
+  assert.deepEqual(
+    page.players.map((p: { level: number | null }) => p.level),
+    [15, 4, null],
+  );
+  // Enrichment must not overwrite the cached export's legacy fallback.
+  dataByPlayer.delete("AA");
+  const reread = await (
+    await request(`/api/admin/players?cursor=${encodeURIComponent(page.snapshotCursor)}`, cookie)
+  ).json();
+  assert.equal(reread.players[0].level, 9);
+  failOperation = "Server/GetUserData";
+  const unavailable = await (
+    await request(`/api/admin/players?cursor=${encodeURIComponent(page.snapshotCursor)}`, cookie)
+  ).json();
+  assert.deepEqual(
+    unavailable.players.map((p: { level: number | null }) => p.level),
+    [9, 4, null],
+  );
+  assert.equal(unavailable.players[0].accountStatus, "active");
+});
+
 test("export parser bounds pages and rejects unsafe download targets", () => {
   const page = readExportPage(Buffer.from(tsv), true, null);
   assert.equal(page.players.length, 20);

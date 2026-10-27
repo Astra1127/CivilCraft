@@ -1,4 +1,5 @@
 import { equipmentRecord, equipmentSnapshot, resolveEquipment } from "./equipment.ts";
+import { parsePlayerLevel } from "./player-level.ts";
 import { LEADERBOARD_STATISTIC } from "./leaderboard-shared.ts";
 /**
  * Player profile & game data read from PlayFab (Client API, read-only).
@@ -287,7 +288,7 @@ export async function getPlayerProfile(playFabId?: string): Promise<PlayerProfil
     ...(createdAt ? { createdAt } : {}),
     ...(lastActive ? { lastActive } : {}),
     role: "player",
-    level: numberFrom(data, "CurrentLevel") ?? null,
+    level: parsePlayerLevel(data["CurrentLevel"]),
     xp: numberFrom(data, "XP") ?? null,
     xpToNextLevel: numberFrom(data, "XPToNextLevel") ?? null,
     totalScore:

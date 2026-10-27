@@ -1,6 +1,8 @@
 import catalog from "@/lib/almanac/game-catalog.json";
 import type { AlmanacJourney } from "@/lib/playfab/types";
 import { EmptyState } from "@/components/common/States";
+import { orderMaterials } from "@/lib/almanac/material-order";
+import { LessonIllustration } from "./LessonIllustration";
 
 export function QuizRecords({ journey }: { journey: AlmanacJourney }) {
   const attempts = journey.quizAttempts ?? [];
@@ -68,26 +70,29 @@ export function GameLessons({ journey }: { journey: AlmanacJourney }) {
         {catalog.lessons.map((lesson) => {
           const record = journey.lessonRecords?.find((r) => r.lessonId === lesson.id);
           return (
-            <li key={lesson.id} className="panel min-w-0 p-5">
+            <li key={lesson.id} className="panel min-w-0 overflow-hidden p-5">
+              <LessonIllustration
+                id={lesson.id}
+                title={lesson.title}
+                {...("image" in lesson ? { image: lesson.image } : {})}
+              />
               <h3 className="font-display text-lg">{lesson.title}</h3>
               <p className="text-xs text-muted-foreground">{lesson.topic}</p>
               <p className="mt-1 text-xs capitalize text-muted-foreground">
                 {record?.state ?? "Unlock state not synchronized"}
               </p>
+              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                {lesson.description.split(/\n|(?<=[.!?])\s+/)[0]}
+              </p>
               {record ? (
-                <>
-                  {"image" in lesson ? (
-                    <img
-                      src={lesson.image}
-                      alt={`${lesson.title} lesson illustration`}
-                      loading="lazy"
-                      className="mt-3 max-h-56 w-full rounded-xl object-contain"
-                    />
-                  ) : null}
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm font-bold text-primary">
+                    Read lesson notes
+                  </summary>
                   <p className="mt-3 whitespace-pre-line text-sm text-muted-foreground">
                     {lesson.description}
                   </p>
-                </>
+                </details>
               ) : null}
             </li>
           );
@@ -105,7 +110,7 @@ export function GameMaterials({ journey }: { journey: AlmanacJourney }) {
         separately for each player.
       </p>
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {catalog.materials.map((m) => {
+        {orderMaterials(catalog.materials).map((m) => {
           const discovered = (journey.discoveredMaterials ?? []).includes(m.id);
           return (
             <li key={m.id} className="panel min-w-0 overflow-hidden p-5">

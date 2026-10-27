@@ -1,4 +1,5 @@
 import { LEADERBOARD_STATISTIC } from "./leaderboard-shared.ts";
+import { parsePlayerLevel } from "./player-level.ts";
 import { createHmac } from "node:crypto";
 import { EncryptJWT, jwtDecrypt } from "jose";
 import type { AdminAuthConfig } from "../admin-auth/config.server.ts";
@@ -148,7 +149,7 @@ export function readExportPage(
         if (Array.isArray(stats)) {
           const stat = (name: string) =>
             numberValue(object(stats.find((s) => object(s)["Name"] === name))["StatisticValue"]);
-          player.level = stat("CurrentLevel");
+          player.level = parsePlayerLevel(stat("CurrentLevel"));
           player.totalScore = stat(LEADERBOARD_STATISTIC);
           player.bridgesCompleted = stat("BridgesCompleted");
           player.challengesCompleted = stat("ChallengesCompleted");
@@ -306,6 +307,7 @@ export async function directoryPage(
   const start = requestedPage === undefined ? state.offset : (requestedPage - 1) * pageSize;
   const end = Math.min(start + pageSize, all.length);
   const players = includeAll ? all : all.slice(start, end);
+  if (!includeAll) await enrichPlayerLevels(players);
   if (!includeAll && options.status === "all") await enrichStatuses(players);
   return {
     players,
@@ -391,6 +393,31 @@ async function readSnapshot(
     });
   }
   return cached.value;
+}
+
+/** Read the dashboard's authoritative key only for visible rows, never entire saves. */
+async function enrichPlayerLevels(players: AdminPlayer[]) {
+  const started = Date.now();
+  for (let i = 0; i < players.length; i += 4) {
+    if (Date.now() - started > 25000) break;
+    await Promise.all(
+      players.slice(i, i + 4).map(async (player) => {
+        try {
+          const result = await playFabAdmin("Server/GetUserData", {
+            PlayFabId: player.playFabId,
+            Keys: ["CurrentLevel"],
+          });
+          const currentLevel = parsePlayerLevel(
+            object(object(result["Data"])["CurrentLevel"])["Value"],
+          );
+          // Keep a real CurrentLevel export statistic as the existing legacy fallback.
+          player.level = currentLevel ?? player.level;
+        } catch {
+          // A failed optional level read must not remove a player or block moderation.
+        }
+      }),
+    );
+  }
 }
 
 async function enrichStatuses(players: AdminPlayer[]) {

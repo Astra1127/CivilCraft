@@ -1,4 +1,5 @@
 import { leaderboardRank } from "./leaderboard.server.ts";
+import { parsePlayerLevel } from "./player-level.ts";
 import { LEADERBOARD_STATISTIC } from "./leaderboard-shared.ts";
 import {
   AdminApiError,
@@ -146,7 +147,7 @@ export async function getAdminPlayer(id: string): Promise<AdminPlayerDetail> {
   return {
     ...player,
     rank: ranking.status === "fulfilled" ? (ranking.value?.rank ?? null) : null,
-    level: numberValue(value("CurrentLevel")),
+    level: parsePlayerLevel(value("CurrentLevel")),
     xp: numberValue(value("XP")),
     xpToNextLevel: numberValue(value("XPToNextLevel")),
     totalScore: stat(LEADERBOARD_STATISTIC),

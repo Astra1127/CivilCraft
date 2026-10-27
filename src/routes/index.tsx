@@ -606,25 +606,6 @@ function HomePage() {
         />
       </div>
 
-      <section className="bg-background py-12">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 sm:px-6">
-          <div>
-            <h2 className="text-3xl sm:text-4xl">What's New in Civil Craft?</h2>
-            <p className="mt-3 text-muted-foreground">
-              Find the current build and release notes on the Download page.
-            </p>
-          </div>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/download" hash="whats-new">
-              View release notes
-              <ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" />
-            </Link>
-          </Button>
-        </div>
-      </section>
-
-      <SectionDivider variant="draft" />
-
       {/* ---------- TEAM TEASER ---------- */}
       <section className="border-y-2 border-border bg-background py-11">
         <div className="mx-auto grid max-w-6xl items-center gap-6 px-4 sm:px-6 md:grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto]">
