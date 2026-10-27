@@ -1,10 +1,18 @@
 import type { AlmanacLevel } from "./types.ts";
 
-// StoryDialogue_Bhan_to_Shopkeeper.md documents these three authored contracts in this order.
-// Tutorials precede Story Mode but do not consume numbered story stages.
-const openingStages: Record<string, number> = {
+// Verified authored story chain: opening transcript, contract dialogue and
+// CanyonCrossing NPC phases. See docs/almanac-integration-audit.md for evidence.
+// Aliases affect display only. Saved IDs and notification targets stay intact.
+const storyStages: Record<string, number> = {
   ShopKeeper: 1,
   ShopKeeperContract: 1,
+  ReedsContract: 2,
+  "Reed's Contract": 2,
+  VancesContract: 3,
+  "Vance's Contract": 3,
+  SilasMainContract: 4,
+  SilasContract: 4,
+  MainContractSilas: 5,
 };
 
 export function tutorialNumber(levelId: string): number | undefined {
@@ -12,7 +20,7 @@ export function tutorialNumber(levelId: string): number | undefined {
 }
 
 export function canonicalStageOrder(levelId: string): number | undefined {
-  return Object.hasOwn(openingStages, levelId) ? openingStages[levelId] : undefined;
+  return Object.hasOwn(storyStages, levelId) ? storyStages[levelId] : undefined;
 }
 
 export function sortStoryLevels(levels: AlmanacLevel[]): AlmanacLevel[] {
@@ -45,7 +53,9 @@ export function verifiedLevelCompletion(level: AlmanacLevel, playerId?: string):
 /** Exported `order` is an internal catalog position, not a story-stage number. */
 export function levelStageLabel(level: AlmanacLevel): string {
   const tutorial = tutorialNumber(level.levelId);
-  if (tutorial) return `Tutorial ${tutorial}`;
+  if (tutorial) return `Tutorial ${tutorial} (Level 00)`;
+  if (["ReedSideInspection", "VanceSideRealignment"].includes(level.levelId))
+    return "Side contract";
   const stage = canonicalStageOrder(level.levelId) ?? level.stageOrder;
   return stage ? `Level ${String(stage).padStart(2, "0")}` : "Contract";
 }

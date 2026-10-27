@@ -1,0 +1,159 @@
+{
+  "lessons": [
+    {
+      "id": "LESSON002",
+      "title": "BEAM BRIDGE",
+      "topic": "Beam bridge",
+      "description": "A beam bridge is a structural system consisting primarily of horizontal beams supported by piers, columns, or abutments. When a downward load acts on the bridge, the beam bends, generally producing compression on one side and tension on the other. These forces are carried through the structure toward its supports. Beam bridges are commonly suited to relatively short spans because increasing the distance between supports increases the structural demands on the beam.",
+      "image": "/images/almanac-game/6aedd357aa978324690d88ed82a19beb.png",
+      "imageSource": "BridgeBuilder/Data/Lessons/Bhan's Contract_photo.png",
+      "source": "BridgeBuilder/Data/Lessons/Beam.asset"
+    },
+    {
+      "id": "What is Compression",
+      "title": "What is Compression",
+      "topic": "Structural principles",
+      "description": "Compression is a pushing force that squeezes or shortens a structural member.\nWhen a member is under compression, forces push toward each other from opposite ends. If the compression becomes too great, the member may crush, bend, or buckle.\nColumns, piers, and bridge supports commonly resist compression.\nBridge Example:\nBridge piers experience compression as they carry the weight of the bridge and transfer it to the ground.",
+      "source": "BridgeBuilder/Data/Lessons/Compression.asset"
+    },
+    {
+      "id": "deadload",
+      "title": "Dead Load",
+      "topic": "Structural principles",
+      "description": "A dead load is the load associated with the permanent components of a structure. For a bridge, this includes the self-weight of structural components such as the deck, beams, trusses, piers, barriers, and other permanently attached elements. Unlike live loads, these loads generally remain in place and continuously act on the structure throughout its service life.",
+      "image": "/images/almanac-game/8097286e569a66a4d9e5bfc046b02263.png",
+      "imageSource": "BridgeBuilder/Data/Lessons/Codex Image Sep 5, 2026, 01_45_52 AM.png",
+      "source": "BridgeBuilder/Data/Lessons/DeadLoad.asset"
+    },
+    {
+      "id": "What is Equilibrium",
+      "title": "What is Equilibrium",
+      "topic": "Structural principles",
+      "description": "Structural equilibrium is the condition in which the combined forces and moments acting on a structure balance one another. For a bridge to remain stationary and stable, loads such as its own weight and traffic must be balanced by reactions from its supports. If these forces or moments become unbalanced, the structure may translate, rotate, or experience instability.",
+      "source": "BridgeBuilder/Data/Lessons/Equilibruim.asset"
+    },
+    {
+      "id": "LESSON001",
+      "title": "Live Load",
+      "topic": "Structural principles",
+      "description": "A live load is a temporary or variable force imposed on a structure by occupants, vehicles, equipment, materials, or other objects that are not permanently part of the structure. On a bridge, live loads may change in magnitude and position as vehicles or pedestrians move across the deck, causing different structural members to experience changing forces. FHWA guidance, for example, distinguishes temporary construction live loads such as workers, tools, supplies, materials, and equipment from permanent structural loads.",
+      "image": "/images/almanac-game/2db204386ad37a845b49016eb72888b4.png",
+      "imageSource": "Elements/Vehicles/Screenshot 2026-08-26 163404.png",
+      "source": "BridgeBuilder/Data/Lessons/LiveLoadLesson.asset"
+    },
+    {
+      "id": "What is Tension",
+      "title": "What is Tension",
+      "topic": "Structural principles",
+      "description": "Tension is a pulling force that stretches a structural member.\nWhen a member is under tension, forces pull away from each other at opposite ends. The member becomes slightly longer as it carries the load. If the tension becomes greater than the material’s strength, the member may stretch excessively or break.\nCables, ropes, and the lower portions of some bridge components commonly resist tension.\nBridge Example:\nThe main cables of a suspension bridge are placed under tension as they support the bridge deck.",
+      "source": "BridgeBuilder/Data/Lessons/Tension.asset"
+    },
+    {
+      "id": "LESSON004",
+      "title": "What is Truss",
+      "topic": "Truss bridge",
+      "description": "A truss bridge uses a framework of straight structural members connected to form stable arrangements, most notably triangular units. When loads act on the bridge, forces are carried through the interconnected members, with individual members primarily resisting tension or compression. The triangular configuration provides structural rigidity and allows substantial loads to be carried efficiently.",
+      "image": "/images/almanac-game/c7ad14becd77b714a820300c6ed3a180.png",
+      "imageSource": "BridgeBuilder/Data/Lessons/Tutorial_photo.png",
+      "source": "BridgeBuilder/Data/Lessons/Truss.asset"
+    }
+  ],
+  "materials": [
+    {
+      "id": "wood_beam",
+      "unityId": "Beam",
+      "name": "Timber Beam",
+      "description": "A low-cost structural member used to support road decks and form trusses. Timber beams resist both pulling and pushing forces and are placed as a matching pair across the bridge.",
+      "costPerMeter": 100,
+      "massPerMeter": 3,
+      "maxLength": 10,
+      "maxTension": 41500,
+      "maxCompression": 41000,
+      "dual": true,
+      "pier": false,
+      "image": "/images/almanac-game/999161720269b2c43881339b86f9c2b6.png",
+      "imageSource": "Elements/UI/bm_ui/WoodBeam_mat_icon.png",
+      "source": "BridgeBuilder/Data/Resources/Beam.asset"
+    },
+    {
+      "id": "concrete_road",
+      "unityId": "Concrete Road",
+      "name": "Reinforced Concrete Road Deck",
+      "description": "A reinforced concrete driving deck with higher tensile capacity than timber roads. Connect it to triangulated beams or supported piers; a flat unsupported deck can still collapse. Its reinforcement carries tension while the concrete carries compression. Heavier and more expensive than wood, with a 10 m placement limit. Mass and strength are balanced gameplay values, not real-world engineering ratings.",
+      "costPerMeter": 650,
+      "massPerMeter": 180,
+      "maxLength": 10,
+      "maxTension": 320000,
+      "maxCompression": 2000000,
+      "dual": false,
+      "pier": false,
+      "image": "/images/almanac-game/2c7f87884363c10419a67a604e269078.png",
+      "imageSource": "Elements/UI/bm_ui/Road_Concrete_op2.png",
+      "source": "BridgeBuilder/Data/Resources/Concrete Road.asset"
+    },
+    {
+      "id": "concrete_member",
+      "unityId": "ConcreteBeam",
+      "name": "Concrete Beam",
+      "description": "Reinforced concrete beams support the Concrete Road deck and transfer its weight and vehicle loads to anchored joints or piers. Use triangular bracing and short supported spans; an unanchored beam cannot support a bridge just by touching it. Each placement creates two side beams, so its price and mass are doubled. Stronger than timber, but heavier and more expensive. Long flat spans can still fail without a continuous load path. These properties are game balance values, not real-world engineering ratings.",
+      "costPerMeter": 600,
+      "massPerMeter": 90,
+      "maxLength": 15,
+      "maxTension": 400000,
+      "maxCompression": 2100000,
+      "dual": true,
+      "pier": false,
+      "image": "/images/almanac-game/d5a222f78463c874e83a77423e84e6ce.png",
+      "imageSource": "Elements/UI/bm_ui/concrete beam not selected.png",
+      "source": "BridgeBuilder/Data/Resources/ConcreteBeam.asset"
+    },
+    {
+      "id": "wood_support",
+      "unityId": "Pier",
+      "name": "Timber Pier",
+      "description": "A vertical foundation support that transfers bridge loads toward the ground or riverbed. Place piers beneath the road where direct support is available.",
+      "costPerMeter": 500,
+      "massPerMeter": 182.5,
+      "maxLength": 50,
+      "maxTension": 119000,
+      "maxCompression": 1160000,
+      "dual": false,
+      "pier": true,
+      "image": "/images/almanac-game/fe5bc2a0e832954428d3c666dca2284f.png",
+      "imageSource": "Elements/UI/bm_ui/T_Pillar_icon.png",
+      "source": "BridgeBuilder/Data/Resources/Pier.asset"
+    },
+    {
+      "id": "rope",
+      "unityId": "RopeMaterial",
+      "name": "Support Rope",
+      "description": "A flexible support for suspension-style bridges that works best under tension. Rope cannot carry meaningful compression, so anchor it securely above a supported road deck.",
+      "costPerMeter": 125,
+      "massPerMeter": 0.216,
+      "maxLength": null,
+      "maxTension": 30000,
+      "maxCompression": 0,
+      "dual": true,
+      "pier": false,
+      "image": "/images/almanac-game/69f3ba5b0653805438eff98b9377ce57.png",
+      "imageSource": "Elements/UI/bm_ui/Rope_icon_v2.png",
+      "source": "BridgeBuilder/Data/Resources/RopeMaterial.asset"
+    },
+    {
+      "id": "wood_road",
+      "unityId": "Wood Road",
+      "name": "Timber Road Deck",
+      "description": "An affordable driving surface that vehicles need to cross the bridge. Build a continuous deck between both sides and support it with beams or piers.",
+      "costPerMeter": 300,
+      "massPerMeter": 9,
+      "maxLength": 10,
+      "maxTension": 124500,
+      "maxCompression": 124000,
+      "dual": false,
+      "pier": false,
+      "image": "/images/almanac-game/07f65aea806e3164282f9fc0f8d21a94.png",
+      "imageSource": "Elements/UI/bm_ui/WoodRoad_mat_icon.png",
+      "source": "BridgeBuilder/Data/Resources/Wood Road.asset"
+    }
+  ]
+}

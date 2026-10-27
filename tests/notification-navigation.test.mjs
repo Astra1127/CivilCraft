@@ -279,6 +279,11 @@ test("journal opens linked completion, closes via URL callback, and follows brow
     changes = [];
   const Dialog = el("dialog");
   const { AlmanacJournal } = load("src/components/dashboard/almanac/AlmanacJournal.tsx", {
+    "./GameEducation": {
+      GameLessons: el("section"),
+      GameMaterials: el("section"),
+      QuizRecords: el("section"),
+    },
     ...baseMocks,
     "@tanstack/react-query": {
       useQuery: (options) => ({

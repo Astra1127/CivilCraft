@@ -8,6 +8,7 @@
  * completion date and screenshot URL). Absent key = empty journey.
  */
 import { getPlayerData } from "./player.ts";
+import { parseEducation } from "./almanac-education.ts";
 import {
   canonicalStageOrder,
   completionDate,
@@ -143,6 +144,15 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
           (completionState === undefined || completionState === "success")
         ) {
           const rawUrl = comp["completionScreenshotUrl"] ?? comp["CompletionScreenshotUrl"];
+          const snapshot = comp["snapshot"] as Record<string, unknown> | undefined;
+          const snapshotFileName =
+            snapshot &&
+            snapshot["contractId"] === levelId &&
+            snapshot["regionId"] === regionId &&
+            typeof snapshot["fileName"] === "string" &&
+            /^bridge-[A-Za-z0-9_-]{1,160}\.png$/.test(snapshot["fileName"])
+              ? snapshot["fileName"]
+              : undefined;
           const rawAchId = comp["achievementId"] ?? comp["AchievementId"];
           completion = {
             playerId: String(comp["playerId"] ?? comp["PlayerId"] ?? ""),
@@ -151,7 +161,9 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
             bridgeTypeId: typeof rawBridge === "string" ? rawBridge : "",
             score: typeof rawScore === "number" && Number.isFinite(rawScore) ? rawScore : 0,
             status: "success",
-            completionScreenshotUrl: typeof rawUrl === "string" ? rawUrl : undefined,
+            completionScreenshotUrl:
+              typeof rawUrl === "string" && /^https:\/\//.test(rawUrl) ? rawUrl : undefined,
+            ...(snapshotFileName ? { snapshotFileName } : {}),
             // A read must not invent the date of a game-written completion.
             completedAt: typeof completedAt === "string" ? completionDate(completedAt) : "",
             achievementId: typeof rawAchId === "string" ? rawAchId : undefined,
@@ -189,6 +201,7 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
     const completedCount = allLevels.filter((l) => l.completion).length;
 
     return {
+      ...parseEducation(parsed),
       regions,
       levelsCompleted: explicitCompleted ?? completedCount,
       levelsTotal: explicitTotal ?? allLevels.length,

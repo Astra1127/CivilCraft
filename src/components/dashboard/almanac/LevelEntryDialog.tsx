@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { getBridgeType, getConcepts } from "@/lib/almanac/content";
 import type { AlmanacLevel } from "@/lib/playfab";
+import { useState } from "react";
+import { useBridgeSnapshot } from "./useBridgeSnapshot";
 
 export function CompletionScreenshot({
   level,
@@ -20,7 +22,10 @@ export function CompletionScreenshot({
   level: AlmanacLevel;
   className?: string;
 }) {
-  const url = level.completion?.completionScreenshotUrl;
+  const privateUrl = useBridgeSnapshot(level);
+  const candidate = privateUrl ?? level.completion?.completionScreenshotUrl;
+  const [failed, setFailed] = useState<string>();
+  const url = candidate && candidate !== failed ? candidate : undefined;
   return (
     <figure
       className={`relative overflow-hidden rounded-2xl border-4 border-primary bg-secondary/60 shadow-[var(--shadow-soft)] ${className ?? ""}`}
@@ -30,17 +35,19 @@ export function CompletionScreenshot({
         aria-hidden="true"
         className="absolute left-3 top-3 z-10 rounded-full border-2 border-primary/40 bg-card/90 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.18em] text-primary"
       >
-        Field photo
+        {url ? "Field photo" : "Photo unavailable · Placeholder"}
       </span>
       {url ? (
         <img
           src={url}
           alt={`Completed bridge built by the player in ${level.levelName ?? "this level"}`}
           loading="lazy"
+          onError={() => setFailed(candidate)}
+          referrerPolicy="no-referrer"
           className="aspect-video w-full object-cover"
         />
       ) : (
-        <BrandedCover label="Completion screenshot pending upload from the game" />
+        <BrandedCover label="Completion screenshot unavailable or not synchronized" />
       )}
       <figcaption className="flex flex-wrap items-center justify-between gap-2 border-t-4 border-primary bg-card px-3 py-2">
         <span className="font-display text-xs uppercase tracking-[0.16em] text-muted-foreground">

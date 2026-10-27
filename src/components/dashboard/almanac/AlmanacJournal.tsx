@@ -1,19 +1,6 @@
 import { levelStageLabel, verifiedLevelCompletion } from "@/lib/playfab/level-records";
 import { useQuery } from "@tanstack/react-query";
-import {
-  BookOpen,
-  Cable,
-  Check,
-  CircleDot,
-  Columns3,
-  Compass,
-  Layers,
-  Lock,
-  MapPin,
-  Trees,
-  Trophy,
-  Wrench,
-} from "lucide-react";
+import { BookOpen, Check, CircleDot, Lock, MapPin, Trophy } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DemoBadge } from "@/components/common/DemoBadge";
 import { PlayerName } from "@/components/common/PlayerName";
@@ -26,7 +13,7 @@ import {
   CompletionScreenshot,
   LevelEntryDialog,
 } from "@/components/dashboard/almanac/LevelEntryDialog";
-import { bridgeTypes, engineeringConcepts, getBridgeType, materials } from "@/lib/almanac/content";
+import { bridgeTypes, engineeringConcepts, getBridgeType } from "@/lib/almanac/content";
 import { useAuth } from "@/lib/auth";
 import { parsePlayerName } from "@/lib/player-name";
 import { almanacService, profileService, type AlmanacLevel } from "@/lib/playfab";
@@ -35,24 +22,13 @@ import { cn } from "@/lib/utils";
 import { findNotificationLevel } from "@/lib/playfab/notification-navigation";
 import { useNotificationRead } from "@/components/dashboard/useNotificationRead";
 
-const materialIcons = {
-  wood_beam: Trees,
-  wood_road: Layers,
-  wood_support: Columns3,
-  rope: Cable,
-  concrete_road: Layers,
-  concrete_member: Columns3,
-  concrete_support: Columns3,
-  steel_beam: Wrench,
-  steel_road: Layers,
-  steel_support: Columns3,
-  steel_cable: Cable,
-};
+import { GameLessons, GameMaterials, QuizRecords } from "./GameEducation";
 
 const tabs = [
   { value: "journey", label: "My Journey" },
   { value: "bridges", label: "Bridge Types" },
   { value: "engineering", label: "Engineering" },
+  { value: "quizzes", label: "Quiz Records" },
   { value: "materials", label: "Materials" },
 ];
 
@@ -100,23 +76,9 @@ export function AlmanacJournal({
   const regionPercent = j.regions.length
     ? Math.round((completedRegions / j.regions.length) * 100)
     : 0;
-  const discoveredMaterials = materials.filter((material) =>
-    (j.discoveredMaterials ?? []).includes(material.id),
-  );
   const discoveredBridges = bridgeTypes.filter((b) =>
     j.discoveredBridgeTypeIds.includes(b.bridgeTypeId),
   );
-  const discoveredConceptIds = new Set(
-    j.regions.flatMap((region) =>
-      region.levels
-        .filter((level) => level.status === "completed" && level.completion)
-        .flatMap((level) => level.engineeringConceptIds ?? []),
-    ),
-  );
-  const discoveredConcepts = engineeringConcepts.filter((concept) =>
-    discoveredConceptIds.has(concept.id),
-  );
-
   return (
     <div className="space-y-8">
       {levelId && !linkedLevel ? (
@@ -316,63 +278,14 @@ export function AlmanacJournal({
           )}
         </TabsContent>
 
-        {/* --------------------------------------------------- engineering */}
         <TabsContent value="engineering" className="mt-6">
-          {discoveredConcepts.length === 0 ? (
-            <EmptyState
-              title="Your Almanac is waiting."
-              description="Engineering concepts recorded in your completed Civil Craft projects will appear here."
-            />
-          ) : (
-            <ul className="grid gap-4 [&>li]:min-w-0 sm:grid-cols-2 lg:grid-cols-3">
-              {discoveredConcepts.map((c) => (
-                <li key={c.id} className="panel hover-lift p-5">
-                  <span className="grid h-10 w-10 place-items-center rounded-2xl border-2 border-border bg-gold/15 text-gold">
-                    <Compass className="h-5 w-5" aria-hidden="true" />
-                  </span>
-                  <h3 className="mt-3 font-display text-lg">{c.name}</h3>
-                  <p className="mt-1 text-sm text-muted-foreground">{c.summary}</p>
-                  {c.diagram ? (
-                    <pre className="blueprint mt-3 overflow-x-auto rounded-xl border-2 border-border p-2 font-mono text-[11px] text-primary/75">
-                      {c.diagram}
-                    </pre>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
+          <GameLessons journey={j} />
         </TabsContent>
-
-        {/* ----------------------------------------------------- materials */}
+        <TabsContent value="quizzes" className="mt-6">
+          <QuizRecords journey={j} />
+        </TabsContent>
         <TabsContent value="materials" className="mt-6">
-          {discoveredMaterials.length === 0 ? (
-            <EmptyState
-              title="Your Almanac is waiting."
-              description="Materials you discover in Civil Craft will be recorded here."
-            />
-          ) : (
-            <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {discoveredMaterials.map((m) => {
-                const Icon = materialIcons[m.id as keyof typeof materialIcons] ?? Layers;
-                return (
-                  <li key={m.id} className="panel min-w-0 overflow-hidden">
-                    <div
-                      className="blueprint relative flex h-28 items-center justify-center border-b-2 border-border bg-secondary/40"
-                      aria-hidden="true"
-                    >
-                      <span className="grid h-16 w-16 place-items-center rounded-2xl border-2 border-gold/40 bg-card shadow-sm">
-                        <Icon className="h-8 w-8 text-gold" strokeWidth={1.5} />
-                      </span>
-                    </div>
-                    <div className="p-5">
-                      <h3 className="font-display text-lg">{m.name}</h3>
-                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{m.note}</p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+          <GameMaterials journey={j} />
         </TabsContent>
       </Tabs>
 

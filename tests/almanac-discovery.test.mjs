@@ -7,6 +7,10 @@ import React from "react";
 import { act, create } from "react-test-renderer";
 import ts from "typescript";
 import { playerNameDependencies } from "./helpers/player-name-ui.mjs";
+import * as levelRecords from "../src/lib/playfab/level-records.ts";
+import * as education from "../src/lib/playfab/almanac-education.ts";
+import * as navigation from "../src/lib/playfab/notification-navigation.ts";
+import catalog from "../src/lib/almanac/game-catalog.json" with { type: "json" };
 
 const require = createRequire(import.meta.url);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -21,7 +25,17 @@ function load(path, dependencies = {}, extra = "") {
   }).outputText;
   runInNewContext(source + extra, {
     exports,
-    require: (name) => dependencies[name] ?? require(name),
+    require: (name) =>
+      dependencies[name] ??
+      {
+        "./almanac-education.ts": education,
+        "./level-records.ts": levelRecords,
+        "@/lib/playfab/level-records": levelRecords,
+        "@/lib/playfab/notification-navigation": navigation,
+        "./useBridgeSnapshot": { useBridgeSnapshot: () => undefined },
+        "@/components/dashboard/useNotificationRead": { useNotificationRead: () => {} },
+      }[name] ??
+      require(name),
   });
   return exports;
 }
@@ -95,11 +109,11 @@ test("material field does not alter existing project or bridge progression", asy
   assert.equal(journey.regions[0].levels[0].levelId, "level_0");
   assert.equal(journey.regions[0].levels[0].order, 1);
   assert.deepEqual(journey.regions[0].levels[0].engineeringConceptIds, []);
-  assert.equal(journey.regions[0].levels[0].completion.completedAt, "");
+  assert.equal(journey.regions[0].levels[0].completion, undefined);
   assert.equal(journey.levelsCompleted, 7);
   assert.equal(journey.levelsTotal, 37);
   assert.equal(journey.journeyPercent, 24);
-  assert.deepEqual(journey.discoveredBridgeTypeIds, ["beam"]);
+  assert.deepEqual(journey.discoveredBridgeTypeIds, []);
 });
 
 test("completion dates are game-written, never generated while reading", async () => {
@@ -134,6 +148,116 @@ const wrap =
   ({ children, ...props }) =>
     React.createElement(tag, props, children);
 const widgets = new Proxy({}, { get: (_, name) => wrap(name) });
+
+test("game lessons require explicit player records and quiz UI renders actual scores and reviews", async () => {
+  const { GameLessons, QuizRecords } = load(
+    "../src/components/dashboard/almanac/GameEducation.tsx",
+    {
+      "@/lib/almanac/game-catalog.json": { default: catalog },
+      "@/components/common/States": widgets,
+    },
+  );
+  let view;
+  await act(async () => {
+    view = create(React.createElement(GameLessons, { journey: {} }));
+  });
+  assert.equal(view.root.findAllByType("img").length, 0);
+  assert.match(JSON.stringify(view.toJSON()), /Unlock state not synchronized/);
+  await act(async () => {
+    view.update(
+      React.createElement(GameLessons, {
+        journey: { lessonRecords: [{ lessonId: "LESSON002", state: "discovered" }] },
+      }),
+    );
+  });
+  assert.match(JSON.stringify(view.toJSON()), /horizontal beams supported by piers/);
+  assert.equal(view.root.findAllByType("img").length, 1);
+  await act(async () => {
+    view.update(React.createElement(QuizRecords, { journey: {} }));
+  });
+  assert.equal(view.root.findByType("EmptyState").props.title, "No quiz records synchronized");
+  await act(async () => {
+    view.update(
+      React.createElement(QuizRecords, {
+        journey: {
+          quizAttempts: [
+            {
+              quizId: "beam",
+              attemptId: "a1",
+              title: "Actual published quiz",
+              score: 0,
+              totalQuestions: 1,
+            },
+          ],
+        },
+      }),
+    );
+  });
+  assert.match(view.root.findAllByType("p")[0].children.join(""), /0\/1.*0%/);
+  assert.match(JSON.stringify(view.toJSON()), /Completion date unavailable/);
+  assert.equal(view.root.findAllByType("details").length, 0);
+  await act(async () => {
+    view.update(
+      React.createElement(QuizRecords, {
+        journey: {
+          quizAttempts: [
+            {
+              quizId: "beam",
+              attemptId: "a2",
+              title: "Actual published quiz",
+              score: 1,
+              totalQuestions: 1,
+              answers: [
+                {
+                  questionId: "q",
+                  question: "Actual question",
+                  choices: ["Actual A", "Actual B"],
+                  selectedIndex: 0,
+                  correctIndex: 0,
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+  });
+  assert.equal(view.root.findAllByType("details").length, 1);
+  assert.match(JSON.stringify(view.toJSON()), /Actual question/);
+  assert.match(JSON.stringify(view.toJSON()), /Your answer/);
+  await act(async () => view.unmount());
+});
+
+test("broken bridge photos fall back to a clearly identified placeholder", async () => {
+  const { CompletionScreenshot } = load(
+    "../src/components/dashboard/almanac/LevelEntryDialog.tsx",
+    {
+      "lucide-react": widgets,
+      "@/components/common/BrandedCover": widgets,
+      "@/components/ui/badge": widgets,
+      "@/components/ui/button": widgets,
+      "@/components/ui/dialog": widgets,
+      "@/lib/almanac/content": content,
+    },
+  );
+  let view;
+  await act(async () => {
+    view = create(
+      React.createElement(CompletionScreenshot, {
+        level: {
+          levelId: "ShopKeeper",
+          completion: { completionScreenshotUrl: "https://example.test/missing.png" },
+        },
+      }),
+    );
+  });
+  assert.equal(view.root.findAllByType("img").length, 1);
+  await act(async () => view.root.findByType("img").props.onError());
+  assert.equal(view.root.findAllByType("img").length, 0);
+  assert.match(JSON.stringify(view.toJSON()), /Placeholder/);
+  assert.match(view.root.findByType("BrandedCover").props.label, /unavailable or not synchronized/);
+  await act(async () => view.unmount());
+});
 
 test("completion dialog keeps undated completions visible without inventing a date", async () => {
   const component = load("../src/components/dashboard/almanac/LevelEntryDialog.tsx", {
@@ -186,6 +310,7 @@ test("completion notifications label missing and invalid dates as unavailable", 
       "@/components/ui/dropdown-menu": widgets,
       "@/lib/playfab": {},
       "@/lib/utils": {},
+      "@/lib/auth": {},
     },
     "\nexports.timeAgo = timeAgo;",
   );
@@ -194,15 +319,15 @@ test("completion notifications label missing and invalid dates as unavailable", 
   assert.notEqual(component.timeAgo("2026-09-01T10:00:00.000Z"), "Date unavailable");
 });
 
-test("Materials UI reveals only exact game-written entries and preserves empty states", async () => {
+test("Materials UI reveals properties only for exact game-written entries", async () => {
   for (const [ids, expected] of [
     [undefined, []],
     [[], []],
     [["unknown", "wood", "WOOD_BEAM", " wood_beam"], []],
-    [["wood_beam"], ["Wood Beam"]],
+    [["wood_beam"], ["Timber Beam"]],
     [
       ["wood_road", "wood_support"],
-      ["Wood Support / Pier", "Wood Road"],
+      ["Timber Pier", "Timber Road Deck"],
     ],
   ]) {
     const journey = {
@@ -214,6 +339,10 @@ test("Materials UI reveals only exact game-written entries and preserves empty s
       discoveredMaterials: ids,
     };
     const component = load("../src/components/dashboard/almanac/AlmanacJournal.tsx", {
+      "./GameEducation": load("../src/components/dashboard/almanac/GameEducation.tsx", {
+        "@/lib/almanac/game-catalog.json": { default: catalog },
+        "@/components/common/States": widgets,
+      }),
       ...playerNameDependencies,
       "@tanstack/react-query": {
         useQuery: ({ queryKey }) => ({
@@ -245,10 +374,13 @@ test("Materials UI reveals only exact game-written entries and preserves empty s
         (node) => node.type === "TabsContent" && node.props.value === "materials",
       )[0];
       assert.deepEqual(
-        tab.findAllByType("h3").map((node) => node.children.join("")),
+        tab
+          .findAllByType("li")
+          .filter((node) => node.findAllByType("dl").length)
+          .map((node) => node.findByType("h3").children.join("")),
         expected,
       );
-      assert.equal(tab.findAllByType("EmptyState").length, expected.length ? 0 : 1);
+      assert.equal(tab.findAllByType("dl").length, expected.length);
       assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /Levels completed|0 \/ 20/);
       assert.match(JSON.stringify(renderer.toJSON()), /Projects completed|Regions completed/);
       assert.doesNotMatch(JSON.stringify(renderer.toJSON()), /<#BF40BF>/);

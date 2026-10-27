@@ -69,14 +69,14 @@ test("only numbered story metadata determines stage order; raw IDs, catalog orde
     ["TUT_CONTRACT1", "TUT_CONTRACT2", "ShopKeeper", "MainContractSilas", "MarshID"],
   );
   assert.deepEqual(result.slice(0, 3).map(levelStageLabel), [
-    "Tutorial 1",
-    "Tutorial 2",
+    "Tutorial 1 (Level 00)",
+    "Tutorial 2 (Level 00)",
     "Level 01",
   ]);
   assert.equal(result[2].order, 4);
   assert.equal(result[3].order, 1);
   assert.equal(result[3].status, "current");
-  assert.equal(levelStageLabel(result[3]), "Contract");
+  assert.equal(levelStageLabel(result[3]), "Level 05");
   assert.equal(findNotificationLevel(j, "p1", "ShopKeeper", "canyon_crossing"), result[2]);
   assert.equal(first(rawLevel({ levelId: "ShopKeeperContract" })).stageOrder, 1);
   assert.equal(first(rawLevel({ levelId: "custom", order: 99 })).stageOrder, undefined);
@@ -103,8 +103,8 @@ test("tutorials remain completed and navigable without consuming Story Mode stag
   ]);
   const levels = j.regions[0].levels;
   assert.deepEqual(levels.map(levelStageLabel), [
-    "Tutorial 1",
-    "Tutorial 2",
+    "Tutorial 1 (Level 00)",
+    "Tutorial 2 (Level 00)",
     "Level 01",
     "Level 02",
   ]);
@@ -117,7 +117,7 @@ test("tutorials remain completed and navigable without consuming Story Mode stag
     assert.equal(tutorial.status, "completed");
     assert.equal(findNotificationLevel(j, "p1", tutorial.levelId, "canyon_crossing"), tutorial);
   }
-  assert.equal(levelStageLabel({ ...levels[0], stageOrder: 1 }), "Tutorial 1");
+  assert.equal(levelStageLabel({ ...levels[0], stageOrder: 1 }), "Tutorial 1 (Level 00)");
   assert.equal(levelStageLabel({ ...levels[2], stageOrder: 3 }), "Level 01");
   assert.equal(
     levelStageLabel(first(rawLevel({ levelId: "unknown-story", order: 2 }))),

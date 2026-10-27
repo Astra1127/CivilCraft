@@ -184,6 +184,8 @@ export type LevelStatus = "completed" | "current" | "locked" | "unknown";
  * final, successful build only.
  */
 export interface PlayerLevelCompletion {
+  /** Private Entity File reference, bound to this exact completion's IDs. */
+  snapshotFileName?: string;
   playerId: string;
   levelId: string;
   regionId: string;
@@ -222,6 +224,8 @@ export interface AlmanacRegion {
 }
 
 export interface AlmanacJourney {
+  quizAttempts?: import("./almanac-education.ts").QuizAttempt[];
+  lessonRecords?: import("./almanac-education.ts").LessonRecord[];
   regions: AlmanacRegion[];
   levelsCompleted: number;
   levelsTotal: number;
