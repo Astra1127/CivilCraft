@@ -10,11 +10,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getBridgeType, getConcepts } from "@/lib/almanac/content";
+import { getBridgeType } from "@/lib/almanac/content";
 import type { AlmanacLevel } from "@/lib/playfab";
 import { useState } from "react";
 import { useBridgeSnapshot } from "./useBridgeSnapshot";
-import { bridgeLesson } from "@/lib/almanac/lesson-catalog";
+import { bridgeLesson, popupConcepts } from "@/lib/almanac/lesson-catalog";
 import { ConceptIllustrations } from "./ConceptIllustrations";
 import { LessonIllustration } from "./LessonIllustration";
 
@@ -74,7 +74,10 @@ export function LevelEntryDialog({
   if (!level) return null;
   const c = level.completion;
   const bridge = getBridgeType(c?.bridgeTypeId);
-  const concepts = getConcepts(level.engineeringConceptIds);
+  // Tutorial 1 omits Bending from this presentation only; keep synced data intact.
+  const concepts = popupConcepts(level.engineeringConceptIds).filter(
+    (concept) => level.levelId !== "TUT_CONTRACT1" || concept.id !== "bending",
+  );
   const bridgeEducation = bridgeLesson(level);
 
   return (
@@ -147,9 +150,9 @@ export function LevelEntryDialog({
           <div className="rounded-xl border-2 border-border bg-secondary/40 p-3">
             {bridgeEducation ? (
               <LessonIllustration
-                id={bridgeEducation.id}
+                id={bridgeEducation.id ?? bridgeEducation.key}
                 title={bridgeEducation.title}
-                {...("image" in bridgeEducation ? { image: bridgeEducation.image } : {})}
+                {...(bridgeEducation.image ? { image: bridgeEducation.image } : {})}
                 compact
               />
             ) : null}

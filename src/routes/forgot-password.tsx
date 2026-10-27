@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
-import heroKeyart from "@/assets/hero-keyart.jpg";
+import recoveryScene from "../../InGameSS/828830518_1064869809875079_8504090739041572536_n.jpg";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({
@@ -75,10 +75,10 @@ function ForgotPasswordPage() {
         <div className="mx-auto grid max-w-6xl items-stretch gap-8 lg:grid-cols-2">
           <div className="game-frame hidden lg:block">
             <img
-              src={heroKeyart}
-              alt="Chibi engineers inspecting a wooden truss bridge in Civil Craft"
+              src={recoveryScene}
+              alt="Civil Craft engineer exploring the timber buildings and construction site in game"
               loading="lazy"
-              className="h-full w-full object-cover"
+              className="h-full w-full object-cover object-center"
             />
           </div>
 

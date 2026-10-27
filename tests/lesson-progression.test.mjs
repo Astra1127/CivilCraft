@@ -1,130 +1,165 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import catalog from "../src/lib/almanac/game-catalog.json" with { type: "json" };
+import source from "../src/lib/almanac/game-catalog.json" with { type: "json" };
 import {
-  completedTutorial,
+  lessons,
   lessonGroups,
+  groupLessons,
+  getLesson,
   lessonProgress,
-  tutorialConceptIds,
+  unmappedLessonIds,
   conceptIllustrations,
   bridgeLesson,
+  popupConcepts,
 } from "../src/lib/almanac/lesson-catalog.ts";
 
-const level = (levelId, overrides = {}) => ({
-  levelId,
-  regionId: "canyon",
-  stableId: true,
-  order: 99,
-  status: "completed",
-  engineeringConceptIds: ["load", "bending", "support"],
-  completion: {
-    playerId: "p1",
-    levelId,
-    regionId: "canyon",
-    status: "success",
-    score: 3,
-    bridgeTypeId: "beam",
-    completedAt: "",
-  },
-  ...overrides,
-});
-const journey = (levels = [], lessonRecords = []) => ({
-  regions: [{ regionId: "canyon", levels }],
-  lessonRecords,
-});
-const tutorial = () => journey([level("TUT_CONTRACT1"), level("TUT_CONTRACT2")]);
+const completed = {
+  regions: [
+    {
+      levels: [
+        "TUT_CONTRACT1",
+        "TUT_CONTRACT2",
+        "ShopKeeper",
+        "ReedsContract",
+        "VancesContract",
+        "SilasMainContract",
+        "MainContractSilas",
+      ].map((levelId) => ({
+        levelId,
+        regionId: "canyon_crossing",
+        stableId: true,
+        status: "completed",
+        engineeringConceptIds: ["load", "tension", "bending"],
+        completion: { levelId, regionId: "canyon_crossing", playerId: "p", status: "success" },
+      })),
+    },
+  ],
+};
 
-test("only owner-confirmed Dead/Live Load introductions appear in tutorial; all seven authored entries are preserved", () => {
+test("partial documented stage order is explicit; original IDs/content remain intact and categories stay separate", () => {
   assert.deepEqual(
-    lessonGroups[0].lessons.map((l) => l.id),
-    ["deadload", "LESSON001"],
+    lessonGroups.map((g) => g.id),
+    [
+      "bhan-initial",
+      "bhan-truss",
+      "reed-supply",
+      "vance-direct",
+      "silas-community",
+      "silas-later",
+      "brooks-market",
+      "mills-equipment",
+    ],
   );
-  const lessons = lessonGroups.flatMap((g) => g.lessons);
-  assert.equal(lessons.length, 7);
-  for (const original of catalog.lessons)
-    assert.equal(
-      lessons.find((l) => l.id === original.id),
-      original,
-    );
-  assert.equal(
-    lessonGroups[1].lessons.length,
-    5,
-    "No unverified Level 01–05 introduction is fabricated",
+  assert.deepEqual(
+    lessonGroups.map((g) => g.lessons.map((l) => l.title)),
+    [
+      ["Dead Load", "Live Load"],
+      ["What is Equilibrium"],
+      ["Bending"],
+      ["What is Tension", "What is Compression"],
+      ["Load Distribution"],
+      ["Load Transfer"],
+      ["Moving Load"],
+      ["Structural Failure"],
+    ],
   );
-});
-
-test("tutorial chapter completion provides encounter evidence only for the two verified introductions", () => {
-  const j = tutorial();
-  const before = JSON.stringify(j);
-  assert.equal(completedTutorial(j, "p1"), true);
-  for (const id of ["deadload", "LESSON001"]) {
-    assert.equal(lessonProgress(id, j, "p1").state, "encountered");
-    assert.equal(lessonProgress(id, j, "p1").canRead, true);
-    assert.match(lessonProgress(id, j, "p1").label, /Unlock sync pending/);
+  for (const original of source.lessons) {
+    const kept = getLesson(original.id);
+    assert.equal(kept.id, original.id);
+    assert.equal(kept.description, original.description);
+    assert.equal(kept.image, original.image);
   }
-  for (const lesson of lessonGroups[1].lessons)
-    assert.equal(lessonProgress(lesson.id, j, "p1").state, "pending");
-  assert.deepEqual(tutorialConceptIds(j, "p1"), ["load", "bending", "support"]);
-  assert.equal(JSON.stringify(j), before, "Reading never writes lesson state or timestamps");
-});
-
-test("missing, partial, duplicate, foreign, unstable and mismatched completion evidence stays pending", () => {
-  const invalid = [
-    journey(),
-    journey([level("TUT_CONTRACT1")]),
-    journey([level("TUT_CONTRACT1"), level("TUT_CONTRACT2", { status: "locked" })]),
-    journey([level("TUT_CONTRACT1"), level("TUT_CONTRACT2"), level("TUT_CONTRACT2")]),
-    journey([level("TUT_CONTRACT1", { stableId: false }), level("TUT_CONTRACT2")]),
-    journey([
-      level("TUT_CONTRACT1", {
-        completion: { ...level("TUT_CONTRACT1").completion, playerId: "p2" },
-      }),
-      level("TUT_CONTRACT2"),
-    ]),
-    journey([level("TUT_CONTRACT1"), level("TUT_CONTRACT2", { regionId: "elsewhere" })]),
-    journey([
-      level("TUT_CONTRACT1", {
-        completion: { ...level("TUT_CONTRACT1").completion, levelId: "wrong" },
-      }),
-      level("TUT_CONTRACT2"),
-    ]),
-  ];
-  for (const j of invalid) assert.equal(lessonProgress("deadload", j, "p1").state, "pending");
-  assert.equal(completedTutorial(tutorial()), false);
-  assert.equal(completedTutorial(tutorial(), "p2"), false);
-});
-
-test("real per-player lesson states take precedence and unrelated contract concepts never grant lessons", () => {
-  const j = tutorial();
-  j.lessonRecords = [
-    { lessonId: "deadload", state: "completed" },
-    { lessonId: "LESSON004", state: "discovered" },
-  ];
-  assert.equal(lessonProgress("deadload", j, "p1").state, "completed");
-  assert.equal(lessonProgress("LESSON004", j, "p1").state, "unlocked");
-  const story = journey(
-    ["ShopKeeper", "ReedsContract", "VancesContract", "SilasMainContract", "MainContractSilas"].map(
-      (id) => level(id),
-    ),
+  assert.equal(getLesson("LESSON002").category, "bridge-type");
+  assert.equal(getLesson("LESSON004").category, "bridge-type");
+  assert.ok(lessonGroups.every((g) => g.lessons.every((l) => l.category === "engineering")));
+  assert.equal(
+    lessonGroups.find((g) => g.id === "reed-supply").introductionLabel,
+    "Introduced in Level 02",
   );
-  for (const lesson of catalog.lessons)
-    assert.equal(lessonProgress(lesson.id, story, "p1").state, "pending");
-  assert.deepEqual(tutorialConceptIds(story, "p1"), []);
+  assert.deepEqual(lessonGroups.find((g) => g.id === "brooks-market").contractIds, []);
 });
 
-test("popup concept illustrations reference the same authored catalog assets without creating introduction mappings", () => {
+test("neither completed tutorials nor story contracts grant encounter, discovery or completion", () => {
+  const before = JSON.stringify(completed);
+  for (const lesson of lessons) {
+    assert.equal(lessonProgress(lesson.key, completed).state, "pending");
+    assert.equal(lessonProgress(lesson.key, completed).canRead, false);
+  }
+  assert.equal(JSON.stringify(completed), before);
+});
+
+test("real discovery before any completion is accepted, explicit completion is distinct, duplicates remain pending", () => {
+  const j = {
+    regions: [],
+    lessonRecords: [
+      { lessonId: "deadload", state: "discovered" },
+      { lessonId: "What is Equilibrium", state: "completed" },
+    ],
+  };
+  const before = JSON.stringify(j);
+  assert.equal(lessonProgress("deadload", j).state, "unlocked");
+  assert.equal(lessonProgress("deadload", j).canRead, true);
+  assert.equal(lessonProgress("What is Equilibrium", j).state, "completed");
+  assert.equal(lessonProgress("LESSON001", j).state, "pending");
+  assert.equal(
+    lessonProgress("deadload", { lessonRecords: [j.lessonRecords[0], j.lessonRecords[0]] }).state,
+    "pending",
+  );
+  assert.equal(JSON.stringify(j), before);
+});
+
+test("website catalog keys never become guessed game lesson IDs; unknown records remain safely unmapped", () => {
+  const records = [
+    { lessonId: "reference:load-transfer", state: "discovered" },
+    { lessonId: "future-real-id", state: "completed" },
+  ];
+  assert.equal(getLesson("reference:load-transfer").id, undefined);
+  assert.equal(getLesson("reference:load-transfer").description, undefined);
+  assert.equal(
+    lessonProgress("reference:load-transfer", { lessonRecords: records }).state,
+    "pending",
+  );
+  assert.deepEqual(
+    unmappedLessonIds({ lessonRecords: records }),
+    records.map((r) => r.lessonId),
+  );
+  assert.equal(getLesson("future-real-id"), undefined);
+  assert.deepEqual(popupConcepts(["future-real-id", "__proto__"]), []);
+});
+
+test("future stages, maps and lessons group without UI changes or invented numbered levels", () => {
+  const future = {
+    ...getLesson("deadload"),
+    key: "future-key",
+    id: "verified-future-id",
+    stageId: "future-stage",
+    title: "Verified future lesson",
+    order: 15,
+  };
+  const groups = groupLessons(
+    [future],
+    [
+      {
+        id: "future-stage",
+        title: "Verified future stage",
+        order: 999,
+        kind: "contract",
+        contractIds: ["verified-future-contract"],
+        mapId: "verified-future-map",
+      },
+    ],
+  );
+  assert.equal(groups[0].lessons[0], future);
+  assert.doesNotMatch(groups[0].introductionLabel, /Level/);
+  assert.equal(groupLessons([future], [])[0].id, "unmapped");
+});
+
+test("popup illustrations and educational previews resolve from the same catalog", () => {
   assert.deepEqual(
     conceptIllustrations("load").map((l) => l.id),
     ["deadload", "LESSON001"],
   );
-  for (const lesson of conceptIllustrations("load"))
-    assert.equal(
-      lesson,
-      catalog.lessons.find((l) => l.id === lesson.id),
-    );
-  assert.equal(bridgeLesson(level("TUT_CONTRACT1")).id, "LESSON002");
-  assert.equal(
-    lessonGroups[0].lessons.some((l) => l.id === "LESSON002"),
-    false,
-  );
+  assert.equal(conceptIllustrations("bending")[0], getLesson("concept:bending"));
+  assert.equal(popupConcepts(["tension"])[0].name, getLesson("What is Tension").title);
+  assert.equal(bridgeLesson({ completion: { bridgeTypeId: "beam" } }).id, "LESSON002");
 });

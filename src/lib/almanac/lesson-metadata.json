@@ -1,0 +1,175 @@
+{
+  "stages": [
+    {
+      "id": "bhan-initial",
+      "title": "Professor Bhan — Initial Tutorial",
+      "npc": "Professor Bhan",
+      "kind": "tutorial",
+      "order": 10,
+      "contractIds": [],
+      "mapId": "canyon_crossing"
+    },
+    {
+      "id": "bhan-truss",
+      "title": "Professor Bhan — Truss Tutorial",
+      "npc": "Professor Bhan",
+      "kind": "tutorial",
+      "order": 20,
+      "contractIds": [],
+      "mapId": "canyon_crossing"
+    },
+    {
+      "id": "reed-supply",
+      "title": "Reed — Supply Route",
+      "npc": "Reed",
+      "kind": "contract",
+      "order": 30,
+      "contractIds": ["ReedsContract"],
+      "mapId": "canyon_crossing"
+    },
+    {
+      "id": "vance-direct",
+      "title": "Vance — Direct Route",
+      "npc": "Vance",
+      "kind": "contract",
+      "order": 40,
+      "contractIds": ["VancesContract"],
+      "mapId": "canyon_crossing"
+    },
+    {
+      "id": "silas-community",
+      "title": "Silas — Community Connection",
+      "npc": "Silas",
+      "kind": "contract",
+      "order": 50,
+      "contractIds": ["SilasMainContract"],
+      "mapId": "canyon_crossing"
+    },
+    {
+      "id": "silas-later",
+      "title": "Silas — Later Main Quest",
+      "npc": "Silas",
+      "kind": "contract",
+      "order": 60,
+      "contractIds": ["MainContractSilas"],
+      "mapId": "canyon_crossing"
+    },
+    {
+      "id": "brooks-market",
+      "title": "Brooks — Market Connection",
+      "npc": "Brooks",
+      "kind": "contract",
+      "order": 70,
+      "contractIds": []
+    },
+    {
+      "id": "mills-equipment",
+      "title": "Mills — Heavy Equipment Route",
+      "npc": "Mills",
+      "kind": "contract",
+      "order": 80,
+      "contractIds": []
+    }
+  ],
+  "lessons": [
+    {
+      "key": "deadload",
+      "gameLessonId": "deadload",
+      "category": "engineering",
+      "stageId": "bhan-initial",
+      "order": 10,
+      "conceptIds": ["load"]
+    },
+    {
+      "key": "LESSON001",
+      "gameLessonId": "LESSON001",
+      "category": "engineering",
+      "stageId": "bhan-initial",
+      "order": 20,
+      "conceptIds": ["load"]
+    },
+    {
+      "key": "What is Equilibrium",
+      "gameLessonId": "What is Equilibrium",
+      "category": "engineering",
+      "stageId": "bhan-truss",
+      "order": 10,
+      "conceptIds": ["stability", "equilibrium"]
+    },
+    {
+      "key": "concept:bending",
+      "conceptId": "bending",
+      "category": "engineering",
+      "stageId": "reed-supply",
+      "order": 10,
+      "conceptIds": ["bending"],
+      "diagramId": "bending"
+    },
+    {
+      "key": "What is Tension",
+      "gameLessonId": "What is Tension",
+      "category": "engineering",
+      "stageId": "vance-direct",
+      "order": 10,
+      "conceptIds": ["tension"]
+    },
+    {
+      "key": "What is Compression",
+      "gameLessonId": "What is Compression",
+      "category": "engineering",
+      "stageId": "vance-direct",
+      "order": 20,
+      "conceptIds": ["compression"]
+    },
+    {
+      "key": "concept:load-distribution",
+      "conceptId": "load-distribution",
+      "category": "engineering",
+      "stageId": "silas-community",
+      "order": 10,
+      "conceptIds": ["load-distribution"],
+      "diagramId": "load-distribution"
+    },
+    {
+      "key": "reference:load-transfer",
+      "title": "Load Transfer",
+      "category": "engineering",
+      "stageId": "silas-later",
+      "order": 10,
+      "conceptIds": []
+    },
+    {
+      "key": "reference:moving-load",
+      "title": "Moving Load",
+      "category": "engineering",
+      "stageId": "brooks-market",
+      "order": 10,
+      "conceptIds": []
+    },
+    {
+      "key": "concept:structural-failure",
+      "conceptId": "structural-failure",
+      "category": "engineering",
+      "stageId": "mills-equipment",
+      "order": 10,
+      "conceptIds": ["structural-failure"],
+      "diagramId": "structural-failure"
+    },
+    {
+      "key": "LESSON002",
+      "gameLessonId": "LESSON002",
+      "category": "bridge-type",
+      "bridgeTypeId": "beam",
+      "order": 10,
+      "conceptIds": []
+    },
+    {
+      "key": "LESSON004",
+      "gameLessonId": "LESSON004",
+      "category": "bridge-type",
+      "bridgeTypeId": "truss",
+      "order": 20,
+      "conceptIds": []
+    }
+  ]
+}

@@ -49,6 +49,7 @@ function load(path, dependencies = {}, extra = "") {
         "@/lib/playfab/level-records": levelRecords,
         "@/lib/playfab/notification-navigation": navigation,
         "./useBridgeSnapshot": { useBridgeSnapshot: () => undefined },
+        "./IllustrationPreview": { IllustrationPreview: ({ children }) => children },
         "@/components/dashboard/useNotificationRead": { useNotificationRead: () => {} },
       }[name] ??
       require(name),
@@ -207,28 +208,32 @@ test("lesson previews do not grant unlocks; full notes need records; quiz result
   await act(async () => {
     view = create(React.createElement(GameLessons, { journey: {} }));
   });
-  assert.equal(view.root.findAllByType("img").length, 4);
-  assert.equal(view.root.findAllByType("svg").length, 3);
+  assert.equal(view.root.findAllByType("img").length, 2);
+  assert.equal(view.root.findAllByType("svg").length, 6);
   assert.equal(view.root.findAllByType("details").length, 0);
-  assert.equal(view.root.findAllByType("h4").length, 7);
+  assert.equal(view.root.findAllByType("h4").length, 10);
+  for (const img of view.root.findAllByType("img"))
+    assert.match(img.props.className, /h-28 sm:h-32/);
   for (const card of view.root.findAllByType("li")) {
-    const lesson = catalog.lessons.find((l) => l.title === card.findByType("h4").children.join(""));
+    const lesson = lessonCatalog.lessons.find(
+      (l) => l.title === card.findByType("h4").children.join(""),
+    );
     assert.ok(
       card
         .findAllByType("p")
-        .some((p) => p.children.join("") === lesson.description.split(/\n|(?<=[.!?])\s+/)[0]),
+        .some((p) => p.children.join("") === lessonCatalog.lessonPreview(lesson)),
     );
   }
   assert.match(JSON.stringify(view.toJSON()), /Lesson state not yet synchronized/);
   await act(async () => {
     view.update(
       React.createElement(GameLessons, {
-        journey: { lessonRecords: [{ lessonId: "LESSON002", state: "discovered" }] },
+        journey: { lessonRecords: [{ lessonId: "deadload", state: "discovered" }] },
       }),
     );
   });
-  assert.match(JSON.stringify(view.toJSON()), /horizontal beams supported by piers/);
-  assert.equal(view.root.findAllByType("img").length, 4);
+  assert.match(JSON.stringify(view.toJSON()), /permanent components of a structure/);
+  assert.equal(view.root.findAllByType("img").length, 2);
   assert.equal(view.root.findAllByType("details").length, 1);
   await act(async () => {
     view.update(React.createElement(QuizRecords, { journey: {} }));
@@ -286,7 +291,7 @@ test("lesson previews do not grant unlocks; full notes need records; quiz result
   await act(async () => view.unmount());
 });
 
-test("Engineering cards distinguish tutorial encounters, synced unlocks and missing player state", async () => {
+test("Engineering cards require lesson sync even after tutorial completion and preserve pre-contract unlocks", async () => {
   const { GameLessons } = load("../src/components/dashboard/almanac/GameEducation.tsx", {
     "@/lib/almanac/game-catalog.json": { default: catalog },
     "@/components/common/States": widgets,
@@ -312,18 +317,24 @@ test("Engineering cards distinguish tutorial encounters, synced unlocks and miss
       .findAll((node) => node.type === "p" && node.props["data-lesson-state"])
       .map((node) => node.props["data-lesson-state"]);
   assert.deepEqual(states(), [
-    "encountered",
-    "encountered",
+    "pending",
     "pending",
     "pending",
     "pending",
     "unlocked",
     "pending",
+    "pending",
+    "pending",
+    "pending",
+    "pending",
   ]);
-  assert.equal(view.root.findAllByType("details").length, 3);
-  assert.match(JSON.stringify(view.toJSON()), /Recorded tutorial concepts/);
+  assert.equal(view.root.findAllByType("details").length, 1);
+  assert.doesNotMatch(
+    JSON.stringify(view.toJSON()),
+    /Recorded tutorial concepts|Encountered in completed tutorial/,
+  );
   assert.match(JSON.stringify(view.toJSON()), /Introduced in Tutorial/);
-  assert.doesNotMatch(JSON.stringify(view.toJSON()), /Introduced in Level 0[1-5]/);
+  assert.match(JSON.stringify(view.toJSON()), /Introduced in Level 02/);
   await act(async () => {
     view.update(React.createElement(GameLessons, { journey, playerId: "another-player" }));
   });
@@ -440,12 +451,27 @@ test("level popup reuses load/beam assets and compact diagrams only for recorded
       .map((id) => catalog.lessons.find((l) => l.id === id).image)
       .sort(),
   );
-  assert.equal(view.root.findAllByType("svg").length, 2);
+  assert.equal(view.root.findAllByType("svg").length, 1);
   assert.match(JSON.stringify(view.toJSON()), /Dead Load/);
   assert.match(JSON.stringify(view.toJSON()), /Live Load/);
+  assert.match(JSON.stringify(view.toJSON()), /Support/);
+  assert.doesNotMatch(JSON.stringify(view.toJSON()), /Bending/);
+  assert.deepEqual(level.engineeringConceptIds, ["load", "bending", "support"]);
   assert.match(JSON.stringify(view.toJSON()), /Date unavailable/);
   assert.match(view.root.findByType("DialogContent").props.className, /overflow-x-hidden/);
   for (const img of view.root.findAllByType("img")) assert.match(img.props.className, /h-28/);
+  await act(async () => {
+    view.update(
+      React.createElement(component.LevelEntryDialog, {
+        level: { ...level, levelId: "TUT_CONTRACT2" },
+        open: true,
+        onOpenChange: () => {},
+      }),
+    );
+  });
+  assert.equal(view.root.findAllByType("svg").length, 2);
+  assert.match(JSON.stringify(view.toJSON()), /Bending/);
+  assert.equal(content.getConcepts(["bending"])[0].name, "Bending");
   await act(async () => {
     view.update(
       React.createElement(component.LevelEntryDialog, {

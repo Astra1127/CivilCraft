@@ -3,8 +3,12 @@ import type { AlmanacJourney } from "@/lib/playfab/types";
 import { EmptyState } from "@/components/common/States";
 import { orderMaterials } from "@/lib/almanac/material-order";
 import { LessonIllustration } from "./LessonIllustration";
-import { lessonGroups, lessonProgress, tutorialConceptIds } from "@/lib/almanac/lesson-catalog";
-import { getConcepts } from "@/lib/almanac/content";
+import {
+  lessonGroups,
+  lessonProgress,
+  lessonPreview,
+  unmappedLessonIds,
+} from "@/lib/almanac/lesson-catalog";
 
 export function QuizRecords({ journey }: { journey: AlmanacJourney }) {
   const attempts = journey.quizAttempts ?? [];
@@ -61,54 +65,50 @@ export function QuizRecords({ journey }: { journey: AlmanacJourney }) {
   );
 }
 
-export function GameLessons({ journey, playerId }: { journey: AlmanacJourney; playerId?: string }) {
-  const recordedTutorialConcepts = getConcepts(tutorialConceptIds(journey, playerId));
+export function GameLessons({ journey }: { journey: AlmanacJourney; playerId?: string }) {
+  const unmapped = unmappedLessonIds(journey);
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Lessons follow verified introductions. Introduction describes the game’s teaching sequence;
-        encounter and unlock labels describe your synchronized progress.
+        This is the currently documented portion of the story. Introductions describe when topics
+        are taught; only synchronized lesson records confirm your unlocks or completion.
       </p>
+      {unmapped.length ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {unmapped.length} synchronized lesson record(s) await catalog mapping. No lesson content
+          or progression has been guessed.
+        </p>
+      ) : null}
       {lessonGroups.map((group) => (
         <section key={group.id} aria-labelledby={`lessons-${group.id}`} className="space-y-3">
           <h3 id={`lessons-${group.id}`} className="font-display text-xl">
             {group.title}
           </h3>
-          {group.id === "tutorial" && recordedTutorialConcepts.length ? (
-            <p className="text-sm text-muted-foreground">
-              Recorded tutorial concepts:{" "}
-              {recordedTutorialConcepts.map((concept) => concept.name).join(", ")}. These concept
-              records do not grant unrelated lesson unlocks.
-            </p>
-          ) : null}
-          <ul className="grid gap-4 md:grid-cols-2">
+          <ul className="grid gap-3 md:grid-cols-2">
             {group.lessons.map((lesson) => {
-              const progress = lessonProgress(lesson.id, journey, playerId);
+              const progress = lessonProgress(lesson.key, journey);
               return (
-                <li key={lesson.id} className="panel min-w-0 overflow-hidden p-5">
+                <li key={lesson.key} className="panel min-w-0 overflow-hidden p-3 sm:p-4">
                   <LessonIllustration
-                    id={lesson.id}
+                    id={lesson.diagramId ?? lesson.id ?? lesson.key}
                     title={lesson.title}
-                    {...("image" in lesson ? { image: lesson.image } : {})}
+                    {...(lesson.image ? { image: lesson.image } : {})}
+                    compact
                   />
                   <h4 className="font-display text-lg">{lesson.title}</h4>
                   <p className="text-xs text-muted-foreground">{lesson.topic}</p>
-                  {group.id === "tutorial" ? (
-                    <p className="mt-1 text-xs font-bold text-primary">
-                      Introduced in Tutorial (Level 00)
-                    </p>
-                  ) : null}
+                  <p className="mt-1 text-xs font-bold text-primary">{group.introductionLabel}</p>
                   <p
                     className="mt-1 text-xs text-muted-foreground"
                     data-lesson-state={progress.state}
                   >
                     {progress.label}
                   </p>
-                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    {lesson.description.split(/\n|(?<=[.!?])\s+/)[0]}
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {lessonPreview(lesson)}
                   </p>
                   {progress.canRead ? (
-                    <details className="mt-3">
+                    <details className="mt-2">
                       <summary className="cursor-pointer text-sm font-bold text-primary">
                         Read lesson notes
                       </summary>

@@ -1,118 +1,146 @@
-# Engineering lessons and level-popup illustrations
+# Engineering Almanac: partial story catalog and real lesson progress
 
-## Verified introductions versus player progress
+This replaces the previous tutorial-completion encounter policy. **No contract
+completion, tutorial completion, bridge type, concept list, score or date grants
+a lesson state.** Lessons can be introduced/discovered before contract completion.
+Only the existing validated per-player `lessonRecords` entries confirm discovery
+or completion. Reading or browsing previews never writes a record.
 
-The project owner's current specification verifies **Dead Load** (`deadload`) and
-**Live Load** (`LESSON001`) as introductions in the **Tutorial (Level 00)** chapter.
-It does not specify which of the two Bhan tutorial contracts introduces each one.
-The UI therefore labels the chapter, not a guessed tutorial sub-stage.
+## Sources and verified mappings
 
-| Lesson ID           | Existing authored title | Verified introduction                           |
-| ------------------- | ----------------------- | ----------------------------------------------- |
-| deadload            | Dead Load               | Tutorial / Level 00, confirmed by project owner |
-| LESSON001           | Live Load               | Tutorial / Level 00, confirmed by project owner |
-| LESSON002           | BEAM BRIDGE             | Requires programmer confirmation                |
-| What is Compression | What is Compression     | Requires programmer confirmation                |
-| What is Equilibrium | What is Equilibrium     | Requires programmer confirmation                |
-| What is Tension     | What is Tension         | Requires programmer confirmation                |
-| LESSON004           | What is Truss           | Requires programmer confirmation                |
+The project owner's latest partial-story specification supplies the stage/topic
+associations below. Existing website contract mappings supply known IDs and level
+labels. `game-catalog.json` preserves the seven extracted authored assets, their
+original LessonData IDs, descriptions, images and provenance. Existing concept
+explanations come from `content.ts`. No Unity files outside this website workspace
+were accessed or modified. This is **not** the final story, map or lesson count.
 
-No Level 01–05 lesson introduction is independently established by the available
-in-repository metadata. ShopKeeper, ReedsContract, VancesContract,
-SilasMainContract and MainContractSilas retain their existing numbered mapping;
-no introduction labels are assigned to them by title, bridge shape or score.
+| Documented introduction           | Topics               | Verified contract/level binding                                    | Game lesson IDs available            |
+| --------------------------------- | -------------------- | ------------------------------------------------------------------ | ------------------------------------ |
+| Professor Bhan — Initial Tutorial | Dead Load; Live Load | Tutorial chapter / Level 00; exact phase/subcontract still unbound | deadload; LESSON001                  |
+| Professor Bhan — Truss Tutorial   | Equilibrium          | Tutorial chapter / Level 00; exact phase/subcontract still unbound | What is Equilibrium                  |
+| Reed — Supply Route               | Bending              | ReedsContract / existing Level 02                                  | Missing                              |
+| Vance — Direct Route              | Tension; Compression | VancesContract / existing Level 03                                 | What is Tension; What is Compression |
+| Silas — Community Connection      | Load Distribution    | SilasMainContract / existing Level 04                              | Missing                              |
+| Silas — Later Main Quest          | Load Transfer        | MainContractSilas / existing Level 05                              | Missing                              |
+| Brooks — Market Connection        | Moving Load          | Contract ID, map and numbered level unverified                     | Missing                              |
+| Mills — Heavy Equipment Route     | Structural Failure   | Contract ID, map and numbered level unverified                     | Missing                              |
 
-The existing `game-catalog.json` contains all seven authored lesson IDs, titles,
-descriptions and available image paths, with source asset provenance. It has no
-lesson-to-contract introduction field. `AlmanacLevel.engineeringConceptIds`
-identifies concepts in a synchronized level record; it does not identify a
-LessonData unlock. The earlier read-only audit of DashboardSyncService recorded
-that those concept IDs are derived from bridge shape. They are insufficient to
-assign numbered introductions or unlock all related lessons. No Unity files
-outside the website workspace were accessed for this change.
+No lesson introduction is assigned to ShopKeeper/Level 01 by inference. Its
+existing numbering is unchanged, as are tutorial, side-contract and deep-link IDs.
+Brooks/Mills are names provided by the project owner; no game NPC identifier or
+contract ID was invented. Their groups have internal **website stage keys**, not
+game identifiers. Map `canyon_crossing` is retained only for existing verified
+Canyon/tutorial bindings; future maps remain unspecified until confirmed.
 
-`src/lib/almanac/lesson-catalog.ts` shares the authored catalog references,
-introduction grouping, progress interpretation and popup visual references.
-Dead/Live Load appear first in the Tutorial group. The other five remain in an
-explicit **Introduction level awaiting verification** group. Their catalog order
-within that group is archival presentation, not a claimed gameplay sequence.
+## Central authored catalog
 
-## Display states
+- `src/lib/almanac/lesson-metadata.json` declares stage order, NPC display names,
+  verified map/contract bindings, categories, stable website keys, existing game
+  lesson references, concept references and optional illustration/diagram IDs.
+- `src/lib/almanac/lesson-catalog.ts` resolves that metadata against the existing
+  authored asset/concept catalogs. It exposes generic grouping, synchronization
+  requirements, real progress interpretation, previews and popup references.
+- Source LessonData IDs remain unchanged. **Website keys are never silently
+  accepted as PlayFab lesson IDs.** `concept:bending`, `concept:load-distribution`,
+  `concept:structural-failure`, `reference:load-transfer` and
+  `reference:moving-load` are presentation keys only. Their `sync.lessonId` is
+  absent, so they cannot accidentally match a discovery record.
+- Five of the existing extracted LessonData records are engineering topics.
+  BEAM BRIDGE (`LESSON002`) and What is Truss (`LESSON004`) remain preserved as
+  `bridge-type` references, separate from Engineering. Existing Bridge Types and
+  Materials tabs are unchanged. Existing records for those IDs remain readable.
+- Bending, Load Distribution and Structural Failure reuse existing concept text
+  and diagrams. Load Transfer and Moving Load have verified names/introductions
+  only: their cards explicitly say educational notes await verified game content.
+  No explanation, illustration, Game Lesson ID or discovery event is fabricated.
 
-1. A validated, unique `lessonRecords` entry takes precedence. `completed` shows
-   **Completed · Synced from game**; `discovered` shows **Unlocked · Synced from
-   game**. Existing payload IDs/fields and parser behavior are unchanged.
-2. Without a lesson record, both `TUT_CONTRACT1` and `TUT_CONTRACT2` must have
-   unique, stable successful completion records in the same region, verified for
-   the signed-in player using the existing completion validator. Then **only the
-   two verified tutorial load lessons** show **Encountered in completed tutorial ·
-   Unlock sync pending**. Full notes are readable, but no lesson record is created
-   and neither unlocked nor completed is claimed. Requiring both contracts is a
-   conservative chapter-completion rule until the exact sub-stage is verified.
-3. Missing, partial, locked, foreign-player, mismatched or ambiguous tutorial
-   completions leave lessons in **Lesson state not yet synchronized**. Explicit
-   lesson records can still independently unlock their own lesson.
+Grouping is driven by stage order and lesson order, not alphabetic catalog order,
+player completion, map count or a fixed list of UI branches. Unknown introduction
+bindings fall into a labeled unmapped group rather than receiving an invented
+level. New verified contract IDs without a known numbered level receive a
+documented-stage label, not a guessed Level 06 or later.
 
-All seven previews and illustrations remain browsable. Authored full notes are
-available for synced unlock/completion or the two verified tutorial encounters.
-Introduction labels describe curriculum; they do not assert player discovery.
-No dates, scores, quiz records or progress values are generated or persisted.
+## Authored introduction versus player synchronization
 
-Verified completed tutorial records may list **Recorded tutorial concepts** in the
-Engineering tab. This is a record-specific association, not a global claim that
-every tutorial contains every concept or that every related lesson is unlocked.
+The label **Introduced in …** describes curriculum only. Cards separately show:
 
-## Popup illustrations
+- **Unlocked · Synced from game** for a unique validated `state: discovered`.
+- **Completed · Synced from game** for a unique validated `state: completed`.
+- **Lesson state not yet synchronized** when a supported ID has no explicit state.
+- **Lesson synchronization unavailable · Game lesson ID pending** when the
+  programmer has not supplied a verified LessonData identifier.
 
-The existing What you encountered list still comes exclusively from that level's
-`engineeringConceptIds`; no concept is appended because of the level name.
+Existing `AlmanacProgress.lessonRecords` is unchanged. No new backend key, endpoint,
+save rewrite or migration is introduced. Invalid/duplicate record handling remains
+in the existing parser/reader. Unknown future lesson IDs remain in the parsed
+records and trigger an unmapped-record notice; the website does not guess their
+content or discard/overwrite historical PlayFab records. Contract
+`engineeringConceptIds` never grant LessonData unlocks.
 
-- `load` reuses the Dead Load and Live Load lessons' exact local image references.
-- Tension and Compression reuse their Engineering-card force diagrams.
-- Stability uses the shared equilibrium diagram as a visual reference, without
-  claiming the equilibrium lesson was introduced or unlocked there.
-- Bending, Support, Shear, Load Distribution and Structural Failure use compact
-  shared diagrams based on their existing concept explanations. These are not
-  additional LessonData entries; the authored seven-lesson catalog is unchanged.
-- Existing Beam Bridge / Truss Bridge information reuses the corresponding
-  authored lesson image when the completion identifies that bridge type. A used
-  bridge type does not establish a lesson introduction or unlock.
+Full notes use actual discovered/completed state, independent of contract
+completion. Public educational previews and illustrations carry no unlock grant.
+No timestamps, scores, quiz results or historical progress are generated.
 
-`ConceptIllustrations` and `LessonIllustration` are shared renderers; no bitmap
-files were duplicated. Compact 112/128 px illustration heights and a two-column
-concept grid from the small breakpoint limit modal scrolling. Figures and list
-items constrain width; the dialog retains its existing vertical scroll, title,
-description, focus/close handling and adds horizontal overflow protection.
-Missing or broken images retain the labeled illustration fallback. Score,
-completion date, contract links, achievement display and bridge photo handling
-remain unchanged.
+## Level-popup behavior
 
-## Programmer confirmation still required
+Popup concepts are still selected from the existing level's synchronized concept
+IDs. Known catalog topics use the same title, first-sentence preview and image or
+diagram as Engineering. Other existing concepts retain their current explanation
+and shared diagram fallback. Unknown concepts without catalog content are omitted
+safely. No authored stage association is used to append a concept to a player's
+historical completion record.
 
-Confirm the precise tutorial contract/phase that introduces each load lesson,
-and the earliest authored introduction for each remaining lesson across Levels
-01–05 (or confirm it belongs elsewhere). Supply stable LessonData.Id and
-ContractID/phase references rather than display titles or alphabetical positions.
-The website must not infer these introductions from `engineeringConceptIds`.
-Continue publishing actual discoveries through the existing `lessonRecords`
-contract; missing data is not backfilled. No new PlayFab schema is required by
-this implementation, and no Unity/CloudScript/configuration/live data was changed.
+Dead/Live Load share the original local images; force/concept diagrams use the
+shared `LessonIllustration` renderer. Beam/Truss bridge information uses its
+preserved authored reference. Compact sizing, responsive grids, image-error
+fallbacks and modal accessibility remain. Tutorial 1's Bending exclusion from the
+previous targeted UI change is preserved; Bending still appears where recorded
+on other levels and in its documented Reed introduction group.
 
-## Validation
+Completion statistics, score/date fields, bridge snapshots, achievement logic and
+notification navigation are unchanged. No images were duplicated.
 
-Regression coverage includes tutorial associations, all seven original catalog
-entries, same-player chapter completion, missing/partial/ambiguous records,
-explicit lesson-state precedence, unrelated story completions, popup asset reuse,
-compact diagrams, missing images and existing navigation/quiz/material/snapshot
-behavior. All 41 selected regression tests, TypeScript (`npx tsc --noEmit`),
-changed-file ESLint and the production build (`npm run build`) passed.
+## Missing game publishing and future additions
 
-No connected browser was available (`cua.listBrowsers()` returned `[]`), so actual
-desktop/mobile visual inspection remains pending. Responsive sizing and rendered
-component structure are tested; they are not a substitute for browser visual QA.
+The programmer must confirm/publish the real LessonData IDs for Bending, Load
+Distribution, Load Transfer, Moving Load and Structural Failure; the exact Bhan
+introduction phases; and Brooks/Mills stable contract/map/NPC IDs if available.
+Load Transfer/Moving Load also need approved educational text and illustrations.
+Publish `lessonRecords` when the actual introduction/unlock is saved, even if the
+associated contract is still incomplete. Publish `completed` only for a genuine
+separate lesson completion event. Retain prior records; do not seed examples or
+backfill lessons from contracts. No Unity/CloudScript/configuration changes were
+performed as part of this website task.
 
-Changed source files: `AlmanacJournal.tsx`, `GameEducation.tsx`,
-`LevelEntryDialog.tsx`, `LessonIllustration.tsx`, new `ConceptIllustrations.tsx`
-in `src/components/dashboard/almanac/`, and new
-`src/lib/almanac/lesson-catalog.ts`. Tests: `tests/almanac-discovery.test.mjs`
-and new `tests/lesson-progression.test.mjs`.
+To add future content without rewriting the UI:
+
+1. Add or update the verified asset definition in `game-catalog.json` (using the
+   existing reviewed export process) or a verified concept explanation.
+2. Add a stable website stage key, explicit order, verified display name and only
+   confirmed map/contract bindings to `lesson-metadata.json`. Leave unknown IDs
+   absent. Never rename existing game LessonData or contract IDs.
+3. Add a lesson metadata row referencing `gameLessonId` or verified `conceptId`,
+   its category, introduction stage, order and optional existing diagram. The
+   generic reader automatically builds its card and group.
+4. For a concept currently lacking a game LessonData ID, preserve its existing
+   website key while adding the verified `gameLessonId` binding. Do not repurpose
+   an old game ID or rewrite player records to match a website key.
+5. Add publishing/fixture checks for real discovery before completion, missing
+   state, unknown/duplicate IDs, image failure and historical compatibility.
+
+## Changed files and validation
+
+Source: `lesson-metadata.json`, `lesson-catalog.ts`, `GameEducation.tsx`,
+`ConceptIllustrations.tsx`, and `LevelEntryDialog.tsx`. Tests:
+`tests/lesson-progression.test.mjs`, `tests/almanac-discovery.test.mjs`. The prior
+compact-card and Tutorial 1 Bending-filter edits already present in the working
+tree are retained. No unrelated files or live data are modified.
+
+The relevant regression suite covers the partial documented order, category
+separation, original IDs/text/images, pre-contract discovery, no contract-based
+unlock inference, unknown game IDs, future stage insertion, popup asset/content
+reuse, materials, quizzes, snapshots and notification navigation. TypeScript,
+scoped ESLint and production build all passed, along with **42 regression tests**.
+No browser was connected, so desktop/mobile visual checks remain pending;
+component tests are not a substitute for visual QA.

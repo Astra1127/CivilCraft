@@ -6,11 +6,11 @@ export function ConceptIllustrations({ id, title }: { id: string; title: string 
   return lessons.length ? (
     <div className={lessons.length > 1 ? "grid min-w-0 grid-cols-2 gap-2" : "min-w-0"}>
       {lessons.map((lesson) => (
-        <div key={lesson.id} className="min-w-0">
+        <div key={lesson.key} className="min-w-0">
           <LessonIllustration
-            id={lesson.id}
+            id={lesson.diagramId ?? lesson.id ?? lesson.key}
             title={lesson.title}
-            {...("image" in lesson ? { image: lesson.image } : {})}
+            {...(lesson.image ? { image: lesson.image } : {})}
             compact
           />
           {lessons.length > 1 ? <p className="mb-2 text-xs font-bold">{lesson.title}</p> : null}
