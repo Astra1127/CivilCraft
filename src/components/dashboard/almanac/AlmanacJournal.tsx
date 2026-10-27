@@ -279,7 +279,7 @@ export function AlmanacJournal({
         </TabsContent>
 
         <TabsContent value="engineering" className="mt-6">
-          <GameLessons journey={j} />
+          <GameLessons journey={j} playerId={id} />
         </TabsContent>
         <TabsContent value="quizzes" className="mt-6">
           <QuizRecords journey={j} />

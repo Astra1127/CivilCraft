@@ -14,6 +14,9 @@ import { getBridgeType, getConcepts } from "@/lib/almanac/content";
 import type { AlmanacLevel } from "@/lib/playfab";
 import { useState } from "react";
 import { useBridgeSnapshot } from "./useBridgeSnapshot";
+import { bridgeLesson } from "@/lib/almanac/lesson-catalog";
+import { ConceptIllustrations } from "./ConceptIllustrations";
+import { LessonIllustration } from "./LessonIllustration";
 
 export function CompletionScreenshot({
   level,
@@ -72,10 +75,11 @@ export function LevelEntryDialog({
   const c = level.completion;
   const bridge = getBridgeType(c?.bridgeTypeId);
   const concepts = getConcepts(level.engineeringConceptIds);
+  const bridgeEducation = bridgeLesson(level);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-y-auto border-4 border-primary bg-card">
+      <DialogContent className="max-h-[92vh] max-w-2xl overflow-x-hidden overflow-y-auto break-words border-4 border-primary bg-card">
         <DialogHeader>
           <DialogTitle className="text-center font-display text-xl uppercase tracking-[0.08em]">
             {levelStageLabel(level)} — {level.levelName ?? "Unknown"}
@@ -125,19 +129,15 @@ export function LevelEntryDialog({
           <h3 className="font-display text-sm uppercase tracking-[0.16em] text-muted-foreground">
             What you encountered
           </h3>
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-2 grid gap-3 sm:grid-cols-2">
             {concepts.map((concept) => (
               <li
                 key={concept.id}
-                className="rounded-xl border-2 border-border bg-secondary/40 px-3 py-2"
+                className="min-w-0 rounded-xl border-2 border-border bg-secondary/40 p-3"
               >
+                <ConceptIllustrations id={concept.id} title={concept.name} />
                 <p className="font-display text-base">{concept.name}</p>
                 <p className="text-sm text-muted-foreground">{concept.summary}</p>
-                {concept.diagram ? (
-                  <pre className="mt-1 overflow-x-auto whitespace-pre-wrap font-mono text-[11px] text-primary/70">
-                    {concept.diagram}
-                  </pre>
-                ) : null}
               </li>
             ))}
           </ul>
@@ -145,6 +145,14 @@ export function LevelEntryDialog({
 
         {bridge ? (
           <div className="rounded-xl border-2 border-border bg-secondary/40 p-3">
+            {bridgeEducation ? (
+              <LessonIllustration
+                id={bridgeEducation.id}
+                title={bridgeEducation.title}
+                {...("image" in bridgeEducation ? { image: bridgeEducation.image } : {})}
+                compact
+              />
+            ) : null}
             <p className="flex items-center gap-2 font-display text-base">
               <BookOpen className="h-4 w-4 text-gold" aria-hidden="true" />
               {bridge.name}

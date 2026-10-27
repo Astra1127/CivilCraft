@@ -12,6 +12,8 @@ import * as education from "../src/lib/playfab/almanac-education.ts";
 import * as navigation from "../src/lib/playfab/notification-navigation.ts";
 import * as playerLevel from "../src/lib/playfab/player-level.ts";
 import * as materialOrder from "../src/lib/almanac/material-order.ts";
+import * as lessonCatalog from "../src/lib/almanac/lesson-catalog.ts";
+import * as actualContent from "../src/lib/almanac/content.ts";
 import catalog from "../src/lib/almanac/game-catalog.json" with { type: "json" };
 
 const require = createRequire(import.meta.url);
@@ -33,6 +35,12 @@ function load(path, dependencies = {}, extra = "") {
         "./almanac-education.ts": education,
         "./player-level.ts": playerLevel,
         "@/lib/almanac/material-order": materialOrder,
+        "@/lib/almanac/lesson-catalog": lessonCatalog,
+        "@/lib/almanac/content": actualContent,
+        "./ConceptIllustrations":
+          name === "./ConceptIllustrations"
+            ? load("../src/components/dashboard/almanac/ConceptIllustrations.tsx")
+            : undefined,
         "./LessonIllustration":
           name === "./LessonIllustration"
             ? load("../src/components/dashboard/almanac/LessonIllustration.tsx")
@@ -202,16 +210,16 @@ test("lesson previews do not grant unlocks; full notes need records; quiz result
   assert.equal(view.root.findAllByType("img").length, 4);
   assert.equal(view.root.findAllByType("svg").length, 3);
   assert.equal(view.root.findAllByType("details").length, 0);
-  assert.equal(view.root.findAllByType("h3").length, 7);
+  assert.equal(view.root.findAllByType("h4").length, 7);
   for (const card of view.root.findAllByType("li")) {
-    const lesson = catalog.lessons.find((l) => l.title === card.findByType("h3").children.join(""));
+    const lesson = catalog.lessons.find((l) => l.title === card.findByType("h4").children.join(""));
     assert.ok(
       card
         .findAllByType("p")
         .some((p) => p.children.join("") === lesson.description.split(/\n|(?<=[.!?])\s+/)[0]),
     );
   }
-  assert.match(JSON.stringify(view.toJSON()), /Unlock state not synchronized/);
+  assert.match(JSON.stringify(view.toJSON()), /Lesson state not yet synchronized/);
   await act(async () => {
     view.update(
       React.createElement(GameLessons, {
@@ -275,6 +283,52 @@ test("lesson previews do not grant unlocks; full notes need records; quiz result
   assert.equal(view.root.findAllByType("details").length, 1);
   assert.match(JSON.stringify(view.toJSON()), /Actual question/);
   assert.match(JSON.stringify(view.toJSON()), /Your answer/);
+  await act(async () => view.unmount());
+});
+
+test("Engineering cards distinguish tutorial encounters, synced unlocks and missing player state", async () => {
+  const { GameLessons } = load("../src/components/dashboard/almanac/GameEducation.tsx", {
+    "@/lib/almanac/game-catalog.json": { default: catalog },
+    "@/components/common/States": widgets,
+  });
+  const levels = ["TUT_CONTRACT1", "TUT_CONTRACT2"].map((levelId) => ({
+    levelId,
+    regionId: "r",
+    stableId: true,
+    status: "completed",
+    engineeringConceptIds: ["load", "bending", "support"],
+    completion: { levelId, regionId: "r", playerId: "p", status: "success" },
+  }));
+  const journey = {
+    regions: [{ regionId: "r", levels }],
+    lessonRecords: [{ lessonId: "What is Tension", state: "discovered" }],
+  };
+  let view;
+  await act(async () => {
+    view = create(React.createElement(GameLessons, { journey, playerId: "p" }));
+  });
+  const states = () =>
+    view.root
+      .findAll((node) => node.type === "p" && node.props["data-lesson-state"])
+      .map((node) => node.props["data-lesson-state"]);
+  assert.deepEqual(states(), [
+    "encountered",
+    "encountered",
+    "pending",
+    "pending",
+    "pending",
+    "unlocked",
+    "pending",
+  ]);
+  assert.equal(view.root.findAllByType("details").length, 3);
+  assert.match(JSON.stringify(view.toJSON()), /Recorded tutorial concepts/);
+  assert.match(JSON.stringify(view.toJSON()), /Introduced in Tutorial/);
+  assert.doesNotMatch(JSON.stringify(view.toJSON()), /Introduced in Level 0[1-5]/);
+  await act(async () => {
+    view.update(React.createElement(GameLessons, { journey, playerId: "another-player" }));
+  });
+  assert.equal(states().filter((state) => state === "encountered").length, 0);
+  assert.equal(view.root.findAllByType("details").length, 1);
   await act(async () => view.unmount());
 });
 
@@ -349,6 +403,65 @@ test("completion dialog keeps undated completions visible without inventing a da
       await act(async () => renderer.unmount());
     }
   }
+});
+
+test("level popup reuses load/beam assets and compact diagrams only for recorded concepts", async () => {
+  const component = load("../src/components/dashboard/almanac/LevelEntryDialog.tsx", {
+    "lucide-react": widgets,
+    "@/components/common/BrandedCover": widgets,
+    "@/components/ui/badge": widgets,
+    "@/components/ui/button": widgets,
+    "@/components/ui/dialog": widgets,
+    "@/lib/almanac/content": content,
+  });
+  const level = {
+    levelId: "TUT_CONTRACT1",
+    levelName: "Tutorial",
+    regionId: "canyon",
+    engineeringConceptIds: ["load", "bending", "support"],
+    completion: { score: 3, completedAt: "", bridgeTypeId: "beam" },
+  };
+  let view;
+  await act(async () => {
+    view = create(
+      React.createElement(component.LevelEntryDialog, {
+        level,
+        open: true,
+        onOpenChange: () => {},
+      }),
+    );
+  });
+  assert.deepEqual(
+    view.root
+      .findAllByType("img")
+      .map((img) => img.props.src)
+      .sort(),
+    ["deadload", "LESSON001", "LESSON002"]
+      .map((id) => catalog.lessons.find((l) => l.id === id).image)
+      .sort(),
+  );
+  assert.equal(view.root.findAllByType("svg").length, 2);
+  assert.match(JSON.stringify(view.toJSON()), /Dead Load/);
+  assert.match(JSON.stringify(view.toJSON()), /Live Load/);
+  assert.match(JSON.stringify(view.toJSON()), /Date unavailable/);
+  assert.match(view.root.findByType("DialogContent").props.className, /overflow-x-hidden/);
+  for (const img of view.root.findAllByType("img")) assert.match(img.props.className, /h-28/);
+  await act(async () => {
+    view.update(
+      React.createElement(component.LevelEntryDialog, {
+        level: { ...level, engineeringConceptIds: [] },
+        open: true,
+        onOpenChange: () => {},
+      }),
+    );
+  });
+  assert.equal(view.root.findAllByType("svg").length, 0);
+  assert.equal(
+    view.root.findAllByType("img").length,
+    1,
+    "Only the actual beam bridge information remains",
+  );
+  await act(async () => view.unmount());
 });
 
 test("completion notifications label missing and invalid dates as unavailable", () => {

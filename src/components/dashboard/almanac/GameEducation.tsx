@@ -3,6 +3,8 @@ import type { AlmanacJourney } from "@/lib/playfab/types";
 import { EmptyState } from "@/components/common/States";
 import { orderMaterials } from "@/lib/almanac/material-order";
 import { LessonIllustration } from "./LessonIllustration";
+import { lessonGroups, lessonProgress, tutorialConceptIds } from "@/lib/almanac/lesson-catalog";
+import { getConcepts } from "@/lib/almanac/content";
 
 export function QuizRecords({ journey }: { journey: AlmanacJourney }) {
   const attempts = journey.quizAttempts ?? [];
@@ -59,45 +61,68 @@ export function QuizRecords({ journey }: { journey: AlmanacJourney }) {
   );
 }
 
-export function GameLessons({ journey }: { journey: AlmanacJourney }) {
+export function GameLessons({ journey, playerId }: { journey: AlmanacJourney; playerId?: string }) {
+  const recordedTutorialConcepts = getConcepts(tutorialConceptIds(journey, playerId));
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Lessons from the game’s learning archive. Unlock state is unavailable until synchronized by
-        the game.
+        Lessons follow verified introductions. Introduction describes the game’s teaching sequence;
+        encounter and unlock labels describe your synchronized progress.
       </p>
-      <ul className="grid gap-4 md:grid-cols-2">
-        {catalog.lessons.map((lesson) => {
-          const record = journey.lessonRecords?.find((r) => r.lessonId === lesson.id);
-          return (
-            <li key={lesson.id} className="panel min-w-0 overflow-hidden p-5">
-              <LessonIllustration
-                id={lesson.id}
-                title={lesson.title}
-                {...("image" in lesson ? { image: lesson.image } : {})}
-              />
-              <h3 className="font-display text-lg">{lesson.title}</h3>
-              <p className="text-xs text-muted-foreground">{lesson.topic}</p>
-              <p className="mt-1 text-xs capitalize text-muted-foreground">
-                {record?.state ?? "Unlock state not synchronized"}
-              </p>
-              <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                {lesson.description.split(/\n|(?<=[.!?])\s+/)[0]}
-              </p>
-              {record ? (
-                <details className="mt-3">
-                  <summary className="cursor-pointer text-sm font-bold text-primary">
-                    Read lesson notes
-                  </summary>
-                  <p className="mt-3 whitespace-pre-line text-sm text-muted-foreground">
-                    {lesson.description}
+      {lessonGroups.map((group) => (
+        <section key={group.id} aria-labelledby={`lessons-${group.id}`} className="space-y-3">
+          <h3 id={`lessons-${group.id}`} className="font-display text-xl">
+            {group.title}
+          </h3>
+          {group.id === "tutorial" && recordedTutorialConcepts.length ? (
+            <p className="text-sm text-muted-foreground">
+              Recorded tutorial concepts:{" "}
+              {recordedTutorialConcepts.map((concept) => concept.name).join(", ")}. These concept
+              records do not grant unrelated lesson unlocks.
+            </p>
+          ) : null}
+          <ul className="grid gap-4 md:grid-cols-2">
+            {group.lessons.map((lesson) => {
+              const progress = lessonProgress(lesson.id, journey, playerId);
+              return (
+                <li key={lesson.id} className="panel min-w-0 overflow-hidden p-5">
+                  <LessonIllustration
+                    id={lesson.id}
+                    title={lesson.title}
+                    {...("image" in lesson ? { image: lesson.image } : {})}
+                  />
+                  <h4 className="font-display text-lg">{lesson.title}</h4>
+                  <p className="text-xs text-muted-foreground">{lesson.topic}</p>
+                  {group.id === "tutorial" ? (
+                    <p className="mt-1 text-xs font-bold text-primary">
+                      Introduced in Tutorial (Level 00)
+                    </p>
+                  ) : null}
+                  <p
+                    className="mt-1 text-xs text-muted-foreground"
+                    data-lesson-state={progress.state}
+                  >
+                    {progress.label}
                   </p>
-                </details>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+                  <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                    {lesson.description.split(/\n|(?<=[.!?])\s+/)[0]}
+                  </p>
+                  {progress.canRead ? (
+                    <details className="mt-3">
+                      <summary className="cursor-pointer text-sm font-bold text-primary">
+                        Read lesson notes
+                      </summary>
+                      <p className="mt-3 whitespace-pre-line text-sm text-muted-foreground">
+                        {lesson.description}
+                      </p>
+                    </details>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }
