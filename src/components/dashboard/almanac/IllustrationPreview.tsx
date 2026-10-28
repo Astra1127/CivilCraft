@@ -41,14 +41,18 @@ export function IllustrationPreview({
       <DialogPortal>
         <DialogOverlay className="z-[100] bg-black/75" />
         <Content
-          className="fixed left-1/2 top-1/2 z-[101] w-fit max-w-[90vw] max-h-[85vh] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border-2 border-border bg-card p-2 shadow-2xl focus:outline-none"
+          className="fixed left-1/2 top-1/2 z-[101] grid h-[85vh] w-[90vw] max-w-[90vw] max-h-[85vh] grid-rows-[auto_minmax(0,1fr)] -translate-x-1/2 -translate-y-1/2 gap-2 overflow-hidden rounded-2xl border-2 border-border bg-card p-3 shadow-2xl focus:outline-none sm:p-4"
           onEscapeKeyDown={(event) => event.stopPropagation()}
         >
-          <DialogTitle className="sr-only">{title} — enlarged illustration</DialogTitle>
+          <DialogTitle className="pr-12 font-display text-lg">
+            {title} — enlarged illustration
+          </DialogTitle>
           <DialogDescription className="sr-only">
             Full illustration preview. Press Escape, click outside, or use Close to return.
           </DialogDescription>
-          {preview}
+          <div className="flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-xl bg-secondary/40">
+            {preview}
+          </div>
           <DialogClose asChild>
             <button
               type="button"

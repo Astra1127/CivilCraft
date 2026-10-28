@@ -37,11 +37,17 @@ export function AlmanacJournal({
   levelId,
   regionId,
   onLevelChange,
+  lessonId,
+  onLessonChange,
+  onTabChange,
 }: {
   initialTab?: string;
   levelId?: string | undefined;
   regionId?: string | undefined;
   onLevelChange?: (level: AlmanacLevel | null) => void;
+  lessonId?: string | undefined;
+  onLessonChange?: (lessonId: string) => void;
+  onTabChange?: (tab: string) => void;
 }) {
   const { player } = useAuth();
   const id = player?.playFabId ?? "";
@@ -57,14 +63,15 @@ export function AlmanacJournal({
   });
   const [localSelected, setSelected] = useState<AlmanacLevel | null>(null);
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [localLessonId, setLocalLessonId] = useState<string>();
   const linkedLevel = journey.data
     ? findNotificationLevel(journey.data, id, levelId, regionId)
     : undefined;
   const selected = onLevelChange ? (linkedLevel ?? null) : localSelected;
   useNotificationRead(linkedLevel ? `lvl-${linkedLevel.levelId}` : undefined);
   useEffect(() => {
-    setActiveTab(levelId ? "journey" : initialTab);
-  }, [initialTab, levelId, regionId]);
+    setActiveTab(levelId ? "journey" : lessonId ? "engineering" : initialTab);
+  }, [initialTab, levelId, regionId, lessonId]);
 
   if (journey.isPending) return <LoadingState label="Opening your field journal…" rows={4} />;
   if (journey.isError)
@@ -134,7 +141,13 @@ export function AlmanacJournal({
         </div>
       </header>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(tab) => {
+          setActiveTab(tab);
+          onTabChange?.(tab);
+        }}
+      >
         <div className="-mx-1 min-w-0 max-w-full overflow-x-auto px-1 pb-1">
           <TabsList className="w-max">
             {tabs.map((t) => (
@@ -279,7 +292,11 @@ export function AlmanacJournal({
         </TabsContent>
 
         <TabsContent value="engineering" className="mt-6">
-          <GameLessons journey={j} playerId={id} />
+          <GameLessons
+            journey={j}
+            playerId={id}
+            selectedLessonId={onLessonChange ? lessonId : localLessonId}
+          />
         </TabsContent>
         <TabsContent value="quizzes" className="mt-6">
           <QuizRecords journey={j} />
@@ -292,6 +309,14 @@ export function AlmanacJournal({
       <LevelEntryDialog
         level={selected}
         open={!!selected}
+        onLessonSelect={(target) => {
+          setSelected(null);
+          if (onLessonChange) onLessonChange(target);
+          else {
+            setLocalLessonId(target);
+            setActiveTab("engineering");
+          }
+        }}
         onOpenChange={(v) => {
           if (!v) {
             if (onLevelChange) onLevelChange(null);

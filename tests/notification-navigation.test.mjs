@@ -392,6 +392,8 @@ test("journal route validates direct-link IDs and removes level selection when d
   });
   assert.equal(Route.validateSearch(search).levelId, level.levelId);
   assert.equal(Route.validateSearch({ levelId: { invalid: true } }).levelId, undefined);
+  assert.equal(Route.validateSearch({ lessonId: "deadload" }).lessonId, "deadload");
+  assert.equal(Route.validateSearch({ lessonId: { invalid: true } }).lessonId, undefined);
   let view;
   await act(async () => {
     view = create(React.createElement(Route.component));
@@ -400,6 +402,24 @@ test("journal route validates direct-link IDs and removes level selection when d
   assert.equal(calls[0].search.levelId, undefined);
   await act(async () => view.root.findByType("main").props.onLevelChange(level));
   assert.equal(calls[1].search.regionId, level.regionId);
+  await act(async () => view.root.findByType("main").props.onLessonChange("deadload"));
+  assert.equal(calls[2].search.tab, "engineering");
+  assert.equal(calls[2].search.lessonId, "deadload");
+  assert.equal(calls[2].search.levelId, undefined);
+  assert.equal(calls[2].replace, undefined, "Push history so Back can restore the completed level");
+  delete search.levelId;
+  delete search.regionId;
+  Object.assign(search, calls[2].search);
+  await act(async () => view.update(React.createElement(Route.component)));
+  assert.equal(view.root.findByType("main").props.lessonId, "deadload");
+  assert.equal(view.root.findByType("main").props.levelId, undefined);
+  delete search.lessonId;
+  Object.assign(search, { tab: "journey", levelId: level.levelId, regionId: level.regionId });
+  await act(async () => view.update(React.createElement(Route.component)));
+  assert.equal(view.root.findByType("main").props.levelId, level.levelId);
+  await act(async () => view.root.findByType("main").props.onTabChange("materials"));
+  assert.equal(calls[3].search.tab, "materials");
+  assert.equal(calls[3].search.lessonId, undefined);
   await act(async () => view.unmount());
 });
 

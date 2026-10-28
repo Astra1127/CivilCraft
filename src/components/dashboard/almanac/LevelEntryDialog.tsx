@@ -1,5 +1,5 @@
 import { levelStageLabel } from "@/lib/playfab/level-records";
-import { BookOpen, Medal } from "lucide-react";
+import { BookOpen, ChevronRight, Medal } from "lucide-react";
 import { BrandedCover } from "@/components/common/BrandedCover";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,10 @@ import {
 } from "@/components/ui/dialog";
 import { getBridgeType } from "@/lib/almanac/content";
 import type { AlmanacLevel } from "@/lib/playfab";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useBridgeSnapshot } from "./useBridgeSnapshot";
-import { bridgeLesson, popupConcepts } from "@/lib/almanac/lesson-catalog";
-import { ConceptIllustrations } from "./ConceptIllustrations";
+import { bridgeLesson } from "@/lib/almanac/lesson-catalog";
+import { levelLessonRows } from "@/lib/almanac/lesson-navigation";
 import { LessonIllustration } from "./LessonIllustration";
 
 export function CompletionScreenshot({
@@ -66,23 +66,31 @@ export function LevelEntryDialog({
   level,
   open,
   onOpenChange,
+  onLessonSelect,
 }: {
   level: AlmanacLevel | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  onLessonSelect?: (lessonId: string) => void;
 }) {
+  const navigatingToLesson = useRef(false);
   if (!level) return null;
   const c = level.completion;
   const bridge = getBridgeType(c?.bridgeTypeId);
-  // Tutorial 1 omits Bending from this presentation only; keep synced data intact.
-  const concepts = popupConcepts(level.engineeringConceptIds).filter(
-    (concept) => level.levelId !== "TUT_CONTRACT1" || concept.id !== "bending",
-  );
+  const lessonRows = levelLessonRows(level);
   const bridgeEducation = bridgeLesson(level);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-2xl overflow-x-hidden overflow-y-auto break-words border-4 border-primary bg-card">
+      <DialogContent
+        className="max-h-[92vh] max-w-2xl overflow-x-hidden overflow-y-auto break-words border-4 border-primary bg-card"
+        onCloseAutoFocus={(event) => {
+          if (navigatingToLesson.current) {
+            event.preventDefault();
+            navigatingToLesson.current = false;
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="text-center font-display text-xl uppercase tracking-[0.08em]">
             {levelStageLabel(level)} — {level.levelName ?? "Unknown"}
@@ -132,18 +140,51 @@ export function LevelEntryDialog({
           <h3 className="font-display text-sm uppercase tracking-[0.16em] text-muted-foreground">
             What you encountered
           </h3>
-          <ul className="mt-2 grid gap-3 sm:grid-cols-2">
-            {concepts.map((concept) => (
-              <li
-                key={concept.id}
-                className="min-w-0 rounded-xl border-2 border-border bg-secondary/40 p-3"
-              >
-                <ConceptIllustrations id={concept.id} title={concept.name} />
-                <p className="font-display text-base">{concept.name}</p>
-                <p className="text-sm text-muted-foreground">{concept.summary}</p>
+          <ul className="mt-2 space-y-2">
+            {lessonRows.map((row) => (
+              <li key={row.key} className="min-w-0">
+                {row.lessonId && onLessonSelect ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigatingToLesson.current = true;
+                      onLessonSelect(row.lessonId!);
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl border border-border bg-secondary/40 px-3 py-2 text-left hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    aria-label={`Read ${row.title} in Engineering`}
+                  >
+                    <BookOpen className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-display text-sm">{row.title}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {row.summary}
+                      </span>
+                    </span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-3 rounded-xl border border-border bg-secondary/20 px-3 py-2">
+                    <BookOpen
+                      className="h-4 w-4 shrink-0 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-display text-sm">{row.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">{row.summary}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Engineering entry or introduction mapping pending
+                      </p>
+                    </div>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
+          {!lessonRows.length ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Lesson mapping pending for this contract.
+            </p>
+          ) : null}
         </section>
 
         {bridge ? (

@@ -13,12 +13,13 @@ import * as navigation from "../src/lib/playfab/notification-navigation.ts";
 import * as playerLevel from "../src/lib/playfab/player-level.ts";
 import * as materialOrder from "../src/lib/almanac/material-order.ts";
 import * as lessonCatalog from "../src/lib/almanac/lesson-catalog.ts";
+import * as lessonNavigation from "../src/lib/almanac/lesson-navigation.ts";
 import * as actualContent from "../src/lib/almanac/content.ts";
 import catalog from "../src/lib/almanac/game-catalog.json" with { type: "json" };
 
 const require = createRequire(import.meta.url);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-function load(path, dependencies = {}, extra = "") {
+function load(path, dependencies = {}, extra = "", globals = {}) {
   const exports = {};
   const source = ts.transpileModule(readFileSync(new URL(path, import.meta.url), "utf8"), {
     compilerOptions: {
@@ -36,6 +37,7 @@ function load(path, dependencies = {}, extra = "") {
         "./player-level.ts": playerLevel,
         "@/lib/almanac/material-order": materialOrder,
         "@/lib/almanac/lesson-catalog": lessonCatalog,
+        "@/lib/almanac/lesson-navigation": lessonNavigation,
         "@/lib/almanac/content": actualContent,
         "./ConceptIllustrations":
           name === "./ConceptIllustrations"
@@ -53,6 +55,7 @@ function load(path, dependencies = {}, extra = "") {
         "@/components/dashboard/useNotificationRead": { useNotificationRead: () => {} },
       }[name] ??
       require(name),
+    ...globals,
   });
   return exports;
 }
@@ -343,6 +346,72 @@ test("Engineering cards require lesson sync even after tutorial completion and p
   await act(async () => view.unmount());
 });
 
+test("Engineering direct targets scroll, focus and briefly highlight the real card without granting progress", async () => {
+  const frames = [],
+    timers = [],
+    scrolled = [],
+    focused = [],
+    lookedUp = [];
+  const { GameLessons } = load(
+    "../src/components/dashboard/almanac/GameEducation.tsx",
+    {
+      "@/lib/almanac/game-catalog.json": { default: catalog },
+      "@/components/common/States": widgets,
+    },
+    "",
+    {
+      window: {
+        requestAnimationFrame: (fn) => {
+          frames.push(fn);
+          return frames.length;
+        },
+        cancelAnimationFrame: () => {},
+        matchMedia: () => ({ matches: true }),
+      },
+      document: {
+        getElementById: (id) => {
+          lookedUp.push(id);
+          return {
+            scrollIntoView: (options) => scrolled.push(options),
+            focus: (options) => focused.push(options),
+          };
+        },
+      },
+      setTimeout: (fn) => {
+        timers.push(fn);
+        return timers.length;
+      },
+      clearTimeout: () => {},
+    },
+  );
+  let view;
+  await act(async () => {
+    view = create(React.createElement(GameLessons, { journey: {}, selectedLessonId: "deadload" }));
+  });
+  await act(async () => frames.shift()());
+  assert.equal(lookedUp[0], "engineering-lesson-deadload");
+  assert.equal(scrolled[0].behavior, "auto", "Respect reduced motion");
+  assert.equal(focused[0].preventScroll, true);
+  const card = () => view.root.findByProps({ id: "engineering-lesson-deadload" });
+  assert.match(card().props.className, /ring-2 ring-gold/);
+  assert.equal(view.root.findAllByType("details").length, 0);
+  await act(async () => timers.shift()());
+  assert.doesNotMatch(card().props.className, /ring-2 ring-gold/);
+  await act(async () =>
+    view.update(
+      React.createElement(GameLessons, { journey: {}, selectedLessonId: "What is Tension" }),
+    ),
+  );
+  await act(async () => frames.shift()());
+  assert.equal(lookedUp[1], "engineering-lesson-What%20is%20Tension");
+  await act(async () =>
+    view.update(React.createElement(GameLessons, { journey: {}, selectedLessonId: "unknown" })),
+  );
+  assert.match(JSON.stringify(view.toJSON()), /unavailable in the current catalog/);
+  assert.equal(frames.length, 0);
+  await act(async () => view.unmount());
+});
+
 test("broken bridge photos fall back to a clearly identified placeholder", async () => {
   const { CompletionScreenshot } = load(
     "../src/components/dashboard/almanac/LevelEntryDialog.tsx",
@@ -416,7 +485,7 @@ test("completion dialog keeps undated completions visible without inventing a da
   }
 });
 
-test("level popup reuses load/beam assets and compact diagrams only for recorded concepts", async () => {
+test("level popup uses compact verified lesson links and pending entries, preserving Tutorial 1 exclusions", async () => {
   const component = load("../src/components/dashboard/almanac/LevelEntryDialog.tsx", {
     "lucide-react": widgets,
     "@/components/common/BrandedCover": widgets,
@@ -433,12 +502,14 @@ test("level popup reuses load/beam assets and compact diagrams only for recorded
     completion: { score: 3, completedAt: "", bridgeTypeId: "beam" },
   };
   let view;
+  const selectedLessons = [];
   await act(async () => {
     view = create(
       React.createElement(component.LevelEntryDialog, {
         level,
         open: true,
         onOpenChange: () => {},
+        onLessonSelect: (id) => selectedLessons.push(id),
       }),
     );
   });
@@ -447,11 +518,10 @@ test("level popup reuses load/beam assets and compact diagrams only for recorded
       .findAllByType("img")
       .map((img) => img.props.src)
       .sort(),
-    ["deadload", "LESSON001", "LESSON002"]
-      .map((id) => catalog.lessons.find((l) => l.id === id).image)
-      .sort(),
+    ["LESSON002"].map((id) => catalog.lessons.find((l) => l.id === id).image).sort(),
   );
-  assert.equal(view.root.findAllByType("svg").length, 1);
+  assert.equal(view.root.findByType("section").findAllByType("img").length, 0);
+  assert.equal(view.root.findByType("section").findAllByType("svg").length, 0);
   assert.match(JSON.stringify(view.toJSON()), /Dead Load/);
   assert.match(JSON.stringify(view.toJSON()), /Live Load/);
   assert.match(JSON.stringify(view.toJSON()), /Support/);
@@ -459,17 +529,33 @@ test("level popup reuses load/beam assets and compact diagrams only for recorded
   assert.deepEqual(level.engineeringConceptIds, ["load", "bending", "support"]);
   assert.match(JSON.stringify(view.toJSON()), /Date unavailable/);
   assert.match(view.root.findByType("DialogContent").props.className, /overflow-x-hidden/);
-  for (const img of view.root.findAllByType("img")) assert.match(img.props.className, /h-28/);
+  assert.equal(view.root.findByType("section").findAllByType("button").length, 2);
+  await act(async () =>
+    view.root.findByProps({ "aria-label": "Read Dead Load in Engineering" }).props.onClick(),
+  );
+  assert.deepEqual(selectedLessons, ["deadload"]);
+  let prevented = false;
+  view.root.findByType("DialogContent").props.onCloseAutoFocus({
+    preventDefault: () => {
+      prevented = true;
+    },
+  });
+  assert.equal(
+    prevented,
+    true,
+    "Lesson navigation must not return focus to the previous level trigger",
+  );
   await act(async () => {
     view.update(
       React.createElement(component.LevelEntryDialog, {
-        level: { ...level, levelId: "TUT_CONTRACT2" },
+        level: { ...level, levelId: "ReedsContract" },
         open: true,
         onOpenChange: () => {},
+        onLessonSelect: (id) => selectedLessons.push(id),
       }),
     );
   });
-  assert.equal(view.root.findAllByType("svg").length, 2);
+  assert.equal(view.root.findByType("section").findAllByType("button").length, 1);
   assert.match(JSON.stringify(view.toJSON()), /Bending/);
   assert.equal(content.getConcepts(["bending"])[0].name, "Bending");
   await act(async () => {
@@ -481,7 +567,7 @@ test("level popup reuses load/beam assets and compact diagrams only for recorded
       }),
     );
   });
-  assert.equal(view.root.findAllByType("svg").length, 0);
+  assert.equal(view.root.findByType("section").findAllByType("svg").length, 0);
   assert.equal(
     view.root.findAllByType("img").length,
     1,

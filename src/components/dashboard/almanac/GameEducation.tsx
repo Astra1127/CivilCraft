@@ -1,4 +1,10 @@
 import catalog from "@/lib/almanac/game-catalog.json";
+import { useEffect, useState } from "react";
+import {
+  engineeringLesson,
+  lessonAnchorId,
+  lessonIdentifier,
+} from "@/lib/almanac/lesson-navigation";
 import type { AlmanacJourney } from "@/lib/playfab/types";
 import { EmptyState } from "@/components/common/States";
 import { orderMaterials } from "@/lib/almanac/material-order";
@@ -65,10 +71,47 @@ export function QuizRecords({ journey }: { journey: AlmanacJourney }) {
   );
 }
 
-export function GameLessons({ journey }: { journey: AlmanacJourney; playerId?: string }) {
+export function GameLessons({
+  journey,
+  selectedLessonId,
+}: {
+  journey: AlmanacJourney;
+  playerId?: string;
+  selectedLessonId?: string | undefined;
+}) {
+  const selected = engineeringLesson(selectedLessonId);
+  const targetId = selected ? lessonIdentifier(selected) : undefined;
+  const [highlighted, setHighlighted] = useState<string>();
+  useEffect(() => {
+    if (!targetId || typeof window === "undefined") {
+      setHighlighted(undefined);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout>;
+    const frame = window.requestAnimationFrame(() => {
+      const card = document.getElementById(lessonAnchorId(targetId));
+      if (!card) return;
+      card.scrollIntoView({
+        block: "center",
+        behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+      });
+      card.focus({ preventScroll: true });
+      setHighlighted(targetId);
+      timer = setTimeout(() => setHighlighted(undefined), 3000);
+    });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [targetId]);
   const unmapped = unmappedLessonIds(journey);
   return (
     <div className="space-y-4">
+      {selectedLessonId && !selected ? (
+        <p role="status">This Engineering lesson is unavailable in the current catalog.</p>
+      ) : null}
       <p className="text-sm text-muted-foreground">
         This is the currently documented portion of the story. Introductions describe when topics
         are taught; only synchronized lesson records confirm your unlocks or completion.
@@ -88,14 +131,25 @@ export function GameLessons({ journey }: { journey: AlmanacJourney; playerId?: s
             {group.lessons.map((lesson) => {
               const progress = lessonProgress(lesson.key, journey);
               return (
-                <li key={lesson.key} className="panel min-w-0 overflow-hidden p-3 sm:p-4">
+                <li
+                  key={lesson.key}
+                  id={lessonAnchorId(lessonIdentifier(lesson))}
+                  tabIndex={-1}
+                  aria-labelledby={`${lessonAnchorId(lessonIdentifier(lesson))}-title`}
+                  className={`panel min-w-0 scroll-mt-24 overflow-hidden p-3 outline-none sm:p-4 ${highlighted === lessonIdentifier(lesson) ? "ring-2 ring-gold bg-gold/10" : ""}`}
+                >
                   <LessonIllustration
                     id={lesson.diagramId ?? lesson.id ?? lesson.key}
                     title={lesson.title}
                     {...(lesson.image ? { image: lesson.image } : {})}
                     compact
                   />
-                  <h4 className="font-display text-lg">{lesson.title}</h4>
+                  <h4
+                    id={`${lessonAnchorId(lessonIdentifier(lesson))}-title`}
+                    className="font-display text-lg"
+                  >
+                    {lesson.title}
+                  </h4>
                   <p className="text-xs text-muted-foreground">{lesson.topic}</p>
                   <p className="mt-1 text-xs font-bold text-primary">{group.introductionLabel}</p>
                   <p

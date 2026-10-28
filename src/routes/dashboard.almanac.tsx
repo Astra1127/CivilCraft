@@ -5,10 +5,11 @@ import { AlmanacJournal } from "@/components/dashboard/almanac/AlmanacJournal";
 export const Route = createFileRoute("/dashboard/almanac")({
   validateSearch: (
     search: Record<string, unknown>,
-  ): { tab?: string; levelId?: string; regionId?: string } => ({
+  ): { tab?: string; levelId?: string; regionId?: string; lessonId?: string } => ({
     ...(typeof search["tab"] === "string" ? { tab: search["tab"] } : {}),
     ...(targetSearch(search, "levelId") ? { levelId: targetSearch(search, "levelId")! } : {}),
     ...(targetSearch(search, "regionId") ? { regionId: targetSearch(search, "regionId")! } : {}),
+    ...(targetSearch(search, "lessonId") ? { lessonId: targetSearch(search, "lessonId")! } : {}),
   }),
   head: () => ({
     meta: [
@@ -25,13 +26,18 @@ export const Route = createFileRoute("/dashboard/almanac")({
 });
 
 function DashboardAlmanacPage() {
-  const { tab, levelId, regionId } = Route.useSearch();
+  const { tab, levelId, regionId, lessonId } = Route.useSearch();
   const navigate = Route.useNavigate();
   return (
     <AlmanacJournal
       initialTab={tab ?? "journey"}
       levelId={levelId}
       regionId={regionId}
+      lessonId={lessonId}
+      onLessonChange={(target) =>
+        void navigate({ search: { tab: "engineering", lessonId: target } })
+      }
+      onTabChange={(target) => void navigate({ search: { tab: target } })}
       onLevelChange={(level) =>
         void navigate({
           search: {

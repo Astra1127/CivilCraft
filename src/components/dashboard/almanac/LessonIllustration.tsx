@@ -42,7 +42,7 @@ export function LessonIllustration({
         onError={() => setFailedImage(image)}
         className={
           enlarged
-            ? "block h-auto w-auto max-w-full max-h-[calc(85vh-2rem)] object-contain"
+            ? "block h-full w-full min-h-0 min-w-0 object-contain"
             : `${height} w-full object-contain p-3`
         }
       />
@@ -53,7 +53,7 @@ export function LessonIllustration({
         aria-label={`${title}: ${descriptions[force] ?? (force === "equilibrium" ? "downward loads balanced by upward support reactions" : force === "tension" ? "forces pull away from opposite ends of a member" : "forces push toward opposite ends of a member")}`}
         className={
           enlarged
-            ? "h-auto w-[min(80vw,1000px)] max-w-full max-h-[calc(85vh-2rem)] text-primary"
+            ? "h-full w-full min-h-0 min-w-0 text-primary"
             : `${height} w-full p-3 text-primary`
         }
       >
