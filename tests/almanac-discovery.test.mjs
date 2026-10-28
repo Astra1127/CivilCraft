@@ -496,7 +496,8 @@ test("level popup uses compact verified lesson links and pending entries, preser
   });
   const level = {
     levelId: "TUT_CONTRACT1",
-    levelName: "Tutorial",
+    levelName:
+      "Tutorial with a very long challenge title that must remain fully readable on narrow screens",
     regionId: "canyon",
     engineeringConceptIds: ["load", "bending", "support"],
     completion: { score: 3, completedAt: "", bridgeTypeId: "beam" },
@@ -529,6 +530,22 @@ test("level popup uses compact verified lesson links and pending entries, preser
   assert.deepEqual(level.engineeringConceptIds, ["load", "bending", "support"]);
   assert.match(JSON.stringify(view.toJSON()), /Date unavailable/);
   assert.match(view.root.findByType("DialogContent").props.className, /overflow-x-hidden/);
+  assert.match(view.root.findByType("DialogContent").props.className, /min-w-0/);
+  assert.match(view.root.findByType("DialogHeader").props.className, /px-6/);
+  assert.match(
+    view.root.findByType("DialogTitle").props.className,
+    /whitespace-normal.*leading-snug/,
+  );
+  assert.ok(JSON.stringify(view.toJSON()).includes(level.levelName));
+  const cover = view.root.findByType("BrandedCover");
+  assert.equal(cover.props.compact, true);
+  assert.equal(view.root.findAllByProps({ className: "mx-auto w-full max-w-xs" }).length, 1);
+  assert.equal(
+    view.root
+      .findByType("section")
+      .findAll((node) => /\btruncate\b/.test(node.props.className ?? "")).length,
+    0,
+  );
   assert.equal(view.root.findByType("section").findAllByType("button").length, 2);
   await act(async () =>
     view.root.findByProps({ "aria-label": "Read Dead Load in Engineering" }).props.onClick(),

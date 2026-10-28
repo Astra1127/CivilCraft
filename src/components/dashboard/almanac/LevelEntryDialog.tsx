@@ -21,9 +21,11 @@ import { LessonIllustration } from "./LessonIllustration";
 export function CompletionScreenshot({
   level,
   className,
+  compactPlaceholder = false,
 }: {
   level: AlmanacLevel;
   className?: string;
+  compactPlaceholder?: boolean;
 }) {
   const privateUrl = useBridgeSnapshot(level);
   const candidate = privateUrl ?? level.completion?.completionScreenshotUrl;
@@ -50,7 +52,12 @@ export function CompletionScreenshot({
           className="aspect-video w-full object-cover"
         />
       ) : (
-        <BrandedCover label="Completion screenshot unavailable or not synchronized" />
+        <div className={compactPlaceholder ? "mx-auto w-full max-w-xs" : undefined}>
+          <BrandedCover
+            label="Completion screenshot unavailable or not synchronized"
+            compact={compactPlaceholder}
+          />
+        </div>
       )}
       <figcaption className="flex flex-wrap items-center justify-between gap-2 border-t-4 border-primary bg-card px-3 py-2">
         <span className="font-display text-xs uppercase tracking-[0.16em] text-muted-foreground">
@@ -83,7 +90,7 @@ export function LevelEntryDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[92vh] max-w-2xl overflow-x-hidden overflow-y-auto break-words border-4 border-primary bg-card"
+        className="max-h-[92dvh] w-[calc(100%-1rem)] min-w-0 max-w-2xl overflow-x-hidden overflow-y-auto [overflow-wrap:anywhere] border-4 border-primary bg-card p-4 sm:p-6 [&>*]:min-w-0"
         onCloseAutoFocus={(event) => {
           if (navigatingToLesson.current) {
             event.preventDefault();
@@ -91,8 +98,8 @@ export function LevelEntryDialog({
           }
         }}
       >
-        <DialogHeader>
-          <DialogTitle className="text-center font-display text-xl uppercase tracking-[0.08em]">
+        <DialogHeader className="min-w-0 px-6 sm:px-8">
+          <DialogTitle className="whitespace-normal text-center font-display text-lg leading-snug uppercase tracking-[0.04em] sm:text-xl">
             {levelStageLabel(level)} — {level.levelName ?? "Unknown"}
           </DialogTitle>
           <DialogDescription className="text-center">
@@ -100,7 +107,7 @@ export function LevelEntryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <CompletionScreenshot level={level} />
+        <CompletionScreenshot level={level} compactPlaceholder />
 
         {c ? (
           <dl className="mt-2 grid gap-px overflow-hidden rounded-xl border-2 border-border bg-border text-sm">
@@ -156,7 +163,7 @@ export function LevelEntryDialog({
                     <BookOpen className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
                     <span className="min-w-0 flex-1">
                       <span className="block font-display text-sm">{row.title}</span>
-                      <span className="block truncate text-xs text-muted-foreground">
+                      <span className="block whitespace-normal text-xs leading-relaxed text-muted-foreground">
                         {row.summary}
                       </span>
                     </span>
@@ -170,7 +177,9 @@ export function LevelEntryDialog({
                     />
                     <div className="min-w-0">
                       <p className="font-display text-sm">{row.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">{row.summary}</p>
+                      <p className="whitespace-normal text-xs leading-relaxed text-muted-foreground">
+                        {row.summary}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         Engineering entry or introduction mapping pending
                       </p>
