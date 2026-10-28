@@ -101,7 +101,9 @@ test("image and SVG previews open via labeled buttons, remain above a parent mod
       await act(async () => trigger().props.onClick());
       const dialog = view.root.findByType("preview-dialog");
       assert.match(dialog.props.className, /z-\[101\].*max-w-\[90vw\].*max-h-\[85vh\]/);
-      assert.ok(dialog.props.className.includes("h-[min(85vh,max(20rem,50vw))] w-[90vw]"));
+      assert.ok(
+        dialog.props.className.includes("h-[min(85vh,max(20rem,50vw))] w-[min(90vw,120vh)]"),
+      );
       assert.doesNotMatch(dialog.props.className, /w-fit/);
       assert.match(view.root.findByType("overlay").props.className, /z-\[100\].*bg-black\/75/);
       assert.match(view.root.findByType("h2").children.join(""), /Lesson.*enlarged illustration/);
@@ -146,6 +148,7 @@ test("shared lesson visual uses original image or vector, contain sizing and no 
     );
   });
   const image = view.root.findByType("preview-wrapper").props.preview;
+  assert.match(view.root.findByType("img").props.className, /h-28 sm:h-32.*object-contain p-1/);
   assert.equal(image.props.src, "/same-original.png");
   assert.match(image.props.className, /object-contain/);
   assert.match(image.props.className, /h-full w-full/);
@@ -158,6 +161,7 @@ test("shared lesson visual uses original image or vector, contain sizing and no 
     ),
   );
   assert.equal(view.root.findByType("preview-wrapper").props.preview.type, "svg");
+  assert.match(view.root.findByType("svg").props.className, /h-28 sm:h-32.*p-1/);
   assert.equal(view.root.findByType("preview-wrapper").props.preview.props.viewBox, "0 0 320 180");
   await act(async () => view.unmount());
 });

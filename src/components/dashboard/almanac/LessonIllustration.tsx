@@ -43,7 +43,7 @@ export function LessonIllustration({
         className={
           enlarged
             ? "block h-full w-full min-h-0 min-w-0 object-contain"
-            : `${height} w-full object-contain p-3`
+            : `${height} w-full object-contain p-1`
         }
       />
     ) : force ? (
@@ -54,7 +54,7 @@ export function LessonIllustration({
         className={
           enlarged
             ? "h-full w-full min-h-0 min-w-0 text-primary"
-            : `${height} w-full p-3 text-primary`
+            : `${height} w-full p-1 text-primary`
         }
       >
         {descriptions[force] ? (
