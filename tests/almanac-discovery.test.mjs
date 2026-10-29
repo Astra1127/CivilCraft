@@ -51,6 +51,16 @@ function load(path, dependencies = {}, extra = "", globals = {}) {
         "@/lib/playfab/level-records": levelRecords,
         "@/lib/playfab/notification-navigation": navigation,
         "./useBridgeSnapshot": { useBridgeSnapshot: () => undefined },
+        "./QuizAnswerReview":
+          name === "./QuizAnswerReview"
+            ? load("../src/components/dashboard/almanac/QuizAnswerReview.tsx", {
+                "./useQuizAnswerReview": {
+                  useQuizAnswerReview: () => ({ status: "idle", retry() {} }),
+                },
+                "@/components/ui/button": widgets,
+                "lucide-react": widgets,
+              })
+            : undefined,
         "./IllustrationPreview": { IllustrationPreview: ({ children }) => children },
         "@/components/dashboard/useNotificationRead": { useNotificationRead: () => {} },
       }[name] ??

@@ -9,6 +9,7 @@ import type { AlmanacJourney } from "@/lib/playfab/types";
 import { EmptyState } from "@/components/common/States";
 import { orderMaterials } from "@/lib/almanac/material-order";
 import { LessonIllustration } from "./LessonIllustration";
+import { QuizAnswerList, QuizAnswerReview } from "./QuizAnswerReview";
 import {
   lessonGroups,
   lessonProgress,
@@ -44,26 +45,12 @@ export function QuizRecords({ journey }: { journey: AlmanacJourney }) {
           {a.answers ? (
             <details className="mt-3">
               <summary className="cursor-pointer font-bold">Review submitted answers</summary>
-              <ol className="mt-3 space-y-4">
-                {a.answers.map((r) => (
-                  <li key={r.questionId}>
-                    <p className="font-bold">{r.question}</p>
-                    <ol className="list-inside list-[upper-alpha]">
-                      {r.choices.map((choice, index) => (
-                        <li key={index}>
-                          {choice}
-                          {index === r.selectedIndex ? " — Your answer" : ""}
-                          {index === r.correctIndex ? " — Correct answer" : ""}
-                        </li>
-                      ))}
-                    </ol>
-                    <p>{r.selectedIndex === r.correctIndex ? "Correct" : "Incorrect"}</p>
-                  </li>
-                ))}
-              </ol>
+              <div className="mt-3 max-h-[65vh] min-w-0 overflow-y-auto [overflow-wrap:anywhere]">
+                <QuizAnswerList answers={a.answers} />
+              </div>
             </details>
           ) : (
-            <p className="mt-3 text-sm text-muted-foreground">Answer review unavailable.</p>
+            <QuizAnswerReview attempt={a} />
           )}
         </li>
       ))}

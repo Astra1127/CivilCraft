@@ -2,6 +2,7 @@ import { contactSettingsRequest } from "./lib/cms/contact-settings.server";
 import { handlePlayerMessages } from "./lib/playfab/player-messages.server";
 import { handleCharacterPortrait } from "./lib/playfab/character-portrait.server";
 import { handleBridgeSnapshot } from "./lib/playfab/bridge-snapshot.server";
+import { handleQuizReview } from "./lib/playfab/quiz-review.server";
 import { releaseRequest } from "./lib/cms/releases.server";
 import { messageRequest } from "./lib/cms/messages.server";
 import { handleEmailRequest } from "./lib/email/api.server";
@@ -71,6 +72,8 @@ export default {
       if (portraitResponse) return portraitResponse;
       const bridgeSnapshotResponse = await handleBridgeSnapshot(request);
       if (bridgeSnapshotResponse) return bridgeSnapshotResponse;
+      const quizReviewResponse = await handleQuizReview(request);
+      if (quizReviewResponse) return quizReviewResponse;
       const releasesResponse = await releaseRequest(request);
       if (releasesResponse) return releasesResponse;
       const contactSettingsResponse = await contactSettingsRequest(request);

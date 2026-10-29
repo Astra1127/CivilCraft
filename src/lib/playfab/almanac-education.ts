@@ -5,6 +5,8 @@ export interface QuizAnswer {
   choices: string[];
   selectedIndex: number;
   correctIndex: number;
+  /** Optional authored feedback for this exact quiz content version. */
+  explanation?: string;
 }
 export interface QuizAttempt {
   quizId: string;
@@ -76,6 +78,7 @@ export function parseEducation(value: unknown): {
             choices: r["choices"],
             selectedIndex: r["selectedIndex"],
             correctIndex: r["correctIndex"],
+            ...(text(r["explanation"]) ? { explanation: r["explanation"] } : {}),
           });
         }
       }

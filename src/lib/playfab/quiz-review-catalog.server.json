@@ -1,0 +1,635 @@
+{
+  "schemaVersion": 1,
+  "versions": [
+    {
+      "quizId": "civil-craft-arch-bridge-quiz-v1",
+      "contentFingerprint": "89829eb25af717bfceb43a0503672dba3c4ebb9cdd54bdf99d61880091f0264d",
+      "title": "Arch Bridge Quiz",
+      "questions": [
+        {
+          "questionId": "arch-bridge",
+          "question": "What is the main structural characteristic of an Arch Bridge?",
+          "choices": [
+            "It uses cables to suspend the roadway.",
+            "It uses a curved structural shape to carry loads.",
+            "It uses only straight horizontal beams.",
+            "It carries loads without structural supports."
+          ],
+          "correctIndex": 1
+        },
+        {
+          "questionId": "compression",
+          "question": "What type of force does an arch primarily carry when weight is applied?",
+          "choices": ["Tension", "Torsion", "Compression", "Shear"],
+          "correctIndex": 2
+        },
+        {
+          "questionId": "abutments",
+          "question": "What is the main purpose of the Abutments in an Arch Bridge?",
+          "choices": [
+            "To resist the outward push created by the arch.",
+            "To increase the speed of vehicles crossing the bridge.",
+            "To suspend the roadway using cables.",
+            "To prevent boats from traveling beneath the bridge."
+          ],
+          "correctIndex": 0
+        },
+        {
+          "questionId": "load-transfer",
+          "question": "How does an Arch Bridge transfer loads toward its supports?",
+          "choices": [
+            "By transferring all loads directly into the water.",
+            "By removing the weight of vehicles as they cross.",
+            "By transferring loads only through the roadway without using the arch.",
+            "By carrying forces along the curved arch toward the supports at both ends."
+          ],
+          "correctIndex": 3
+        },
+        {
+          "questionId": "waterway-clearance",
+          "question": "Why must Marsh's bridge provide sufficient clearance beneath the roadway?",
+          "choices": [
+            "To prevent vehicles from applying weight to the bridge.",
+            "To allow boats to pass safely underneath the bridge.",
+            "To eliminate the need for abutments.",
+            "To make the bridge carry loads only through tension."
+          ],
+          "correctIndex": 1
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-beam-bridge-quiz-v1",
+      "contentFingerprint": "c749e506a797ea71a8a1e7db0846d884e70202c8b6d2b74a5f06f23f19c64325",
+      "title": "Beam Bridge Quiz",
+      "questions": [
+        {
+          "questionId": "live-load",
+          "question": "What is a Live Load in bridge construction?",
+          "choices": [
+            "The permanent weight of the bridge",
+            "The weight of the bridge supports",
+            "A load that moves or changes position on a structure",
+            "The total cost of bridge materials"
+          ],
+          "correctIndex": 2
+        },
+        {
+          "questionId": "dead-load",
+          "question": "Which of the following is an example of a Dead Load?",
+          "choices": [
+            "A vehicle crossing the bridge",
+            "The weight of the bridge deck",
+            "A person walking across the bridge",
+            "A moving construction vehicle"
+          ],
+          "correctIndex": 1
+        },
+        {
+          "questionId": "beam-bridge",
+          "question": "What is the main function of a Beam Bridge?",
+          "choices": [
+            "To carry loads across a gap toward its supports",
+            "To support the roadway using cables only",
+            "To prevent all bending in the bridge",
+            "To carry loads without structural supports"
+          ],
+          "correctIndex": 0
+        },
+        {
+          "questionId": "wood-road",
+          "question": "What is the purpose of the Wood Road in bridge construction?",
+          "choices": [
+            "To transfer loads directly into the ground",
+            "To measure the stress of the bridge",
+            "To replace the bridge supports",
+            "To provide a roadway for vehicles to cross"
+          ],
+          "correctIndex": 3
+        },
+        {
+          "questionId": "wood-pier",
+          "question": "What is the main function of a Wood Pier?",
+          "choices": [
+            "To increase the speed of crossing vehicles",
+            "To support the bridge and transfer loads toward the ground",
+            "To serve as the roadway of the bridge",
+            "To reduce the cost of all construction materials"
+          ],
+          "correctIndex": 1
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-bending-quiz-v1",
+      "contentFingerprint": "23b27549322f31a5110cf80333d229645b3df8f2d5f62b7da2848de566cadf84",
+      "title": "Bending Quiz",
+      "questions": [
+        {
+          "questionId": "bending",
+          "question": "What is <b><#E09500>Bending</color></b> in bridge construction?",
+          "choices": [
+            "The movement of a bridge from one location to another.",
+            "The expansion of bridge materials due to temperature.",
+            "The curving or deformation of a structural member under an applied load.",
+            "The complete removal of forces acting on a bridge."
+          ],
+          "correctIndex": 2,
+          "explanation": "Bending is the curving or deformation of a structural member under an applied load."
+        },
+        {
+          "questionId": "vehicle-load",
+          "question": "What happens when a vehicle crosses a bridge?",
+          "choices": [
+            "Its weight creates a downward load on the structure.",
+            "Its weight removes the forces acting on the bridge.",
+            "Its weight only affects the ground beneath the bridge.",
+            "Its weight prevents structural members from bending."
+          ],
+          "correctIndex": 0,
+          "explanation": "Vehicle weight creates a downward load that the bridge transfers toward its supports."
+        },
+        {
+          "questionId": "maximum-bending",
+          "question": "For a simply supported bridge with a vehicle positioned at the middle, where does the greatest bending moment commonly occur?",
+          "choices": [
+            "At the bridge entrance.",
+            "At the bridge supports.",
+            "Beyond the end of the bridge.",
+            "Near the middle of the bridge."
+          ],
+          "correctIndex": 3,
+          "explanation": "In this simply supported case, a load at midspan commonly produces the greatest bending moment near the middle."
+        },
+        {
+          "questionId": "compression-and-tension",
+          "question": "When a simply supported beam bends downward under a vehicle's weight, what happens to its upper and lower parts?",
+          "choices": [
+            "Both parts experience only compression.",
+            "The upper part experiences compression, while the lower part experiences tension.",
+            "The upper part experiences tension, while the lower part experiences compression.",
+            "Both parts experience no internal forces."
+          ],
+          "correctIndex": 1,
+          "explanation": "In downward bending of a simply supported beam, the upper part is compressed and the lower part is stretched in tension."
+        },
+        {
+          "questionId": "structural-support",
+          "question": "Why is understanding bending important when designing a bridge?",
+          "choices": [
+            "It eliminates the need to test the bridge.",
+            "It ensures that no loads will act on the bridge.",
+            "It helps identify areas that may need additional structural support.",
+            "It allows the bridge to carry any weight without limitations."
+          ],
+          "correctIndex": 2,
+          "explanation": "Understanding bending helps identify areas needing more support; testing still confirms whether the bridge safely carries its intended load."
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-load-distribution-quiz-v1",
+      "contentFingerprint": "f8bac87865e287a37f4c5363224e3bae04e6588b4ad5d0c9433f45a5f43fb719",
+      "title": "Load Distribution Quiz",
+      "questions": [
+        {
+          "questionId": "load-distribution",
+          "question": "What is <b><#E09500>Load Distribution</color></b> in bridge construction?",
+          "choices": [
+            "The movement of vehicles across a bridge.",
+            "The process of removing weight from a structure.",
+            "How an applied load is shared among structural members and supports.",
+            "How construction materials are transported to a site."
+          ],
+          "correctIndex": 2,
+          "explanation": "Load distribution describes how structural members and supports share an applied load."
+        },
+        {
+          "questionId": "vehicle-load",
+          "question": "When a vehicle crosses a bridge, how does its weight affect the structure?",
+          "choices": [
+            "It only affects the section directly beneath the vehicle.",
+            "It is carried by different structural members and distributed toward the supports.",
+            "It affects only the roadway and never reaches the supports.",
+            "It disappears once the vehicle reaches the middle."
+          ],
+          "correctIndex": 1,
+          "explanation": "Connected members carry the vehicle's weight through the structure toward its supports."
+        },
+        {
+          "questionId": "support-placement",
+          "question": "How does the <b><#E09500>placement of supports</color></b> affect a bridge?",
+          "choices": [
+            "It changes how the load is distributed throughout the structure.",
+            "It removes the need for structural members.",
+            "It prevents vehicles from applying downward loads.",
+            "It guarantees that all supports carry equal loads."
+          ],
+          "correctIndex": 0,
+          "explanation": "Changing support positions can change how the load is shared; equal loading is not guaranteed."
+        },
+        {
+          "questionId": "unequal-load-distribution",
+          "question": "Why might some structural members and supports carry more load than others?",
+          "choices": [
+            "Because every bridge member always carries the same amount of weight.",
+            "Because the vehicle's weight only acts on the nearest support.",
+            "Because the length of the roadway eliminates load differences.",
+            "Because the bridge's design and support arrangement affect how loads are shared."
+          ],
+          "correctIndex": 3,
+          "explanation": "The structural arrangement and support positions influence the portion of load carried by each part."
+        },
+        {
+          "questionId": "structural-observation",
+          "question": "Why should engineers observe the <b><#E09500>entire bridge</color></b> when testing it under a moving vehicle?",
+          "choices": [
+            "Because only the section beneath the vehicle carries the load.",
+            "Because the bridge's supports do not affect structural behavior.",
+            "Because the vehicle's load can affect different sections and supports throughout the structure.",
+            "Because the bridge stops carrying weight when the vehicle moves."
+          ],
+          "correctIndex": 2,
+          "explanation": "The moving load can affect members and supports throughout the connected structure."
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-load-transfer-quiz-v1",
+      "contentFingerprint": "51fcaf64803811e6c997413e3901be318c3b066d035144fdf6d82c53757467cb",
+      "title": "Load Transfer Quiz",
+      "questions": [
+        {
+          "questionId": "load-transfer",
+          "question": "What is <b><#E09500>Load Transfer</color></b> in bridge construction?",
+          "choices": [
+            "The movement of vehicles from one bridge to another.",
+            "The process of removing weight from a bridge.",
+            "The distribution of construction materials across a site.",
+            "The process through which forces travel through structural components toward supports and foundations."
+          ],
+          "correctIndex": 3,
+          "explanation": "Load transfer is the movement of forces through connected components toward supports and foundations."
+        },
+        {
+          "questionId": "suspension-load-path",
+          "question": "In a suspension bridge, which sequence correctly describes how the vehicle's weight is transferred?",
+          "choices": [
+            "Deck → Towers → Hangers → Main Cables → Ground",
+            "Deck → Hangers → Main Cables → Towers and Anchorages → Ground",
+            "Main Cables → Deck → Towers → Hangers → Ground",
+            "Anchorages → Deck → Hangers → Towers → Ground"
+          ],
+          "correctIndex": 1,
+          "explanation": "In this suspension example, the deck transfers load through hangers and cables to towers and anchorages, then the ground."
+        },
+        {
+          "questionId": "main-cables",
+          "question": "What type of force do the <b><#E09500>main cables</color></b> of a suspension bridge primarily carry?",
+          "choices": ["Tension", "Compression", "Bending", "Torsion"],
+          "correctIndex": 0,
+          "explanation": "The main cables primarily carry tension: a pulling force."
+        },
+        {
+          "questionId": "towers-and-anchorages",
+          "question": "How do the towers and anchor points help support a suspension bridge?",
+          "choices": [
+            "The towers carry tension while the anchor points support the roadway directly.",
+            "Both eliminate the forces acting on the bridge.",
+            "The towers carry compressive forces toward the ground, while anchor points resist the cables' pull.",
+            "The towers prevent vehicles from applying weight to the deck."
+          ],
+          "correctIndex": 2,
+          "explanation": "Towers carry compression toward the ground; anchor points resist the tension in the cables."
+        },
+        {
+          "questionId": "structural-connections",
+          "question": "Why are the <b><#E09500>connections between structural components</color></b> important in a bridge?",
+          "choices": [
+            "They ensure every component carries exactly the same amount of weight.",
+            "They allow forces to travel through connected components toward the supports.",
+            "They remove the need for towers and foundations.",
+            "They prevent all structural deformation during testing."
+          ],
+          "correctIndex": 1,
+          "explanation": "Connections let forces travel along a continuous load path toward the supports."
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-material-stress-quiz-v1",
+      "contentFingerprint": "b27c0724c3d63516cbfa78f2451c25d33a9959465b3375f5b8c4ce745fc45931",
+      "title": "Material Stress Quiz",
+      "questions": [
+        {
+          "questionId": "material-stress",
+          "question": "What is Material Stress in structural engineering?",
+          "choices": [
+            "The total weight of a bridge and its materials.",
+            "The amount of movement a vehicle creates while crossing.",
+            "The internal force per unit area developed within a material under load.",
+            "The distance between a bridge's structural supports."
+          ],
+          "correctIndex": 2
+        },
+        {
+          "questionId": "causes-of-stress",
+          "question": "Which of the following can cause stress in a bridge's structural members?",
+          "choices": [
+            "Only the length of the bridge.",
+            "Tension, compression, bending, or shear.",
+            "Only the color and appearance of the materials.",
+            "The number of vehicles parked near the bridge."
+          ],
+          "correctIndex": 1
+        },
+        {
+          "questionId": "concrete-behavior",
+          "question": "Which statement correctly describes how concrete generally behaves under forces?",
+          "choices": [
+            "Concrete is equally strong in tension and compression.",
+            "Concrete cannot withstand any compression.",
+            "Concrete is strongest only when pulled apart.",
+            "Concrete generally handles compression well but is weaker in tension unless reinforced."
+          ],
+          "correctIndex": 3
+        },
+        {
+          "questionId": "excessive-stress",
+          "question": "What may happen when the stress in a structural member exceeds what its material can safely withstand?",
+          "choices": [
+            "The member may crack, deform excessively, or fail.",
+            "The member automatically becomes stronger.",
+            "The bridge stops experiencing internal forces.",
+            "The material becomes unaffected by additional loads."
+          ],
+          "correctIndex": 0
+        },
+        {
+          "questionId": "structural-safety",
+          "question": "Why is it important to choose suitable materials and arrange supports properly?",
+          "choices": [
+            "To eliminate the need for bridge testing.",
+            "To ensure all structural members carry exactly the same force.",
+            "To help keep the stresses within safe limits under applied loads.",
+            "To prevent vehicles from creating any downward force."
+          ],
+          "correctIndex": 2
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-moving-load-quiz-v1",
+      "contentFingerprint": "e8e5b5e3d5616fe3c9611f34a88c9ffe0846d5d478d841b11871854bed96544f",
+      "title": "Moving Load Quiz",
+      "questions": [
+        {
+          "questionId": "moving-load",
+          "question": "What is a Moving Load in bridge construction?",
+          "choices": [
+            "A load that remains in one position on a bridge.",
+            "A load that changes position as it travels across a structure.",
+            "A load that only affects the bridge's supports.",
+            "A load that does not create forces on the bridge."
+          ],
+          "correctIndex": 1
+        },
+        {
+          "questionId": "structural-response",
+          "question": "What happens to the forces acting on a bridge as a vehicle moves across it?",
+          "choices": [
+            "The forces remain exactly the same at every position.",
+            "The forces disappear when the vehicle reaches the middle.",
+            "The forces and stresses can change as the vehicle changes position.",
+            "The forces only affect the bridge after the vehicle crosses."
+          ],
+          "correctIndex": 2
+        },
+        {
+          "questionId": "support-reactions",
+          "question": "When a vehicle is near one end of a simply supported bridge, which support generally carries a greater share of that vehicle's weight?",
+          "choices": [
+            "The support closest to the vehicle.",
+            "The support farthest from the vehicle.",
+            "Both supports always carry exactly the same amount.",
+            "Neither support carries any load."
+          ],
+          "correctIndex": 0
+        },
+        {
+          "questionId": "bending-effect",
+          "question": "For a simply supported bridge, what generally happens to the bending effect near the center as a vehicle moves toward the middle?",
+          "choices": [
+            "It disappears completely.",
+            "It remains unchanged regardless of vehicle position.",
+            "It becomes unrelated to the vehicle's weight.",
+            "It generally increases as the vehicle approaches the middle."
+          ],
+          "correctIndex": 3
+        },
+        {
+          "questionId": "structural-safety",
+          "question": "Why must a bridge be tested with vehicles moving across the entire span?",
+          "choices": [
+            "Because only the vehicle's starting position affects the structure.",
+            "Because the bridge must safely handle different loads and structural responses throughout the crossing.",
+            "Because moving vehicles eliminate the need for structural supports.",
+            "Because the bridge experiences no forces once the vehicle starts moving."
+          ],
+          "correctIndex": 1
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-shear-quiz-v1",
+      "contentFingerprint": "d7378b19eab509d4724820360287fba6293f0f0ad36d0137e29660d91964684d",
+      "title": "Shear Quiz",
+      "questions": [
+        {
+          "questionId": "shear",
+          "question": "What is Shear in structural engineering?",
+          "choices": [
+            "A force that stretches a structural member.",
+            "An internal force that resists adjacent parts of a material sliding past each other.",
+            "A force that only causes a bridge to bend.",
+            "A force that removes the weight acting on a structure."
+          ],
+          "correctIndex": 1
+        },
+        {
+          "questionId": "cause-of-shear",
+          "question": "How do shear forces develop in a bridge beam carrying a heavy vehicle?",
+          "choices": [
+            "The vehicle pushes upward while the supports push downward.",
+            "The vehicle and supports remove all internal forces.",
+            "The vehicle pushes downward while the supports provide upward reactions.",
+            "The bridge experiences shear only when no vehicle is present."
+          ],
+          "correctIndex": 2
+        },
+        {
+          "questionId": "shear-near-supports",
+          "question": "In a simply supported beam carrying a load near the middle, where is shear force often greatest?",
+          "choices": [
+            "In the regions near the supports.",
+            "Only at the exact center of the beam.",
+            "Outside the bridge structure.",
+            "Only above the vehicle."
+          ],
+          "correctIndex": 0
+        },
+        {
+          "questionId": "shear-and-bending",
+          "question": "Which statement correctly describes Shear and Bending?",
+          "choices": [
+            "Shear and bending are exactly the same force.",
+            "Bending occurs only in bridges without supports.",
+            "Shear eliminates bending in structural members.",
+            "Shear and bending are different internal effects that can occur in the same structural member."
+          ],
+          "correctIndex": 3
+        },
+        {
+          "questionId": "excessive-shear",
+          "question": "What may happen if a structural member cannot safely withstand the shear forces acting on it?",
+          "choices": [
+            "It automatically becomes stronger.",
+            "It may crack or fail.",
+            "It stops carrying all loads without damage.",
+            "It eliminates the need for additional supports."
+          ],
+          "correctIndex": 1
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-tension-compression-quiz-v1",
+      "contentFingerprint": "5324f064dc03cc662b05abf360f42bb97600e04f11344f7d7935648e770de477",
+      "title": "Tension & Compression Quiz",
+      "questions": [
+        {
+          "questionId": "tension",
+          "question": "What happens to a structural member when it experiences <b><#E09500>Tension</color></b>?",
+          "choices": [
+            "It is pushed or squeezed together.",
+            "It is pulled or stretched apart.",
+            "It experiences no internal force.",
+            "It becomes shorter due to compression."
+          ],
+          "correctIndex": 1,
+          "explanation": "Tension pulls or stretches a structural member; compression pushes or squeezes it together."
+        },
+        {
+          "questionId": "compression",
+          "question": "What is <b><#E09500>Compression</color></b> in structural engineering?",
+          "choices": [
+            "A force that causes a member to stretch.",
+            "A force that causes a member to rotate.",
+            "A force that removes the weight of a structure.",
+            "A force that pushes or squeezes a member together."
+          ],
+          "correctIndex": 3,
+          "explanation": "Compression pushes or squeezes a member together and can cause it to shorten."
+        },
+        {
+          "questionId": "structural-members",
+          "question": "When a vehicle crosses a truss bridge, what can happen to its structural members?",
+          "choices": [
+            "Some members experience tension while others experience compression.",
+            "All members experience only tension.",
+            "All members experience only compression.",
+            "The members stop carrying forces once the vehicle moves."
+          ],
+          "correctIndex": 0,
+          "explanation": "Different truss members can carry tension or compression under the same vehicle load."
+        },
+        {
+          "questionId": "load-transfer",
+          "question": "Why are tension and compression important in a bridge structure?",
+          "choices": [
+            "They prevent vehicles from applying weight to the bridge.",
+            "They eliminate the need for structural supports.",
+            "They help structural members carry loads toward the supports.",
+            "They allow the bridge to carry unlimited weight."
+          ],
+          "correctIndex": 2,
+          "explanation": "Members carry tension and compression as they transfer loads through the bridge toward its supports."
+        },
+        {
+          "questionId": "structural-safety",
+          "question": "Why must engineers consider tension and compression when designing a bridge for heavier vehicles?",
+          "choices": [
+            "To make every structural member the same length.",
+            "To ensure the members can safely withstand the forces acting on them.",
+            "To remove the need for bridge testing.",
+            "To prevent the bridge from carrying its own weight."
+          ],
+          "correctIndex": 1,
+          "explanation": "Members must withstand the forces from the intended loads, including the vehicle and its cargo."
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-truss-bridge-quiz-v1",
+      "contentFingerprint": "969012b6d2da2e4c12b46c7859ac071fd3deb53a4447c9c2d36fa9568c331bfd",
+      "title": "Truss Bridge Quiz",
+      "questions": [
+        {
+          "questionId": "truss",
+          "question": "What is the main characteristic of a Truss Bridge?",
+          "choices": [
+            "It uses only horizontal roadways without additional members.",
+            "It uses connected structural members arranged in triangular patterns.",
+            "It relies entirely on cables to carry loads.",
+            "It uses curved structural members to carry loads."
+          ],
+          "correctIndex": 1
+        },
+        {
+          "questionId": "equilibrium",
+          "question": "What does Equilibrium mean in structural engineering?",
+          "choices": [
+            "The structure has no weight acting on it.",
+            "The bridge is built using equal amounts of materials.",
+            "The forces and moments acting on a structure are balanced.",
+            "The bridge can carry any load without failing."
+          ],
+          "correctIndex": 2
+        },
+        {
+          "questionId": "wood-beam",
+          "question": "What is the purpose of a Wood Beam in a Truss Bridge?",
+          "choices": [
+            "To form connected structural arrangements that help carry loads.",
+            "To provide the roadway surface for vehicles.",
+            "To measure the total construction budget.",
+            "To control the movement of vehicles."
+          ],
+          "correctIndex": 0
+        },
+        {
+          "questionId": "triangular-arrangement",
+          "question": "Why are triangular arrangements commonly used in Truss Bridges?",
+          "choices": [
+            "They remove the need for structural supports.",
+            "They prevent all forces from acting on the bridge.",
+            "They make the roadway longer without adding materials.",
+            "They help the structure maintain its shape when forces act on it."
+          ],
+          "correctIndex": 3
+        },
+        {
+          "questionId": "support-reactions",
+          "question": "When a vehicle crosses a bridge, how do the supports help maintain equilibrium?",
+          "choices": [
+            "They remove the weight of the vehicle.",
+            "They provide upward reactions that help balance downward loads.",
+            "They prevent the vehicle from moving across the bridge.",
+            "They eliminate the need for structural members."
+          ],
+          "correctIndex": 1
+        }
+      ]
+    }
+  ]
+}
