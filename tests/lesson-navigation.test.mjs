@@ -28,13 +28,13 @@ test("verified story introductions link to existing Engineering cards, not gener
   });
   assert.deepEqual(
     reed.map((r) => r.lessonId),
-    ["concept:bending"],
+    ["civil-craft-bending-lesson-v1"],
   );
   assert.deepEqual(
     levelLessonRows({ levelId: "Reed's Contract", engineeringConceptIds: [] }).map(
       (r) => r.lessonId,
     ),
-    ["concept:bending"],
+    ["civil-craft-bending-lesson-v1"],
   );
   assert.deepEqual(
     levelLessonRows({ levelId: "VancesContract", engineeringConceptIds: [] }).map(
@@ -44,7 +44,7 @@ test("verified story introductions link to existing Engineering cards, not gener
   );
   assert.equal(
     levelLessonRows({ levelId: "MainContractSilas", engineeringConceptIds: [] })[0].lessonId,
-    undefined,
+    "civil-craft-load-transfer-lesson-v1",
   );
 });
 test("unknown stages and unavailable Engineering entries produce pending rows without broken links", () => {
@@ -52,9 +52,13 @@ test("unknown stages and unavailable Engineering entries produce pending rows wi
     levelLessonRows({ levelId: "unverified", engineeringConceptIds: ["tension"] })[0].lessonId,
     undefined,
   );
-  for (const id of [undefined, "", "unknown", "LESSON002", "reference:load-transfer"])
+  for (const id of [undefined, "", "unknown", "LESSON002"])
     assert.equal(engineeringLesson(id), undefined);
   const lesson = engineeringLesson("concept:bending");
-  assert.equal(lessonIdentifier(lesson), "concept:bending");
+  assert.equal(lessonIdentifier(lesson), "civil-craft-bending-lesson-v1");
+  assert.equal(
+    engineeringLesson("reference:load-transfer").id,
+    "civil-craft-load-transfer-lesson-v1",
+  );
   assert.equal(lessonAnchorId("What is Tension"), "engineering-lesson-What%20is%20Tension");
 });

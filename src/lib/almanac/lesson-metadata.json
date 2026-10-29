@@ -98,6 +98,7 @@
     },
     {
       "key": "concept:bending",
+      "gameLessonId": "civil-craft-bending-lesson-v1",
       "conceptId": "bending",
       "category": "engineering",
       "stageId": "reed-supply",
@@ -123,6 +124,7 @@
     },
     {
       "key": "concept:load-distribution",
+      "gameLessonId": "civil-craft-load-distribution-lesson-v1",
       "conceptId": "load-distribution",
       "category": "engineering",
       "stageId": "silas-community",
@@ -132,6 +134,7 @@
     },
     {
       "key": "reference:load-transfer",
+      "gameLessonId": "civil-craft-load-transfer-lesson-v1",
       "title": "Load Transfer",
       "category": "engineering",
       "stageId": "silas-later",
@@ -140,6 +143,7 @@
     },
     {
       "key": "reference:moving-load",
+      "gameLessonId": "civil-craft-moving-load-lesson-v1",
       "title": "Moving Load",
       "category": "engineering",
       "stageId": "brooks-market",
@@ -154,6 +158,35 @@
       "order": 10,
       "conceptIds": ["structural-failure"],
       "diagramId": "structural-failure"
+    },
+    {
+      "key": "civil-craft-shear-lesson-v1",
+      "gameLessonId": "civil-craft-shear-lesson-v1",
+      "category": "engineering",
+      "order": 10,
+      "conceptIds": []
+    },
+    {
+      "key": "civil-craft-material-stress-lesson-v1",
+      "gameLessonId": "civil-craft-material-stress-lesson-v1",
+      "category": "engineering",
+      "order": 20,
+      "conceptIds": []
+    },
+    {
+      "key": "civil-craft-tension-compression-lesson-v1",
+      "gameLessonId": "civil-craft-tension-compression-lesson-v1",
+      "category": "engineering",
+      "order": 30,
+      "conceptIds": []
+    },
+    {
+      "key": "civil-craft-arch-bridge-lesson-v1",
+      "gameLessonId": "civil-craft-arch-bridge-lesson-v1",
+      "category": "bridge-type",
+      "bridgeTypeId": "arch",
+      "order": 30,
+      "conceptIds": []
     },
     {
       "key": "LESSON002",

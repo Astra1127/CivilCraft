@@ -119,7 +119,9 @@ export function LevelEntryDialog({
             ) : null}
             <div className="grid grid-cols-2 gap-2 bg-card px-3 py-2">
               <dt className="text-muted-foreground">Score</dt>
-              <dd className="text-right font-display">{c.score.toLocaleString()}</dd>
+              <dd className="text-right font-display">
+                {c.scoreKnown === false ? "Unavailable" : c.score.toLocaleString()}
+              </dd>
             </div>
             <div className="grid grid-cols-2 gap-2 bg-card px-3 py-2">
               <dt className="text-muted-foreground">Completed</dt>

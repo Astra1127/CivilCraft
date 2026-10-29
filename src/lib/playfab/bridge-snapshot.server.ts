@@ -2,6 +2,7 @@ import { AdminApiError, adminGameConfig, object, playFabAdmin } from "./admin-cl
 
 import { parseAlmanacProgress } from "./almanac.ts";
 import { verifiedLevelCompletion } from "./level-records.ts";
+import { albumImage, cachedBridgeAlbum, MAX_ALBUM_BYTES } from "./bridge-photo-album.server.ts";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -98,35 +99,52 @@ export async function handleBridgeSnapshot(request: Request): Promise<Response |
       (download.port && download.port !== "443")
     )
       throw new Error("Snapshot URL unavailable");
-    const response = await fetch(download, {
-      cache: "no-store",
-      redirect: "error",
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok || !response.body) throw new Error("Snapshot download unavailable");
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > MAX_BYTES) throw new Error("Snapshot too large");
-        chunks.push(value);
+    const downloadBytes = async () => {
+      const response = await fetch(download, {
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!response.ok || !response.body) throw new Error("Snapshot download unavailable");
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.byteLength;
+          if (size > (match.completion?.snapshotAlbum ? MAX_ALBUM_BYTES : MAX_BYTES))
+            throw new Error("Snapshot too large");
+          chunks.push(value);
+        }
+      } finally {
+        await reader.cancel();
       }
-    } finally {
-      await reader.cancel();
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.length;
-    }
+      const bytes = new Uint8Array(size);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+      }
+      return bytes;
+    };
+    let bytes: Uint8Array;
+    if (match.completion?.snapshotAlbum) {
+      const album = await cachedBridgeAlbum(
+        JSON.stringify([titleId, playerId, entity["Id"]]),
+        file["Checksum"],
+        downloadBytes,
+      );
+      const image = albumImage(album, match.completion.snapshotAlbum);
+      if (!image) return empty(404);
+      bytes = image;
+    } else bytes = await downloadBytes();
     if (!PNG_SIGNATURE.every((value, index) => bytes[index] === value))
       throw new Error("Snapshot format unavailable");
-    return new Response(bytes, { headers: { ...headers, "Content-Type": "image/png" } });
+    return new Response(Uint8Array.from(bytes), {
+      headers: { ...headers, "Content-Type": "image/png" },
+    });
   } catch (error) {
     if (error instanceof AdminApiError && error.status === 401) return empty(401);
     console.warn("[bridge-snapshot] Snapshot service temporarily unavailable.");

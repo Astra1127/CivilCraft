@@ -214,7 +214,10 @@ test("lesson previews do not grant unlocks; full notes need records; quiz result
   assert.equal(view.root.findAllByType("img").length, 2);
   assert.equal(view.root.findAllByType("svg").length, 6);
   assert.equal(view.root.findAllByType("details").length, 0);
-  assert.equal(view.root.findAllByType("h4").length, 10);
+  assert.equal(
+    view.root.findAllByType("h4").length,
+    lessonCatalog.lessons.filter((l) => l.category === "engineering").length,
+  );
   for (const img of view.root.findAllByType("img"))
     assert.match(img.props.className, /h-28 sm:h-32/);
   for (const card of view.root.findAllByType("li")) {
@@ -325,6 +328,9 @@ test("Engineering cards require lesson sync even after tutorial completion and p
     "pending",
     "pending",
     "unlocked",
+    "pending",
+    "pending",
+    "pending",
     "pending",
     "pending",
     "pending",
@@ -616,10 +622,10 @@ test("Materials UI reveals properties only for exact game-written entries", asyn
     [undefined, []],
     [[], []],
     [["unknown", "wood", "WOOD_BEAM", " wood_beam"], []],
-    [["wood_beam"], ["Timber Beam"]],
+    [["wood_beam"], ["Wood Beam"]],
     [
       ["wood_road", "wood_support"],
-      ["Timber Pier", "Timber Road Deck"],
+      ["Wood Pier", "Wood Road"],
     ],
   ]) {
     const journey = {

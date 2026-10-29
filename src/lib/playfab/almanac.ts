@@ -145,14 +145,45 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
         ) {
           const rawUrl = comp["completionScreenshotUrl"] ?? comp["CompletionScreenshotUrl"];
           const snapshot = comp["snapshot"] as Record<string, unknown> | undefined;
+          const resultId =
+            typeof comp["resultId"] === "string" && /^[a-f0-9]{32}$/.test(comp["resultId"])
+              ? comp["resultId"]
+              : undefined;
+          const scoreKnown =
+            comp["scoreKnown"] !== false &&
+            typeof rawScore === "number" &&
+            Number.isFinite(rawScore);
+          const archiveSnapshot =
+            snapshot &&
+            snapshot["storage"] === "archive-v1" &&
+            snapshot["fileName"] === "bridge-photos-v1.zip" &&
+            snapshot["contractId"] === levelId &&
+            snapshot["regionId"] === regionId &&
+            resultId &&
+            scoreKnown &&
+            snapshot["resultId"] === resultId &&
+            snapshot["entryName"] === `bridge-${resultId}.png` &&
+            typeof snapshot["sha256"] === "string" &&
+            /^[a-f0-9]{64}$/.test(snapshot["sha256"])
+              ? {
+                  storage: "archive-v1" as const,
+                  fileName: "bridge-photos-v1.zip" as const,
+                  contractId: levelId,
+                  regionId,
+                  resultId,
+                  entryName: snapshot["entryName"] as string,
+                  sha256: snapshot["sha256"],
+                }
+              : undefined;
           const snapshotFileName =
             snapshot &&
+            snapshot["storage"] === undefined &&
             snapshot["contractId"] === levelId &&
             snapshot["regionId"] === regionId &&
             typeof snapshot["fileName"] === "string" &&
             /^bridge-[A-Za-z0-9_-]{1,160}\.png$/.test(snapshot["fileName"])
               ? snapshot["fileName"]
-              : undefined;
+              : archiveSnapshot?.fileName;
           const rawAchId = comp["achievementId"] ?? comp["AchievementId"];
           completion = {
             playerId: String(comp["playerId"] ?? comp["PlayerId"] ?? ""),
@@ -160,10 +191,17 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
             regionId,
             bridgeTypeId: typeof rawBridge === "string" ? rawBridge : "",
             score: typeof rawScore === "number" && Number.isFinite(rawScore) ? rawScore : 0,
+            scoreKnown,
+            ...(resultId ? { resultId } : {}),
             status: "success",
             completionScreenshotUrl:
-              typeof rawUrl === "string" && /^https:\/\//.test(rawUrl) ? rawUrl : undefined,
+              snapshot?.["storage"] === undefined &&
+              typeof rawUrl === "string" &&
+              /^https:\/\//.test(rawUrl)
+                ? rawUrl
+                : undefined,
             ...(snapshotFileName ? { snapshotFileName } : {}),
+            ...(archiveSnapshot ? { snapshotAlbum: archiveSnapshot } : {}),
             // A read must not invent the date of a game-written completion.
             completedAt: typeof completedAt === "string" ? completionDate(completedAt) : "",
             achievementId: typeof rawAchId === "string" ? rawAchId : undefined,

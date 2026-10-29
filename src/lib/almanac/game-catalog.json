@@ -1,6 +1,13 @@
 {
   "lessons": [
     {
+      "id": "civil-craft-arch-bridge-lesson-v1",
+      "title": "Arch Bridge",
+      "topic": "Structural principles",
+      "description": "An Arch Bridge carries loads using a curved structural shape. When weight acts on the bridge, the arch carries forces mainly through compression. Those forces travel along the curve toward the supports at both ends.\n\nThe end supports are called Abutments. They must resist the outward thrust, or push, produced by the arch. How the arch connects to these supports is important to the crossing.\n\nA curved structure can help leave space beneath the roadway. The bridge must still provide sufficient clearance for the traffic or waterway below it. In Marsh's project, taxis and residents need a safe route above while boats need enough room to pass beneath.\n\nDuring testing, observe how the arch and its supports respond as the vehicle crosses. Then check whether the boat can pass safely beneath the bridge. A successful crossing must support the traffic above without blocking the waterway below.",
+      "source": "BridgeBuilder/Data/Lessons/ArchBridge.asset"
+    },
+    {
       "id": "LESSON002",
       "title": "BEAM BRIDGE",
       "topic": "Beam bridge",
@@ -8,6 +15,13 @@
       "image": "/images/almanac-game/6aedd357aa978324690d88ed82a19beb.png",
       "imageSource": "BridgeBuilder/Data/Lessons/Bhan's Contract_photo.png",
       "source": "BridgeBuilder/Data/Lessons/Beam.asset"
+    },
+    {
+      "id": "civil-craft-bending-lesson-v1",
+      "title": "Bending",
+      "topic": "Structural principles",
+      "description": "Bending is the curving or deformation of a structural member under an applied load. When a vehicle crosses a bridge, its weight creates a downward load. The connected structural members carry this load toward the supports.\n\nFor a simply supported bridge with a load at midspan, the greatest bending moment commonly occurs near the middle. The position and amount of bending depend on the load position, supports, and structural arrangement.\n\nWhen a simply supported beam bends downward under a vehicle's weight, its upper part experiences compression, while its lower part experiences tension. Compression pushes material together; tension pulls it apart.\n\nUnderstanding bending helps you identify areas that may need additional structural support. Proper material choices, connected members, and support arrangements help a bridge withstand bending safely.\n\nDuring Reed's factory crossing test, observe how the bridge responds as the pickup moves across. Watch for members that curve or deform most under the load, then review whether the design needs more support.",
+      "source": "BridgeBuilder/Data/Lessons/Bending.asset"
     },
     {
       "id": "What is Compression",
@@ -29,7 +43,7 @@
       "id": "What is Equilibrium",
       "title": "What is Equilibrium",
       "topic": "Structural principles",
-      "description": "Structural equilibrium is the condition in which the combined forces and moments acting on a structure balance one another. For a bridge to remain stationary and stable, loads such as its own weight and traffic must be balanced by reactions from its supports. If these forces or moments become unbalanced, the structure may translate, rotate, or experience instability.",
+      "description": "Structural Equilibrium is the condition in which the forces and moments acting on a structure are balanced. Both force balance and moment balance are needed for a stationary bridge.\n\nThe weight of the bridge and a crossing vehicle act downward. The supports provide upward reactions that help balance these loads. As a vehicle changes position, the forces carried by the members and supports change too. If forces or moments are unbalanced, the structure may move or rotate.\n\nEquilibrium alone does not mean a bridge is safe for any load. Its members, connections, and supports must also have enough strength and stability to carry the required loads without failing.",
       "source": "BridgeBuilder/Data/Lessons/Equilibruim.asset"
     },
     {
@@ -42,6 +56,41 @@
       "source": "BridgeBuilder/Data/Lessons/LiveLoadLesson.asset"
     },
     {
+      "id": "civil-craft-load-distribution-lesson-v1",
+      "title": "Load Distribution",
+      "topic": "Structural principles",
+      "description": "Load Distribution refers to how an applied load is shared among the structural members and supports of a bridge. A vehicle's weight does not affect only the section directly beneath it. The connected members work together to carry that load toward the supports.\n\nThe bridge's design, connections, support placement, and vehicle position affect how the load is shared. Some members or supports may carry more than others; placing additional supports does not guarantee equal loading. Adding or repositioning a support can change the load carried throughout the structure.\n\nDuring a moving-load test, observe the entire bridge, including the surrounding members and supports. A response away from the vehicle can still be part of the structure carrying its load. Check that each part can safely withstand the demand placed on it.\n\nFor Silas's community crossing, consider the available support points and the lower rock formation when arranging the structure. Choose a connected design that safely carries the test vehicle while distributing its load toward the supports. Test the whole crossing rather than judging only the section immediately below the vehicle.",
+      "source": "BridgeBuilder/Data/Lessons/LoadDistribution.asset"
+    },
+    {
+      "id": "civil-craft-load-transfer-lesson-v1",
+      "title": "Load Transfer",
+      "topic": "Structural principles",
+      "description": "Load Transfer describes how forces travel through connected structural components until they reach the supports, foundations, and eventually the ground. It focuses on the load path; load distribution describes how that load is shared among members and supports.\n\nA vehicle applies its weight to the deck. The deck and its connected components must provide a continuous path that carries those forces toward suitable supports. The path depends on the type of bridge and how its parts are connected.\n\nExample: a suspension bridge\nDeck → Hangers → Main Cables → Towers and Anchorages → Ground\n\nIn this example, hangers carry load from the deck to the main cables. The cables carry tension, pass over towers, and are secured at anchorages. Towers carry compressive forces toward the ground, while anchor points resist the cables' pull. This is one possible structural arrangement, not a requirement to use the same design on every crossing.\n\nFor Silas's eastern passage, rope and the existing wooden towers offer another way to support connected bridge components. Think carefully about their connections and the available anchor points. If you use those supports, make sure they form part of a continuous load path. Every component has a role in carrying and transferring the vehicle's load safely.",
+      "source": "BridgeBuilder/Data/Lessons/LoadTransfer.asset"
+    },
+    {
+      "id": "civil-craft-material-stress-lesson-v1",
+      "title": "Material Stress",
+      "topic": "Structural principles",
+      "description": "Material Stress is the internal force per unit area developed within a material under load. Loads placed on a bridge create internal stresses in its structural members. These stresses can occur due to tension, compression, bending, or shear.\n\nDifferent materials can withstand different amounts of stress. Each material has its own strength and allowable stress limits. Concrete, for example, generally handles compression well but is weaker in tension unless it is reinforced.\n\nIf the stress in a member exceeds what its material can safely withstand, the member may crack, deform excessively, or fail. Choosing suitable materials and arranging the supports properly helps keep stresses within safe limits under the applied loads.\n\nFord's loaded cargo trucks carry heavier loads than the taxi from the previous project. During testing, watch how the bridge and its supports respond as a loaded truck moves across. Observe which members experience the greatest stress, and consider whether the supports or structural arrangement need adjustment.",
+      "source": "BridgeBuilder/Data/Lessons/MaterialStress.asset"
+    },
+    {
+      "id": "civil-craft-moving-load-lesson-v1",
+      "title": "Moving Load",
+      "topic": "Structural principles",
+      "description": "A Moving Load is a load that changes position along a structure, such as a vehicle traveling across a bridge. Unlike a load that remains in one place, a vehicle applies its weight at different positions as it moves.\n\nThe forces and stresses in the bridge can change throughout a crossing. Different vehicle positions can produce different bending moments and support reactions. For a simply supported bridge, the support closest to a vehicle generally carries a greater share of that vehicle's weight when it is near one end. The bending effect near the center generally increases as the vehicle approaches the middle.\n\nA bridge must remain safe from one end of the crossing to the other, not just at the starting point or middle. Testing a vehicle over the entire span lets you observe how the structural response changes with its position.\n\nBrooks's market connection must safely carry both taxis and heavier delivery vehicles. Watch how the bridge responds as each vehicle enters, travels along the span, and approaches the opposite side. Continue observing until each vehicle has completely crossed.",
+      "source": "BridgeBuilder/Data/Lessons/MovingLoad.asset"
+    },
+    {
+      "id": "civil-craft-shear-lesson-v1",
+      "title": "Shear",
+      "topic": "Structural principles",
+      "description": "Shear is an internal force that acts across a section of a structural member and resists adjacent parts sliding relative to each other. Shear forces develop when loads act on a structure. When a heavy vehicle crosses a bridge beam, its weight acts downward while the supports provide upward reactions.\n\nShear and bending are different internal effects, but both can occur in the same structural member. In a simply supported beam carrying a load near the middle, shear force is often greatest in the regions near the supports. Its significance depends on the load and how the bridge is supported.\n\nA structural member must safely withstand the shear forces acting on it. Excessive shear can cause cracking or structural failure. Review the members near the supports as well as the safety of the entire bridge.\n\nRonan's southern connection must carry a heavy vehicle across a 100-meter gap with different road elevations. During testing, observe how the structural members near the supports respond as the vehicle enters, moves along the span, and approaches the opposite side. Continue observing until the vehicle has completed the crossing.",
+      "source": "BridgeBuilder/Data/Lessons/Shear.asset"
+    },
+    {
       "id": "What is Tension",
       "title": "What is Tension",
       "topic": "Structural principles",
@@ -49,10 +98,17 @@
       "source": "BridgeBuilder/Data/Lessons/Tension.asset"
     },
     {
+      "id": "civil-craft-tension-compression-lesson-v1",
+      "title": "Tension & Compression",
+      "topic": "Structural principles",
+      "description": "Tension is a pulling force that stretches a structural member. Forces pull away from each other at opposite ends of the member. Excessive tension can cause the member to stretch too much or break.\n\nCompression is a pushing force that squeezes or shortens a member. Forces push toward each other from opposite ends. Excessive compression can cause crushing or buckling, depending on the material and shape.\n\nWhen a vehicle crosses a bridge, the roadway and connected structural members transfer its weight toward the supports. In a truss bridge, some members can carry tension while others carry compression under the same load. The forces in each member depend on the structural arrangement, support positions, and where the vehicle is along the crossing.\n\nEngineers must choose suitable materials and arrange members so they can safely withstand these forces. Understanding tension and compression helps identify which parts need stronger members or a better load path; it does not remove the need to test the bridge.\n\nFor Vance's transport crossing, load the cargo onto the vehicle before testing. The cargo adds to the vehicle's load. Watch how the members work together as the loaded vehicle crosses, and check how their responses change as it moves.",
+      "source": "BridgeBuilder/Data/Lessons/TensionCompression.asset"
+    },
+    {
       "id": "LESSON004",
       "title": "What is Truss",
       "topic": "Truss bridge",
-      "description": "A truss bridge uses a framework of straight structural members connected to form stable arrangements, most notably triangular units. When loads act on the bridge, forces are carried through the interconnected members, with individual members primarily resisting tension or compression. The triangular configuration provides structural rigidity and allows substantial loads to be carried efficiently.",
+      "description": "A Truss Bridge is a framework of connected structural members arranged in triangular patterns. Loads entering through the roadway travel through these members toward the bridge supports.\n\nTriangular arrangements help the framework maintain its shape when forces act on it. They still require proper connections, suitable supports, and members with enough strength; adding triangles does not make every bridge safe.\n\nIn an ideal pin-jointed truss, members mainly carry axial forces: tension pulls and compression pushes along a member. Real members and connections can also experience bending. Later lessons explore these forces in more detail.",
       "image": "/images/almanac-game/c7ad14becd77b714a820300c6ed3a180.png",
       "imageSource": "BridgeBuilder/Data/Lessons/Tutorial_photo.png",
       "source": "BridgeBuilder/Data/Lessons/Truss.asset"
@@ -62,8 +118,8 @@
     {
       "id": "wood_beam",
       "unityId": "Beam",
-      "name": "Timber Beam",
-      "description": "A low-cost structural member used to support road decks and form trusses. Timber beams resist both pulling and pushing forces and are placed as a matching pair across the bridge.",
+      "name": "Wood Beam",
+      "description": "A Wood Beam is a structural member that connects with other members to form load-bearing arrangements, including the triangular patterns of a Truss Bridge. These connected arrangements help carry loads toward the supports. Timber beams can resist pulling and pushing forces and are placed as a matching pair across the bridge.",
       "costPerMeter": 100,
       "massPerMeter": 3,
       "maxLength": 10,
@@ -74,6 +130,22 @@
       "image": "/images/almanac-game/999161720269b2c43881339b86f9c2b6.png",
       "imageSource": "Elements/UI/bm_ui/WoodBeam_mat_icon.png",
       "source": "BridgeBuilder/Data/Resources/Beam.asset"
+    },
+    {
+      "id": "Concrete Pier",
+      "unityId": "Concrete Pier",
+      "name": "Concrete Pier",
+      "description": "A concrete vertical support placed beneath a bridge to help carry loads and transfer them to the ground or foundation.",
+      "costPerMeter": 900,
+      "massPerMeter": 240,
+      "maxLength": 30,
+      "maxTension": 400000,
+      "maxCompression": 2100000,
+      "dual": false,
+      "pier": true,
+      "image": "/images/almanac-game/91e91c24e8c573e4ba73a19586500fcd.png",
+      "imageSource": "Elements/UI/bm_ui/pier concrete not selected.png",
+      "source": "BridgeBuilder/Data/Resources/Concrete Pier.asset"
     },
     {
       "id": "concrete_road",
@@ -110,8 +182,8 @@
     {
       "id": "wood_support",
       "unityId": "Pier",
-      "name": "Timber Pier",
-      "description": "A vertical foundation support that transfers bridge loads toward the ground or riverbed. Place piers beneath the road where direct support is available.",
+      "name": "Wood Pier",
+      "description": "Supports the bridge structure and transfers loads toward the ground. Place Wood Piers beneath the roadway where structural support is available.",
       "costPerMeter": 500,
       "massPerMeter": 182.5,
       "maxLength": 50,
@@ -142,8 +214,8 @@
     {
       "id": "wood_road",
       "unityId": "Wood Road",
-      "name": "Timber Road Deck",
-      "description": "An affordable driving surface that vehicles need to cross the bridge. Build a continuous deck between both sides and support it with beams or piers.",
+      "name": "Wood Road",
+      "description": "Used as the roadway of the bridge. Vehicles and other loads travel across this component. Build a continuous roadway between both sides and support it with structural members or piers.",
       "costPerMeter": 300,
       "massPerMeter": 9,
       "maxLength": 10,

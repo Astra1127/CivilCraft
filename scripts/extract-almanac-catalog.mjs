@@ -2,8 +2,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
-const root = path.resolve("../CivilCraft_Apk/Civil-Craft/Assets");
+const rootArgument = process.argv.indexOf("--unity-assets");
+if (rootArgument < 0 || !process.argv[rootArgument + 1]) {
+  throw new Error("Pass --unity-assets <absolute path to the reviewed Unity Assets directory>.");
+}
+const root = path.resolve(process.argv[rootArgument + 1]);
 const dataRoot = path.join(root, "BridgeBuilder/Data");
+if (!fs.existsSync(dataRoot))
+  throw new Error("The selected Unity Assets directory has no BridgeBuilder/Data.");
 const read = (file) =>
   yaml.load(
     fs
@@ -43,7 +49,8 @@ function illustration(ref) {
 }
 for (const relative of fs
   .readdirSync(dataRoot, { recursive: true })
-  .filter((p) => p.endsWith(".asset"))) {
+  .filter((p) => p.endsWith(".asset"))
+  .sort()) {
   const source = path.join(dataRoot, relative);
   const raw = fs.readFileSync(source, "utf8");
   if (!/lessonTitle:|costPerMeter:/.test(raw)) continue;

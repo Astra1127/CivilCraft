@@ -8,11 +8,19 @@ test("canonical card order puts timber first and preserves the existing remainin
   const result = orderMaterials(input);
   assert.deepEqual(
     result.map((m) => m.id),
-    ["wood_beam", "wood_support", "wood_road", "concrete_road", "concrete_member", "rope"],
+    [
+      "wood_beam",
+      "wood_support",
+      "wood_road",
+      "concrete_road",
+      "concrete_member",
+      "rope",
+      "Concrete Pier",
+    ],
   );
   assert.deepEqual(
     result.slice(0, 3).map((m) => m.name),
-    ["Timber Beam", "Timber Pier", "Timber Road Deck"],
+    ["Wood Beam", "Wood Pier", "Wood Road"],
   );
   for (const item of result)
     assert.equal(

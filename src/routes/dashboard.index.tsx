@@ -331,7 +331,9 @@ function PlayerOverview() {
                           ? new Date(c.completedAt).toLocaleDateString()
                           : "Date unavailable"}
                       </p>
-                      <p className="font-display">{c.score.toLocaleString()}</p>
+                      <p className="font-display">
+                        {c.scoreKnown === false ? "Unavailable" : c.score.toLocaleString()}
+                      </p>
                       <Button asChild variant="outline" size="sm" className="mt-2">
                         <Link to="/dashboard/almanac" search={{ tab: "journey" }}>
                           View in Almanac →

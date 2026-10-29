@@ -183,9 +183,23 @@ export type LevelStatus = "completed" | "current" | "locked" | "unknown";
  * retries are intentionally NOT modelled here — the Almanac preserves the
  * final, successful build only.
  */
+export interface BridgeAlbumSnapshot {
+  storage: "archive-v1";
+  fileName: "bridge-photos-v1.zip";
+  contractId: string;
+  regionId: string;
+  resultId: string;
+  entryName: string;
+  sha256: string;
+}
+
 export interface PlayerLevelCompletion {
   /** Private Entity File reference, bound to this exact completion's IDs. */
   snapshotFileName?: string;
+  snapshotAlbum?: BridgeAlbumSnapshot;
+  resultId?: string;
+  /** Explicit false prevents an old best score from describing a newer design. */
+  scoreKnown?: boolean;
   playerId: string;
   levelId: string;
   regionId: string;

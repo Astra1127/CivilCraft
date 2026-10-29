@@ -48,6 +48,7 @@ test("partial documented stage order is explicit; original IDs/content remain in
       "silas-later",
       "brooks-market",
       "mills-equipment",
+      "unmapped",
     ],
   );
   assert.deepEqual(
@@ -61,6 +62,7 @@ test("partial documented stage order is explicit; original IDs/content remain in
       ["Load Transfer"],
       ["Moving Load"],
       ["Structural Failure"],
+      ["Shear", "Material Stress", "Tension & Compression"],
     ],
   );
   for (const original of source.lessons) {
@@ -113,8 +115,8 @@ test("website catalog keys never become guessed game lesson IDs; unknown records
     { lessonId: "reference:load-transfer", state: "discovered" },
     { lessonId: "future-real-id", state: "completed" },
   ];
-  assert.equal(getLesson("reference:load-transfer").id, undefined);
-  assert.equal(getLesson("reference:load-transfer").description, undefined);
+  assert.equal(getLesson("reference:load-transfer").id, "civil-craft-load-transfer-lesson-v1");
+  assert.ok(getLesson("reference:load-transfer").description);
   assert.equal(
     lessonProgress("reference:load-transfer", { lessonRecords: records }).state,
     "pending",

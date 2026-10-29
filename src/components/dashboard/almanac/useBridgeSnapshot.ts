@@ -7,7 +7,13 @@ export function useBridgeSnapshot(level: AlmanacLevel) {
   const { player } = useAuth();
   const id = player?.playFabId;
   const fileName = level.completion?.snapshotFileName;
-  const key = JSON.stringify([id, level.regionId, level.levelId, fileName]);
+  const key = JSON.stringify([
+    id,
+    level.regionId,
+    level.levelId,
+    fileName,
+    level.completion?.snapshotAlbum,
+  ]);
   const [photo, setPhoto] = useState<{ key: string; url: string }>();
   useEffect(() => {
     if (!id || !fileName) return;
