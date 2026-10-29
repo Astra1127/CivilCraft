@@ -84,19 +84,24 @@ No timestamps, scores, quiz results or historical progress are generated.
 
 ## Level-popup behavior
 
-Popup concepts are still selected from the existing level's synchronized concept
-IDs. Known catalog topics use the same title, first-sentence preview and image or
-diagram as Engineering. Other existing concepts retain their current explanation
-and shared diagram fallback. Unknown concepts without catalog content are omitted
-safely. No authored stage association is used to append a concept to a player's
-historical completion record.
+Current popup presentation uses `lesson-navigation.ts`: compact lesson rows,
+not large concept illustrations. Verified contract introductions (including
+existing canonical display aliases) resolve shared catalog titles/previews.
+Tutorial 1 explicitly presents Dead Load and Live Load; Support is retained as
+a pending non-clickable entry when recorded. Bending is excluded from Tutorial 1
+even when present in its generic concept list. This targeted owner-confirmed
+presentation does not bind the still-unverified Bhan phases in stage metadata.
+Unbound stages retain only recognized recorded concepts as non-clickable pending
+entries; unknown concepts are omitted. No player completion record is rewritten.
 
-Dead/Live Load share the original local images; force/concept diagrams use the
-shared `LessonIllustration` renderer. Beam/Truss bridge information uses its
-preserved authored reference. Compact sizing, responsive grids, image-error
-fallbacks and modal accessibility remain. Tutorial 1's Bending exclusion from the
-previous targeted UI change is preserved; Bending still appears where recorded
-on other levels and in its documented Reed introduction group.
+Rows with verified Engineering entries close the level modal and navigate to
+`/dashboard/almanac?tab=engineering&lessonId=<encoded identifier>`. The identifier
+is an existing game ID or stable website catalog key; URL support for a website
+key does **not** make it an accepted PlayFab lesson ID. Missing full content or
+missing Engineering destination stays pending. Direct links and Back/Forward
+select, scroll to, focus and briefly highlight the real card. Engineering retains
+its detailed content and shared image/SVG lightbox. The separate bridge-information
+illustration remains in the level popup. No images were duplicated.
 
 Completion statistics, score/date fields, bridge snapshots, achievement logic and
 notification navigation are unchanged. No images were duplicated.
@@ -129,7 +134,7 @@ To add future content without rewriting the UI:
 5. Add publishing/fixture checks for real discovery before completion, missing
    state, unknown/duplicate IDs, image failure and historical compatibility.
 
-## Changed files and validation
+## Original implementation validation (historical)
 
 Source: `lesson-metadata.json`, `lesson-catalog.ts`, `GameEducation.tsx`,
 `ConceptIllustrations.tsx`, and `LevelEntryDialog.tsx`. Tests:

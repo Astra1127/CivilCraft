@@ -1,6 +1,6 @@
 # CivilCraft Unity ↔ Website handoff
 
-Repository audit: **2026-10-27**, website workspace only.
+Repository audit refreshed: **2026-10-28**, website workspace only.
 
 ## 1. Readiness and evidence boundaries
 
@@ -27,6 +27,14 @@ Evidence labels used below:
 - **Pending:** new game publishing or verified identifiers/content are required.
 - **Historical:** a dated investigation/rollout record, not a fresh live check.
 - **Recommended/proposed:** future programmer/operator work, not deployed behavior.
+
+For readiness classification, **working** means an implemented website reader
+with regression coverage, not a new live-game certification. **Partially
+synchronized** means the reader exists but its installed-game publisher or
+semantics still need acceptance. **Awaiting Unity implementation** means optional
+website payload support exists but game publication has not been established.
+No current live player records or published handler were inspected in this
+refresh; historical evidence is explicitly dated below.
 
 ### Resolve older documentation before implementation
 
@@ -271,6 +279,30 @@ through GetCatalogItems or the website catalog. Ownership alone does not imply
 equipped state. The website does not reconstruct a tinted 3D character. Confirm
 the installed game's actual loadout DTO; the writer only validates an outer JSON
 object, so parser support is not proof of publisher compatibility.
+
+### Reader precedence and unavailable data (current source)
+
+These are existing behaviors, not new fields or proposed writers.
+
+| Feature | Exact reader behavior / unavailable state | Acceptance check |
+| --- | --- | --- |
+| Account/profile | Client/GetAccountInfo.AccountInfo: PlayFabId, Username, PrivateInfo.Email, Created; TitleInfo.DisplayName, AvatarUrl, Created, LastLogin. Missing/mismatched player ID errors. Display name falls back to Username then `Not available`. AvatarUrl is distinct from the character portrait. | Compare the same approved account in game/site, then switch accounts and expire the ticket. |
+| Account level/XP | CurrentLevel uses parsePlayerLevel: nonnegative safe integer or null. XP/XPToNextLevel use finite UserData scalars or null. Historical writer accepts currentLevel **1–1000**. Tutorial **Level 00** is a story label, not an instruction to publish account level zero. | Compare actual game level/XP with UserData; never derive from score, rank or completed-contract count. |
+| Dashboard statistics | Client/GetPlayerStatistics.Statistics[]: StatisticName, Value, optional Version. BridgesCompleted/ChallengesCompleted prefer statistics then same-name UserData. BestSingleBuildScore prefers that statistic, then legacy BestBuildScore, then UserData. TotalScore prefers its statistic then UserData. TotalScore/BestSingleBuildScore are **not requested** in default UserData keys: publish the established statistics. Missing values remain null; statistic failures can fall back to available requested scalars. | Check all four actual statistics independently after sync; CharacterSyncedAt alone proves neither statistics nor portrait upload. |
+| Maps/achievements | Missing/malformed MapProgress becomes empty regions and zero percentages, not proof of zero saved game progress. Missing/malformed AchievementProgress becomes an empty list. Achievement totals use scalar UserData. | Compare a real committed mission/unlock, retained stable IDs and actual date; no catalog-based grants. |
+| Equipment/ownership | GetUserInventory.Inventory[].ItemId establishes ownership; ItemInstanceId/DisplayName/ItemClass are provider fields. EquippedCosmetics is separate; missing/invalid payload remains missing/invalid, never default equipment. | Own an unequipped item; equip multiple accessories, commit, refresh; distinguish empty slots from absent projection. |
+| Character portrait | Fixed private Entity File reader (§7), separate from legacy CharacterPortraitUrl fallback. Projection timestamp is not upload evidence. | Finalize a real own-account portrait, refresh, test missing file and account switch. |
+| Journey/contracts | Missing/malformed AlmanacProgress becomes EMPTY_JOURNEY. Explicit levelsCompleted/levelsTotal/journeyPercent win; absent totals derive from parsed levels/completions. MapProgress alone does not populate the journey. | Compare a finalized contract's exact IDs, score, retained date, totals and notification target. |
+| Bridge types | Explicit AlmanacProgress.discoveredBridgeTypeIds[] wins, including empty array. If absent, existing legacy fallback derives types from parsed completion.bridgeTypeId. Current local IDs: beam, truss, arch, suspension. This never grants lesson/material state. | Verify explicit empty, explicit discovered type and omitted legacy list against intended game semantics. |
+| Materials | Exact string membership in discoveredMaterials[], deduplicated. Missing list stays empty; static properties/images grant nothing. | Discover one real material before completion; verify only its properties become available. |
+| Engineering | Unique lessonRecords[{lessonId,state}] only. Missing record is pending sync; missing game ID is unavailable; unknown IDs remain unmapped. | Discover before contract completion; complete an unrelated contract and confirm no extra grants. |
+| Quizzes | Only validated quizAttempts. Missing dates/review stay unavailable; valid aggregate survives invalid optional review. All duplicate immutable attempt keys are discarded. | Compare real retained attempts, then isolated missing-review/duplicate fixtures. |
+| Achievements/rankings | AchievementProgress owns unlocks. Leaderboards use provider statistics/positions, separately from story and account level. Service errors are not successful empty rankings. | Compare actual unlock, accepted single-player run and finalized multiplayer results separately. |
+
+The website requests projections only; it does not deserialize encrypted game
+save files to fill missing data. Reader tolerance is compatibility, not proof of
+writer validation. Summaries, map progress and Almanac must reflect the same
+committed save despite non-atomic publication. Test procedures are expanded in §11.
 
 ### AlmanacProgress — existing website read contract
 
@@ -606,7 +638,7 @@ level-records,leaderboard-config.server,multiplayer-leaderboard.server,
 character-portrait.server,bridge-snapshot.server}.ts`, `src/lib/almanac/`,
 `src/lib/game-wallet/api.server.ts`, and the referenced existing guides/tests.
 
-Validation completed against the current working tree:
+Earlier handoff validation (historical, not this refresh's test count):
 
 - `npx tsc --noEmit`: passed.
 - Scoped ESLint of the audited dashboard/Almanac/equipment/private-image integration
@@ -618,9 +650,44 @@ Validation completed against the current working tree:
 - `npm run build`: passed; local build only, not a deployment.
 - All **20 relative documentation links** resolve; `git diff --check` passed.
 
-Only this handoff document was added by the handover task. Existing uncommitted
-Almanac files remain unchanged by this task. Do not run migration/grant/import
-scripts or live-provider verification as a substitute for mocked website tests.
+### October 28 refresh
+
+This refresh changes this handoff and the outdated popup-behavior paragraph in
+`almanac-lesson-progression.md` only. No application contract or player record is
+changed. Current compact popup navigation uses the existing catalog through
+`lesson-navigation.ts`; lessonId URL keys can be website presentation keys and
+must never be copied into PlayFab lessonRecords as invented game IDs. Tutorial 1
+excludes Bending and keeps recorded Support pending, without granting lesson state.
+See the linked lesson guide for the exact current presentation behavior.
+
+Fresh validation: `npx tsc --noEmit`, scoped ESLint of the ten audited
+projection/equipment/private-image/catalog/navigation sources, and `npm run build`
+all exited **0**. The 14-file integration regression run passed **102 tests, no
+failures or skips**: dashboard-sync-v1, dashboard-account-features,
+character-portrait, player-session, player-level, bridge-score,
+multiplayer-leaderboard, almanac-integration, almanac-discovery, lesson-progression,
+lesson-navigation, level-progression, material-order and notification-navigation.
+Existing test-renderer/dependency warnings are not live integration evidence.
+Earlier test counts above are historical, not a claim of rerunning those suites.
+All **20 relative documentation links** resolve; `git diff --check` passed.
+No browser or installed-game/live-provider acceptance was performed in this
+documentation refresh. Existing visual/end-to-end acceptance remains pending.
+Do not run migration/grant/import scripts or live-provider verification as a
+substitute for mocked website tests.
+
+**Start-testing prerequisites:** approved test accounts on the intended title;
+the actual installed APK/source revision; access by the programmer/operator to
+the published handler and statistic aggregation settings; working website
+server-only configuration; a safe retained-save/lesson event to exercise; and
+an agreed sanitized evidence log. Missing lesson/quiz IDs block their respective
+feature acceptance, not initial account/dashboard testing. No secret, ticket,
+signed file URL, full save or live player identifier belongs in that log.
+
+For each acceptance row in §11, record build/deployment revision, handler revision
+where applicable, actual event, expected versus observed values, timestamp of the
+test (not a fabricated game event date), and pass/fail/pending. Keep the actual
+saved IDs unchanged. Reconfirm installed-game publication rather than treating
+website regression tests as proof of a successful Unity round trip.
 
 Remaining release blockers are **publication/identity acceptance, missing lesson/
 quiz IDs/content, correct private photo uploads, true completion-date/turn-in
