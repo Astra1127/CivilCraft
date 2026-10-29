@@ -68,6 +68,13 @@ PNG chunks and checksums. It never extracts to disk. It returns only the PNG wit
 private/no-store headers. A stale reference returns 404, not the wrong design;
 provider or malformed-file failure returns 503. Completion remains visible.
 
+Overview's Recent builds uses the same authenticated snapshot loader as the
+Almanac, including private archive and legacy separate-PNG references. It shows
+an animated loading indicator until the image loads and a clear fallback if no
+photo is synchronized or its download fails. The dashboard Refresh button retries
+photo loading even when the published reference has not changed. Account/session
+changes abort obsolete requests and revoke their temporary image URLs.
+
 Album downloads are deduplicated in process by title/player/entity and PlayFab
 file checksum. Cache retention is 60 seconds, at most eight albums and 32 MiB;
 at most eight distinct cacheable loads run concurrently. No checksum means no
@@ -106,6 +113,7 @@ Local checks:
 
 ```text
 node --test tests/bridge-photo-album.test.mjs tests/almanac-integration.test.mjs
+node --test tests/recent-build-photo.test.mjs
 node --test tests/lesson-progression.test.mjs tests/lesson-navigation.test.mjs
 npx tsc --noEmit
 npm run build

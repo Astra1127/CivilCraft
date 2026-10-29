@@ -5,6 +5,7 @@ import { useState } from "react";
 import { DemoBadge } from "@/components/common/DemoBadge";
 import { PlayerName } from "@/components/common/PlayerName";
 import { CharacterPreview } from "@/components/dashboard/CharacterPreview";
+import { RecentBuildPhoto } from "@/components/dashboard/RecentBuildPhoto";
 import { YourRanking } from "@/components/dashboard/YourRanking";
 import { SectionHeading } from "@/components/common/PageHeader";
 import { StatCard } from "@/components/common/StatCard";
@@ -12,7 +13,6 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/common/States
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth";
-import { BrandedCover } from "@/components/common/BrandedCover";
 import {
   achievementsService,
   almanacService,
@@ -30,6 +30,7 @@ function PlayerOverview() {
   const { player } = useAuth();
   const id = player?.playFabId ?? "";
   const [refreshing, setRefreshing] = useState(false);
+  const [photoRefreshKey, setPhotoRefreshKey] = useState(0);
 
   const profile = useQuery({
     queryKey: ["profile", id],
@@ -69,6 +70,7 @@ function PlayerOverview() {
         character.refetch(),
         journey.refetch(),
       ]);
+      setPhotoRefreshKey((key) => key + 1);
     } finally {
       setRefreshing(false);
     }
@@ -312,17 +314,8 @@ function PlayerOverview() {
                 const c = l.completion!;
                 const bridge = getBridgeType(c.bridgeTypeId);
                 return (
-                  <li key={l.levelId} className="panel overflow-hidden">
-                    {c.completionScreenshotUrl ? (
-                      <img
-                        src={c.completionScreenshotUrl}
-                        alt={`Completed bridge from ${l.levelName ?? "a Civil Craft level"}`}
-                        loading="lazy"
-                        className="aspect-video w-full border-b-2 border-border object-cover"
-                      />
-                    ) : (
-                      <BrandedCover label="Completion screenshot pending upload from the game" />
-                    )}
+                  <li key={`${id}:${l.regionId}:${l.levelId}`} className="panel overflow-hidden">
+                    <RecentBuildPhoto level={l} refreshKey={photoRefreshKey} />
                     <div className="space-y-1 p-4">
                       <p className="truncate font-display">{l.levelName}</p>
                       <p className="text-xs text-muted-foreground">
