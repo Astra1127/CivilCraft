@@ -281,3 +281,88 @@ test("reauthenticatePlayer verifies password against PlayFab and guards against 
     delete (globalThis as unknown as { window?: unknown }).window;
   }
 });
+
+test("account deletion audit document docs/account-deletion-audit.md exists and covers all 6 systems", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+
+  const docPath = path.resolve(process.cwd(), "docs/account-deletion-audit.md");
+  const content = await fs.readFile(docPath, "utf-8");
+
+  assert.ok(content.includes("PlayFab Master Account"));
+  assert.ok(content.includes("PlayFab Title Entity Files"));
+  assert.ok(content.includes("PlayFab Title UserData & Statistics"));
+  assert.ok(content.includes("PostgreSQL Database"));
+  assert.ok(content.includes("permanent_account"));
+  assert.ok(content.includes("permanent_receipt"));
+  assert.ok(content.includes("Unity Android Client"));
+  assert.ok(content.includes("Active Browser Sessions & Cache"));
+});
+
+test("settings route places Email updates above Delete Account and hides preview controls", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+
+  const settingsRoutePath = path.resolve(process.cwd(), "src/routes/dashboard.settings.tsx");
+  const content = await fs.readFile(settingsRoutePath, "utf-8");
+
+  // Verify Email updates comes before DeleteAccountSection in JSX order
+  const emailUpdatesIndex = content.indexOf('id="email-updates"');
+  const deleteAccountIndex = content.indexOf("<DeleteAccountSection");
+  assert.ok(emailUpdatesIndex > 0, "Email updates switch must exist");
+  assert.ok(deleteAccountIndex > 0, "DeleteAccountSection must exist");
+  assert.ok(
+    emailUpdatesIndex < deleteAccountIndex,
+    "Email updates must be positioned above Delete Account",
+  );
+
+  // Verify preview-only controls (publicProfile, compactMode) are preserved but wrapped in hidden container
+  assert.ok(content.includes('id="public-profile"'), "publicProfile switch preserved");
+  assert.ok(content.includes('id="compact-mode"'), "compactMode switch preserved");
+  assert.ok(
+    content.includes('className="hidden"'),
+    "preview-only controls wrapped in hidden container",
+  );
+  assert.ok(content.includes('aria-hidden="true"'), "preview-only controls have aria-hidden");
+});
+
+test("account settings player UI simplifies deletion and truthfully reflects unavailable backend status", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+
+  const componentPath = path.resolve(process.cwd(), "src/components/dashboard/AccountSettings.tsx");
+  const content = await fs.readFile(componentPath, "utf-8");
+
+  // Verify player-facing UI shows unavailable badge & action
+  assert.ok(content.includes("Currently Unavailable"), "Shows Currently Unavailable badge");
+  assert.ok(
+    content.includes("Delete Account (Unavailable)"),
+    "Action clearly indicates unavailable status",
+  );
+
+  // Verify dialog states no request was submitted or processed
+  assert.ok(
+    content.includes("No deletion request has been submitted or processed"),
+    "Dialog truthfully states no request was submitted or processed",
+  );
+
+  // Verify false claims are NOT present
+  assert.ok(
+    !content.includes("Identity Reauthenticated & Request Submitted"),
+    "Must not claim request was submitted",
+  );
+  assert.ok(
+    !content.includes("A permanent account deletion request has been registered"),
+    "Must not claim request was registered",
+  );
+
+  // Verify developer jargon (SQL trigger names) is removed from player component
+  assert.ok(
+    !content.includes("permanent_account"),
+    "SQL trigger permanent_account removed from player UI",
+  );
+  assert.ok(
+    !content.includes("permanent_receipt"),
+    "SQL trigger permanent_receipt removed from player UI",
+  );
+});

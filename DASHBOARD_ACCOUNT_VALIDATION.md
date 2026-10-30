@@ -44,6 +44,14 @@ Using the website's configured title `17FA03`:
 5. In admin Players, compare recent, intermediate, never-login and >30-day accounts with their filters. Confirm a non-banned inactive account reads “Inactive” and “Not banned,” and a banned recent account reads “Recently active” and “Banned.” Unknown ban data must not be labeled not banned. Compare to PlayFab's actual ban state.
 6. In Settings, verify username, login email and contact email independently. Try an incorrect current password: no contact write should occur. Save a new contact email with the correct password, refresh backend status, follow the verification email and refresh until PlayFab reports Confirmed. Verify original login credentials still work in Unity and website. Use password-reset email, complete the existing token flow, then log into both with the new password. Check network/server failures do not clear the player session and logout in a second tab blocks an in-flight update from restoring it.
 
+## Settings and account management refinements
+
+- **Visual Hierarchy**: Email Updates preference panel is positioned directly above Delete Account.
+- **Simplified Player Interface**: Removed developer jargon, database trigger references (`permanent_account`, `permanent_receipt`), and multi-system table schemas from the player dashboard.
+- **Accurate Deletion Status**: Account deletion is explicitly labeled with a "Currently Unavailable" status badge and a clear "Delete Account (Unavailable)" action opening an informational dialog. The dialog truthfully states that no deletion request has been submitted or processed, reflecting the offline backend request status without misleading simulated submissions.
+- **Technical Audit Preserved**: Complete technical multi-system architectural audit is maintained in `docs/account-deletion-audit.md` and in `ACCOUNT_DATA_AUDIT` inside `src/lib/playfab/account-settings.ts`.
+- **Hidden Preview Controls**: Nonfunctional preview-only settings (`Public profile`, `Compact dashboard`) are hidden from player view (`hidden`, `aria-hidden="true"`) while keeping their underlying code and state intact.
+
 ## Changed files
 
 - Profile/equipment: `src/routes/dashboard.profile.tsx`, `src/lib/playfab/player.ts`, `src/lib/playfab/equipment.ts`, `src/lib/playfab/types.ts`.

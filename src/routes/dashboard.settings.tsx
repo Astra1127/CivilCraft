@@ -1,5 +1,5 @@
 import { playerFetch } from "@/lib/playfab/client";
-import { AccountSettings } from "@/components/dashboard/AccountSettings";
+import { AccountSettings, DeleteAccountSection } from "@/components/dashboard/AccountSettings";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Bell, Eye, Globe } from "lucide-react";
@@ -60,7 +60,10 @@ function SettingsPage() {
         description="Dashboard preferences for your Civil Craft account."
       />
 
+      {/* Account Details: Username, Contact Email, Password */}
       <AccountSettings />
+
+      {/* Preferences: Email Updates (Placed ABOVE Delete Account) */}
       <div className="panel space-y-6 p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
@@ -82,34 +85,41 @@ function SettingsPage() {
           />
         </div>
 
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Eye className="h-4 w-4 text-gold" aria-hidden="true" />
-              <Label htmlFor="public-profile" className="font-display text-base">
-                Public profile
-              </Label>
+        {/* Nonfunctional preview-only settings hidden without removing their code */}
+        <div className="hidden" aria-hidden="true">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-gold" aria-hidden="true" />
+                <Label htmlFor="public-profile" className="font-display text-base">
+                  Public profile
+                </Label>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Preview only. This control does not change leaderboard visibility.
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Preview only. This control does not change leaderboard visibility.
-            </p>
+            <Switch
+              id="public-profile"
+              checked={publicProfile}
+              onCheckedChange={setPublicProfile}
+            />
           </div>
-          <Switch id="public-profile" checked={publicProfile} onCheckedChange={setPublicProfile} />
-        </div>
 
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-gold" aria-hidden="true" />
-              <Label htmlFor="compact-mode" className="font-display text-base">
-                Compact dashboard
-              </Label>
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Globe className="h-4 w-4 text-gold" aria-hidden="true" />
+                <Label htmlFor="compact-mode" className="font-display text-base">
+                  Compact dashboard
+                </Label>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Preview only. This control does not change dashboard spacing.
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Preview only. This control does not change dashboard spacing.
-            </p>
+            <Switch id="compact-mode" checked={compactMode} onCheckedChange={setCompactMode} />
           </div>
-          <Switch id="compact-mode" checked={compactMode} onCheckedChange={setCompactMode} />
         </div>
 
         {preferences.isPending ? (
@@ -134,6 +144,9 @@ function SettingsPage() {
           preference.
         </p>
       </div>
+
+      {/* Delete Account (Placed BELOW Email Updates) */}
+      <DeleteAccountSection />
 
       <p className="text-sm text-muted-foreground">
         Manage your display name and cosmetics in Civil Craft. To reset your shared account
