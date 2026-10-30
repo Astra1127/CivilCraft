@@ -399,12 +399,10 @@ test("terms, privacy, and cookie policies are structured, responsive, and ground
   assert.ok(privacy.includes("Right to be Informed"), "Privacy details DPA user rights");
   assert.ok(privacy.includes("DraftReviewNotice"), "Privacy uses DraftReviewNotice");
 
-  // Verify Cookie Policy discloses only verified technologies and disclaims trackers
-  assert.ok(cookies.includes("sidebar_state"), "Cookie policy discloses sidebar_state");
-  assert.ok(
-    cookies.includes("civilcraft.session.player.v1"),
-    "Cookie policy discloses player session in localStorage",
-  );
+  // Verify Cookie Policy uses player-friendly categories and disclaims trackers
+  assert.ok(cookies.includes("Essential Storage"), "Cookie policy explains Essential Storage");
+  assert.ok(cookies.includes("Functional Storage"), "Cookie policy explains Functional Storage");
+  assert.ok(cookies.includes("Temporary Storage"), "Cookie policy explains Temporary Storage");
   assert.ok(
     cookies.includes("NO Third-Party Analytics Trackers"),
     "Cookie policy disclaims analytics trackers",
@@ -412,6 +410,41 @@ test("terms, privacy, and cookie policies are structured, responsive, and ground
   assert.ok(
     cookies.includes("NO Advertising Cookies"),
     "Cookie policy disclaims advertising cookies",
+  );
+
+  // Verify internal key names and developer jargon are NOT displayed on the public page
+  assert.ok(
+    !cookies.includes("sidebar_state"),
+    "Internal key sidebar_state must not be exposed on public page",
+  );
+  assert.ok(
+    !cookies.includes("civilcraft.session.player.v1"),
+    "Internal session key must not be exposed on public page",
+  );
+  assert.ok(
+    !cookies.includes("civilcraft_admin_session"),
+    "Admin session identifier must not be exposed on public page",
+  );
+
+  // Verify developer documentation docs/browser-storage-inventory.md contains the technical matrix
+  const inventoryPath = path.resolve(process.cwd(), "docs/browser-storage-inventory.md");
+  const inventory = await fs.readFile(inventoryPath, "utf-8");
+  assert.ok(inventory.includes("sidebar_state"), "Dev doc contains sidebar_state");
+  assert.ok(
+    inventory.includes("civilcraft.session.player.v1"),
+    "Dev doc contains civilcraft.session.player.v1",
+  );
+  assert.ok(
+    inventory.includes("civilcraft_admin_session"),
+    "Dev doc contains civilcraft_admin_session",
+  );
+  assert.ok(
+    inventory.includes("civilcraft.session.end_reason.v1"),
+    "Dev doc contains civilcraft.session.end_reason.v1",
+  );
+  assert.ok(
+    inventory.includes("civilcraft.admin.directory.rows"),
+    "Dev doc contains civilcraft.admin.directory.rows",
   );
 
   // Verify Footer includes all policy links
