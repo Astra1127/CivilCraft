@@ -16,6 +16,8 @@ import {
   requestPasswordReset as sendRecoveryEmail,
   getStoredPlayer,
   signOutPlayer,
+  CURRENT_TERMS_VERSION,
+  CURRENT_PRIVACY_VERSION,
 } from "./auth";
 import {
   PlayFabError,
@@ -73,6 +75,7 @@ import type {
 
 export * from "./types";
 export { PlayFabError, playFabConfig, demoMode, getVirtualCurrency };
+export { CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION };
 export type { AuthScope, PlayFabSession };
 
 const TITLE_ID = playFabConfig.titleId;
@@ -133,18 +136,18 @@ export const authService = {
   },
 
   /** PlayFab RegisterPlayFabUser. The backend owns email verification. */
-  async register({ username, email, password }: RegisterInput): Promise<RegisterResult> {
-    if (!passwordIsValid(password)) {
+  async register(input: RegisterInput): Promise<RegisterResult> {
+    if (!passwordIsValid(input.password)) {
       throw new Error("Password does not meet the requirements.");
     }
-    if (username.trim().length < 3) {
+    if (input.username.trim().length < 3) {
       throw new Error("Username must be at least 3 characters.");
     }
     if (demoMode) {
       await latency(400);
-      return { email: email.trim(), verificationRequired: true };
+      return { email: input.email.trim(), verificationRequired: true };
     }
-    return registerPlayer({ username, email, password });
+    return registerPlayer(input);
   },
 
   /** PlayFab SendAccountRecoveryEmail. Players only. */

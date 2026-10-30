@@ -7,10 +7,11 @@ import { IntegrationNotice } from "@/components/common/DemoBadge";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { BrandMark } from "@/components/site/BrandMark";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
-import { passwordRules } from "@/lib/playfab";
+import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION, passwordRules } from "@/lib/playfab";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/signup")({
@@ -47,6 +48,12 @@ const schema = z
         message: "Password does not meet all requirements",
       }),
     confirm: z.string().max(128),
+    agreedToPolicies: z.literal(true, {
+      errorMap: () => ({
+        message: "You must agree to the Terms of Use and Privacy Policy to create an account",
+      }),
+    }),
+    emailUpdates: z.boolean().default(false),
   })
   .refine((v) => v.password === v.confirm, {
     path: ["confirm"],
@@ -61,6 +68,8 @@ function SignupPage() {
     email: "",
     password: "",
     confirm: "",
+    agreedToPolicies: false,
+    emailUpdates: false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
@@ -91,6 +100,11 @@ function SignupPage() {
         username: parsed.data.username,
         email: parsed.data.email,
         password: parsed.data.password,
+        emailUpdates: parsed.data.emailUpdates,
+        termsAccepted: true,
+        termsVersion: CURRENT_TERMS_VERSION,
+        privacyVersion: CURRENT_PRIVACY_VERSION,
+        policyAcceptedAt: new Date().toISOString(),
       });
       setRegisteredEmail(result.email);
       toast.success("Account created — check your email to verify it");
@@ -108,7 +122,7 @@ function SignupPage() {
         id={id}
         type={type}
         autoComplete={autoComplete}
-        value={values[id]}
+        value={values[id] as string}
         onChange={set(id)}
         className="border-2"
       />
@@ -208,6 +222,91 @@ function SignupPage() {
                     })}
                   </ul>
                   {passwordField("confirm", "Confirm Password")}
+
+                  {/* Required User Agreement */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="flex items-start gap-2.5">
+                      <Checkbox
+                        id="agreedToPolicies"
+                        checked={values.agreedToPolicies}
+                        onCheckedChange={(checked) => {
+                          setValues((v) => ({ ...v, agreedToPolicies: checked === true }));
+                          if (checked) {
+                            setErrors((e) => {
+                              const { agreedToPolicies: _, ...rest } = e;
+                              return rest;
+                            });
+                          }
+                        }}
+                        className="mt-0.5 border-2 border-border"
+                        aria-invalid={!!errors["agreedToPolicies"]}
+                        aria-describedby={
+                          errors["agreedToPolicies"] ? "agreedToPolicies-error" : undefined
+                        }
+                      />
+                      <Label
+                        htmlFor="agreedToPolicies"
+                        className="cursor-pointer text-xs leading-relaxed text-foreground select-none"
+                      >
+                        I have read and agree to the{" "}
+                        <Link
+                          to="/terms"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-gold underline underline-offset-2 hover:text-gold/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        >
+                          Terms of Use
+                        </Link>{" "}
+                        and{" "}
+                        <Link
+                          to="/privacy"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-gold underline underline-offset-2 hover:text-gold/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        >
+                          Privacy Policy
+                        </Link>
+                        .{" "}
+                        <span className="text-destructive" aria-hidden="true">
+                          *
+                        </span>
+                      </Label>
+                    </div>
+                    {errors["agreedToPolicies"] ? (
+                      <p
+                        id="agreedToPolicies-error"
+                        className="text-xs font-semibold text-destructive"
+                      >
+                        {errors["agreedToPolicies"]}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {/* Optional Email Updates Consent */}
+                  <div className="space-y-1 pb-1">
+                    <div className="flex items-start gap-2.5">
+                      <Checkbox
+                        id="emailUpdates"
+                        checked={values.emailUpdates}
+                        onCheckedChange={(checked) =>
+                          setValues((v) => ({ ...v, emailUpdates: checked === true }))
+                        }
+                        className="mt-0.5 border-2 border-border"
+                      />
+                      <Label
+                        htmlFor="emailUpdates"
+                        className="cursor-pointer text-xs leading-relaxed text-muted-foreground select-none"
+                      >
+                        (Optional) Send me email updates about Civil Craft releases, announcements,
+                        and features.
+                      </Label>
+                    </div>
+                    <p className="pl-6.5 text-[11px] text-muted-foreground/80">
+                      You can change this anytime in Player Settings. Password recovery and
+                      essential account messages are sent independently of this preference.
+                    </p>
+                  </div>
+
                   <Button
                     type="submit"
                     variant="gold"

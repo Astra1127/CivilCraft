@@ -275,6 +275,11 @@ export interface RegisterInput {
   username: string;
   email: string;
   password: string;
+  emailUpdates?: boolean;
+  termsAccepted?: boolean;
+  termsVersion?: string;
+  privacyVersion?: string;
+  policyAcceptedAt?: string;
 }
 
 /** Result of a registration attempt; mirrors PlayFab's verification flow. */

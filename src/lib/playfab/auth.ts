@@ -6,9 +6,9 @@
  * same account. Passwords are never stored — only the PlayFab id, session
  * ticket, entity token and profile information are kept for the session.
  */
-import { callPlayFab, clearSession, readSession, writeSession, PlayFabError } from "./client";
-import type { PlayerIdentity, RegisterInput, RegisterResult } from "./types";
-import { syncContactEmail } from "./contact-email";
+import { callPlayFab, clearSession, readSession, writeSession, PlayFabError } from "./client.ts";
+import type { PlayerIdentity, RegisterInput, RegisterResult } from "./types.ts";
+import { syncContactEmail } from "./contact-email.ts";
 
 interface EntityTokenResponse {
   EntityToken?: string;
@@ -126,10 +126,37 @@ export async function loginPlayer(identifier: string, password: string): Promise
 }
 
 /** Client/RegisterPlayFabUser — creates the account in the Civil Craft title. */
+export const CURRENT_TERMS_VERSION = "2026-10-29";
+export const CURRENT_PRIVACY_VERSION = "2026-10-29";
+
+export async function savePlayerEmailPreference(
+  sessionTicket: string,
+  emailUpdates: boolean,
+): Promise<void> {
+  try {
+    await fetch("/api/player/email-preference", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + sessionTicket,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ emailUpdates }),
+      cache: "no-store",
+    });
+  } catch {
+    /* Email preference write failure should not fail registration */
+  }
+}
+
 export async function registerPlayer({
   username,
   email,
   password,
+  emailUpdates,
+  termsAccepted,
+  termsVersion,
+  privacyVersion,
+  policyAcceptedAt,
 }: RegisterInput): Promise<RegisterResult> {
   const result = await callPlayFab<LoginResult>("/Client/RegisterPlayFabUser", {
     Username: username.trim(),
@@ -156,6 +183,36 @@ export async function registerPlayer({
       );
     } catch {
       /* display name already taken or restricted — the account still exists */
+    }
+
+    if (termsAccepted) {
+      try {
+        const acceptedAt = policyAcceptedAt ?? new Date().toISOString();
+        const tVersion = termsVersion ?? CURRENT_TERMS_VERSION;
+        const pVersion = privacyVersion ?? CURRENT_PRIVACY_VERSION;
+        await callPlayFab(
+          "/Client/UpdateUserData",
+          {
+            Data: {
+              PolicyAcceptedAt: acceptedAt,
+              TermsAcceptedVersion: tVersion,
+              PrivacyAcceptedVersion: pVersion,
+              PolicyAgreement: JSON.stringify({
+                termsVersion: tVersion,
+                privacyVersion: pVersion,
+                acceptedAt,
+              }),
+            },
+          },
+          { sessionTicket: result.SessionTicket },
+        );
+      } catch {
+        /* Policy record write failure should not block account existence */
+      }
+    }
+
+    if (emailUpdates) {
+      await savePlayerEmailPreference(result.SessionTicket, true);
     }
   }
   clearSession("player");
