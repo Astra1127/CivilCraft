@@ -93,6 +93,7 @@ export function SiteFooter() {
                 { to: "/contact", label: "Contact" },
                 { to: "/privacy", label: "Privacy" },
                 { to: "/terms", label: "Terms" },
+                { to: "/cookies", label: "Cookies" },
               ].map((l) => (
                 <li key={l.to}>
                   <Link to={l.to} className="text-muted-foreground hover:text-foreground">

@@ -15,6 +15,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AlmanacRouteImport } from './routes/almanac'
 import { Route as CommunityRouteImport } from './routes/community'
 import { Route as ContactRouteImport } from './routes/contact'
+import { Route as CookiesRouteImport } from './routes/cookies'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DownloadRouteImport } from './routes/download'
 import { Route as FaqRouteImport } from './routes/faq'
@@ -91,6 +92,11 @@ const CommunityRoute = CommunityRouteImport.update({
 const ContactRoute = ContactRouteImport.update({
   id: '/contact',
   path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CookiesRoute = CookiesRouteImport.update({
+  id: '/cookies',
+  path: '/cookies',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -336,6 +342,7 @@ export interface FileRoutesByFullPath {
   '/almanac': typeof AlmanacRoute
   '/community': typeof CommunityRouteWithChildren
   '/contact': typeof ContactRoute
+  '/cookies': typeof CookiesRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/download': typeof DownloadRoute
   '/faq': typeof FaqRoute
@@ -389,6 +396,7 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/almanac': typeof AlmanacRoute
   '/contact': typeof ContactRoute
+  '/cookies': typeof CookiesRoute
   '/download': typeof DownloadRoute
   '/faq': typeof FaqRoute
   '/forgot-password': typeof ForgotPasswordRoute
@@ -444,6 +452,7 @@ export interface FileRoutesById {
   '/almanac': typeof AlmanacRoute
   '/community': typeof CommunityRouteWithChildren
   '/contact': typeof ContactRoute
+  '/cookies': typeof CookiesRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/download': typeof DownloadRoute
   '/faq': typeof FaqRoute
@@ -501,6 +510,7 @@ export interface FileRouteTypes {
     | '/almanac'
     | '/community'
     | '/contact'
+    | '/cookies'
     | '/dashboard'
     | '/download'
     | '/faq'
@@ -554,6 +564,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/almanac'
     | '/contact'
+    | '/cookies'
     | '/download'
     | '/faq'
     | '/forgot-password'
@@ -608,6 +619,7 @@ export interface FileRouteTypes {
     | '/almanac'
     | '/community'
     | '/contact'
+    | '/cookies'
     | '/dashboard'
     | '/download'
     | '/faq'
@@ -664,6 +676,7 @@ export interface RootRouteChildren {
   AlmanacRoute: typeof AlmanacRoute
   CommunityRoute: typeof CommunityRouteWithChildren
   ContactRoute: typeof ContactRoute
+  CookiesRoute: typeof CookiesRoute
   DashboardRoute: typeof DashboardRouteWithChildren
   DownloadRoute: typeof DownloadRoute
   FaqRoute: typeof FaqRoute
@@ -725,6 +738,13 @@ declare module '@tanstack/react-router' {
       path: '/contact'
       fullPath: '/contact'
       preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cookies': {
+      id: '/cookies'
+      path: '/cookies'
+      fullPath: '/cookies'
+      preLoaderRoute: typeof CookiesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -1154,6 +1174,7 @@ const rootRouteChildren: RootRouteChildren = {
   AlmanacRoute: AlmanacRoute,
   CommunityRoute: CommunityRouteWithChildren,
   ContactRoute: ContactRoute,
+  CookiesRoute: CookiesRoute,
   DashboardRoute: DashboardRouteWithChildren,
   DownloadRoute: DownloadRoute,
   FaqRoute: FaqRoute,

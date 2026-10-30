@@ -366,3 +366,56 @@ test("account settings player UI simplifies deletion and truthfully reflects una
     "SQL trigger permanent_receipt removed from player UI",
   );
 });
+
+test("terms, privacy, and cookie policies are structured, responsive, and grounded in verified implementation", async () => {
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+
+  const termsPath = path.resolve(process.cwd(), "src/routes/terms.tsx");
+  const privacyPath = path.resolve(process.cwd(), "src/routes/privacy.tsx");
+  const cookiesPath = path.resolve(process.cwd(), "src/routes/cookies.tsx");
+  const footerPath = path.resolve(process.cwd(), "src/components/site/SiteFooter.tsx");
+
+  const terms = await fs.readFile(termsPath, "utf-8");
+  const privacy = await fs.readFile(privacyPath, "utf-8");
+  const cookies = await fs.readFile(cookiesPath, "utf-8");
+  const footer = await fs.readFile(footerPath, "utf-8");
+
+  // Verify Terms covers required areas
+  assert.ok(terms.includes("educational-scope"), "Terms includes educational scope");
+  assert.ok(terms.includes("acceptable-use"), "Terms includes acceptable use");
+  assert.ok(terms.includes("virtual-currency"), "Terms includes virtual currency");
+  assert.ok(terms.includes("intellectual-property"), "Terms includes IP ownership");
+  assert.ok(terms.includes("deletion-requests"), "Terms includes deletion requests");
+  assert.ok(terms.includes("Republic of the Philippines"), "Terms references Philippine law");
+  assert.ok(terms.includes("DraftReviewNotice"), "Terms uses DraftReviewNotice");
+
+  // Verify Privacy covers required areas under Philippine DPA (RA 10173)
+  assert.ok(privacy.includes("Republic Act No. 10173"), "Privacy references RA 10173");
+  assert.ok(privacy.includes("Data Privacy Act of 2012"), "Privacy references DPA");
+  assert.ok(privacy.includes("National Privacy Commission"), "Privacy references NPC");
+  assert.ok(privacy.includes("PlayFab"), "Privacy covers PlayFab integration");
+  assert.ok(privacy.includes("PayMongo"), "Privacy covers PayMongo integration");
+  assert.ok(privacy.includes("Right to be Informed"), "Privacy details DPA user rights");
+  assert.ok(privacy.includes("DraftReviewNotice"), "Privacy uses DraftReviewNotice");
+
+  // Verify Cookie Policy discloses only verified technologies and disclaims trackers
+  assert.ok(cookies.includes("sidebar_state"), "Cookie policy discloses sidebar_state");
+  assert.ok(
+    cookies.includes("civilcraft.session.player.v1"),
+    "Cookie policy discloses player session in localStorage",
+  );
+  assert.ok(
+    cookies.includes("NO Third-Party Analytics Trackers"),
+    "Cookie policy disclaims analytics trackers",
+  );
+  assert.ok(
+    cookies.includes("NO Advertising Cookies"),
+    "Cookie policy disclaims advertising cookies",
+  );
+
+  // Verify Footer includes all policy links
+  assert.ok(footer.includes('to: "/privacy"'), "Footer links to Privacy");
+  assert.ok(footer.includes('to: "/terms"'), "Footer links to Terms");
+  assert.ok(footer.includes('to: "/cookies"'), "Footer links to Cookies");
+});
