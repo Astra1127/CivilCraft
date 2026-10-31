@@ -171,10 +171,11 @@ function CookiesPage() {
                 <div className="flex items-start gap-2.5 rounded-xl border border-border bg-card p-4">
                   <CheckCircle2 className="h-5 w-5 text-gold shrink-0 mt-0.5" aria-hidden="true" />
                   <div className="text-xs sm:text-sm">
-                    <p className="font-semibold text-foreground">No Intrusive Cookie Banners</p>
+                    <p className="font-semibold text-foreground">A Simple Storage Notice</p>
                     <p className="text-muted-foreground mt-0.5">
-                      Because we use zero non-essential marketing trackers, consent-gating banners
-                      are not required by privacy regulations.
+                      Our small notice explains browser storage without blocking access. Clicking
+                      &ldquo;Got It&rdquo; acknowledges the notice; it does not give consent to
+                      optional tracking or accept all cookies.
                     </p>
                   </div>
                 </div>
@@ -367,6 +368,13 @@ function CookiesPage() {
                   6. Updates &amp; Contact Information
                 </h2>
               </div>
+              <p>
+                We remember your notice acknowledgment locally on this browser, with the policy
+                version and acknowledgment time, until you clear site data. A new policy version
+                will show the notice again. This record contains no account identifier and is not
+                sent to our servers. If browser storage is unavailable, you can still dismiss the
+                notice for the current page visit.
+              </p>
               <p>
                 As an evolving academic student project, any future updates to how the website uses
                 storage will be reflected on this page with an updated &ldquo;Last Updated&rdquo;

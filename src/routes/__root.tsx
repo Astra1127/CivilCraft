@@ -14,6 +14,7 @@ import appCss from "../styles.css?url";
 import { reportApplicationError } from "../lib/error-reporting";
 import { AuthProvider } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
+import { CookieNotice } from "@/components/site/CookieNotice";
 
 function NotFoundComponent() {
   return (
@@ -113,6 +114,7 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        <CookieNotice />
         {children}
         <Scripts />
       </body>

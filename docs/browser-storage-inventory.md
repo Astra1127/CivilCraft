@@ -1,37 +1,24 @@
-# CivilCraft Browser Storage & Cookie Technical Inventory
+# CivilCraft browser storage inventory
 
-**Document Version:** 1.0.0  
-**Target Environment:** CivilCraft Production Web Client & Dashboard  
-**Audience:** Developers, Systems Architects, Security Auditors  
+Audited from source on October 30, 2026, before adding the cookie notice. This is a code-level audit; deployment infrastructure and browser extension cookies were not inspected. No live PlayFab data was accessed.
 
----
+| Mechanism / key                                                                                | Purpose                                                                                                                            | Lifetime                                                                                       |
+| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Cookie: `sidebar_state`                                                                        | Sidebar expanded preference (`src/components/ui/sidebar.tsx`); the reusable component writes this value, but does not read it back | 7 days                                                                                         |
+| Cookie: `__Host-civilcraft-admin-session` (secure) or `civilcraft-admin-session` (development) | Signed staff session; HttpOnly, SameSite=Lax, Path=/, Secure when configured (`src/lib/admin-auth/session.server.ts`)              | 8 hours; removed on staff logout                                                               |
+| localStorage: `civilcraft.session.player.v1`                                                   | PlayFab player identity, session ticket and optional entity credentials (`src/lib/playfab/session-store.ts`)                       | Until signout, detected expiration, or site data removal; browser storage itself has no expiry |
+| localStorage: `civilcraft.session.player.ended`                                                | Expired-session notification flag                                                                                                  | Cleared on login or explicit player session clearing                                           |
+| localStorage: `civilcraft.cms.v3`                                                              | Legacy CMS local state/settings fallback (`src/lib/cms/store.ts`); excludes news/gallery and contact settings                      | Until site data removal                                                                        |
+| localStorage: `civilcraft.notifications.read.v1:<playerId>`                                    | Read notification IDs for each player (`src/lib/playfab/index.ts`)                                                                 | Until site data removal                                                                        |
+| sessionStorage: `civilcraft.admin.directory.rows`                                              | Admin player directory pagination preference                                                                                       | Current tab session                                                                            |
+| localStorage: `civilcraft.session.v1`, `civilcraft.session.admin.v1`                           | Legacy keys removed by session cleanup/auth; no current writes found                                                               | Removed by existing cleanup paths                                                              |
 
-## 1. Overview
+No IndexedDB usage or browser advertising/analytics tracker initialization was found in the application source. Existing external requests include Google Fonts, PlayFab and configured service integrations; absence of tracker code does not establish the behavior of deployment infrastructure. Server-side game statistics and download counts are distinct from browser tracking storage.
 
-This developer documentation provides a code-level technical inventory of all browser storage mechanisms (HTTP cookies, `localStorage`, and `sessionStorage`) implemented in the CivilCraft website. 
+The previous inventory incorrectly listed `civilcraft.session.end_reason.v1`, `civilcraft.cms.v1`, `unlocked-levels-<playFabId>`, and an underscore-form admin cookie name. The table above reflects current source.
 
-The public Cookie Policy at `/cookies` presents a simplified, player-friendly overview grouped into **Essential Storage**, **Functional Storage**, and **Temporary Storage**. Technical key names, internal storage tokens, and administrative implementation details are maintained here for engineering reference.
+## Notice addition
 
----
+The notice adds only localStorage key `civilcraft.cookie-notice.v1`, with `{ policyVersion: "2026-10-30", acknowledgedAt: "<ISO timestamp>" }`. It contains no player identifier, session ticket, or tracking permission. It remains until site data is cleared or overwritten on acknowledgment of a newer policy version. Missing, malformed or outdated records show the notice again. If storage is blocked, dismissal lasts for the mounted page only. Clearing this key restores the notice without changing authentication.
 
-## 2. Technical Inventory Matrix
-
-| Technology | Storage Type | Scope | Key / Name | Purpose & Code Location | Lifespan / Expiration |
-|---|---|---|---|---|---|
-| **Cookie (Client-side)** | Document Cookie | Public & Dashboard | `sidebar_state` | Remembers whether the dashboard navigation sidebar is expanded (`true`) or collapsed (`false`). Set in `src/components/ui/sidebar.tsx`. | 7 days (`max-age=604800`) |
-| **Cookie (Server-side)** | HttpOnly, Secure, SameSite=Lax | Admin Only (`/admin/*`) | Configured via `cookieName(config, "session")` (default `civilcraft_admin_session`) | Cryptographically signed administrative session token for staff login and endpoint protection. Set in `src/lib/admin-auth/session.server.ts`. Never issued to normal players. | Active session (max 8 hours) |
-| **Local Storage (`localStorage`)** | Web Storage | Player Dashboard | `civilcraft.session.player.v1` | Serialized JSON containing active PlayFab session ticket, PlayFab ID, and display name. Managed by `src/lib/playfab/session-store.ts`. | Persistent until player clicks "Sign Out" or ticket expires |
-| **Local Storage (`localStorage`)** | Web Storage | Player Dashboard | `civilcraft.session.end_reason.v1` | Flags reason for session termination (e.g., `"expired"`). Triggers session expiry notification banner upon subsequent navigation. Managed in `src/lib/playfab/session-store.ts`. | Cleared automatically upon new login |
-| **Local Storage (`localStorage`)** | Web Storage | CMS / Demo Mode | `civilcraft.cms.v1` | Local fallback state for news, releases, FAQ, and team members when operating in offline demo or mock mode. Implemented in `src/lib/cms/store.ts`. | Persistent in mock/local mode |
-| **Local Storage (`localStorage`)** | Web Storage | Player Dashboard | `unlocked-levels-<playFabId>` | Client-side cache of completed level IDs to minimize duplicate API calls on dashboard navigation. Implemented in `src/lib/playfab/index.ts`. | Persistent until browser cache cleared |
-| **Session Storage (`sessionStorage`)** | Web Storage | Admin Directory | `civilcraft.admin.directory.rows` | Remembers selected pagination row count (e.g. 20, 50, 100) in the admin player directory table. Implemented in `src/routes/admin.players.tsx`. | Ephemeral (cleared on browser tab close) |
-
----
-
-## 3. Privacy & Compliance Analysis
-
-### Republic Act No. 10173 (Philippine Data Privacy Act of 2012)
-- **Strictly Necessary Exemption:** Under National Privacy Commission (NPC) advisory opinions and international data privacy frameworks, storage technologies strictly necessary for providing an explicitly requested service (such as player authentication tickets in `localStorage` and admin session cookies) do not require prior consent banners because they are essential to contract fulfillment.
-- **Zero Third-Party Tracking:** The website loads no advertising tags, no Google Analytics scripts, no Meta (Facebook) tracking pixels, and no behavioral profiling cookies.
-- **Player Data Erasure:** When a player clicks **Sign Out** in the dashboard, `src/lib/playfab/session-store.ts` immediately invokes `localStorage.removeItem(PLAYER_SESSION_KEY)`, terminating local authentication tokens.
-
+The notice adds no cookies, trackers, network calls, or changes to PlayFab session handling. It renders in normal document flow and does not gate access. The existing `/cookies` policy explains storage and now documents acknowledgment retention explicitly.
