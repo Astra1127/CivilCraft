@@ -70,16 +70,24 @@ export async function prepareApkDownload(
     throw new Error(unavailable);
   try {
     const url = new URL(value["url"]);
+    const github =
+      url.hostname === "github.com" &&
+      /^\/Astra1127\/CivilCraft\/releases\/download\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+\.apk$/.test(
+        url.pathname,
+      ) &&
+      !url.search;
+    const blob =
+      url.hostname.endsWith(".private.blob.vercel-storage.com") &&
+      Boolean(url.searchParams.get("vercel-blob-signature")) &&
+      Boolean(url.searchParams.get("vercel-blob-delegation"));
     if (
       url.protocol !== "https:" ||
-      !url.hostname.endsWith(".private.blob.vercel-storage.com") ||
+      (!github && !blob) ||
       url.username ||
       url.password ||
       (url.port && url.port !== "443") ||
       url.hash ||
-      decodeURIComponent(url.pathname).split("/").at(-1) !== fileName ||
-      !url.searchParams.get("vercel-blob-signature") ||
-      !url.searchParams.get("vercel-blob-delegation")
+      decodeURIComponent(url.pathname).split("/").at(-1) !== fileName
     )
       throw new Error();
     return url.href;

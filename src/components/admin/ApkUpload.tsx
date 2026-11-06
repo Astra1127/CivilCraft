@@ -75,6 +75,33 @@ export function ApkUpload({
     }
   };
 
+  if (release.downloadProvider === "github")
+    return (
+      <section className="space-y-3 rounded-xl border-2 border-border bg-secondary/20 p-3">
+        <h3 className="text-sm font-bold">GitHub Releases APK</h3>
+        <p className="text-xs text-muted-foreground">
+          This APK is hosted on GitHub Releases. Publish the next APK there and update its reviewed
+          website delivery binding.
+        </p>
+        <div className="space-y-1 rounded-lg border border-border bg-card px-3 py-2 text-xs">
+          <p className="font-bold">
+            {release.fileName ?? "APK"}
+            {release.fileSizeBytes !== null ? ` · ${formatBytes(release.fileSizeBytes)}` : ""}
+          </p>
+          <p className="break-all text-muted-foreground">{release.fileUrl}</p>
+          <ApkDownloadButton
+            url={`/api/admin/releases/${encodeURIComponent(release.id)}/download`}
+            fileName={release.fileName}
+            variant="link"
+            size="sm"
+            className="h-auto px-0 text-gold"
+          >
+            Preview APK download
+          </ApkDownloadButton>
+        </div>
+      </section>
+    );
+
   return (
     <section className="space-y-3 rounded-xl border-2 border-border bg-secondary/20 p-3">
       <div className="space-y-1">

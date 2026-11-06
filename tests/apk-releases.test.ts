@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, afterEach, beforeEach, test } from "node:test";
 import { releaseRequest } from "../src/lib/cms/releases.server.ts";
 import { apkStorage } from "../src/lib/cms/apk-storage.server.ts";
+import { githubApkStorage } from "../src/lib/cms/github-apk.server.ts";
 import { releaseWriteLock } from "../src/lib/cms/release-write-lock.server.ts";
 import { releaseDownloadStats } from "../src/lib/cms/release-download-stats.server.ts";
 import { APK_CONTENT_TYPE, MAX_APK_BYTES } from "../src/lib/cms/apk.ts";
@@ -28,6 +29,7 @@ const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.
 const originalFetch = globalThis.fetch;
 const originalDateNow = Date.now;
 const originalStorage = { ...apkStorage };
+const originalGithubVerify = githubApkStorage.verifyDownload;
 const originalLock = releaseWriteLock.run;
 const originalDownloadRecord = releaseDownloadStats.record;
 const uploadResult = {
@@ -96,6 +98,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
   Date.now = originalDateNow;
   Object.assign(apkStorage, originalStorage);
+  githubApkStorage.verifyDownload = originalGithubVerify;
 });
 after(() => {
   for (const [key, value] of Object.entries(previous)) {
@@ -200,6 +203,104 @@ const adminData = async () => (await admin()).json();
 const rawRelease = (id = base.id) => JSON.parse(records["civilcraft.website.v1.releases." + id]!);
 const signedUrl = (pathname: string) =>
   "https://storage.test/" + encodeURIComponent(pathname) + "?signature=private-download";
+
+function seedGithubRelease(current = true) {
+  const id = "1db44dc0-eea1-43a1-8aeb-a4109fbf13e3";
+  const release = {
+    ...base,
+    id,
+    version: "BETA 0.0.0.6",
+    build: "7",
+    androidVersionCode: 13,
+    fileName: "CivilCraft_10-29-26.apk",
+    fileSizeBytes: 128537911,
+    fileUrl: `/api/releases/${id}/download`,
+    apk: {
+      storagePath: `civilcraft/releases/${id}/00000000-0000-4000-8000-000000000001/CivilCraft_10-29-26.apk`,
+      fileName: "CivilCraft_10-29-26.apk",
+      fileSizeBytes: 128537911,
+      etag: "original-etag",
+      uploadedAt: "2026-10-29T03:00:00Z",
+    },
+  };
+  records["civilcraft.website.v1.release-config"] = JSON.stringify({
+    currentId: current ? id : null,
+  });
+  records["civilcraft.website.v1.releases." + id] = JSON.stringify(release);
+  return release;
+}
+
+test("reviewed GitHub delivery recovers cached URLs without Blob calls, metadata writes or emails", async () => {
+  const release = seedGithubRelease();
+  const initialRecords = JSON.stringify(records);
+  let verified = 0;
+  let blobCalls = 0;
+  githubApkStorage.verifyDownload = async () => {
+    verified++;
+  };
+  const blocked = async () => {
+    blobCalls++;
+    throw new Error("Suspended Blob must not be called");
+  };
+  apkStorage.downloadUrl = blocked;
+  apkStorage.verifyDownload = blocked;
+  apkStorage.head = blocked;
+  releaseWriteLock.run = blocked;
+  releaseDownloadStats.record = blocked;
+  const current = (await publicData()).current;
+  assert.equal(current.downloadProvider, "github");
+  assert.equal(current.fileUrl, release.fileUrl);
+  assert.equal(current.version, release.version);
+  assert.equal(current.notes, ""); // Unpublished notes stay private.
+  const ready = await publicRequest(`${release.fileUrl}-link`, "POST");
+  assert.equal(ready.status, 200);
+  const result = await ready.json();
+  assert.equal(
+    result.url,
+    "https://github.com/Astra1127/CivilCraft/releases/download/android-2026-10-29/CivilCraft_10-29-26.apk",
+  );
+  assert.equal(result.fileSizeBytes, release.fileSizeBytes);
+  const legacy = await publicRequest(release.fileUrl);
+  assert.equal(legacy.status, 307);
+  assert.equal(legacy.headers.get("location"), result.url);
+  const preview = await admin(`/api/admin/releases/${release.id}/download-link`, {});
+  assert.equal(preview.status, 200);
+  assert.equal((await preview.json()).url, result.url);
+  assert.equal(verified, 3);
+  assert.equal(blobCalls, 0);
+  assert.equal(JSON.stringify(records), initialRecords);
+});
+
+test("GitHub preparation failures remain truthful JSON errors; non-current builds stay private", async () => {
+  const release = seedGithubRelease();
+  githubApkStorage.verifyDownload = async () => {
+    throw new AdminApiError(
+      503,
+      "The APK download is temporarily unavailable from GitHub. Please try again.",
+    );
+  };
+  const response = await publicRequest(`${release.fileUrl}-link`, "POST");
+  assert.equal(response.status, 503);
+  assert.match((await response.json()).error, /unavailable from GitHub/);
+  assert.equal(response.headers.get("content-disposition"), null);
+  seedGithubRelease(false);
+  assert.equal((await publicRequest(`${release.fileUrl}-link`, "POST")).status, 404);
+  assert.equal((await publicRequest(release.fileUrl)).status, 404);
+});
+
+test("replacing even the same-sized APK expires the reviewed GitHub delivery", async () => {
+  const release = seedGithubRelease();
+  release.apk.uploadedAt = "2026-11-06T03:04:55Z";
+  records["civilcraft.website.v1.releases." + release.id] = JSON.stringify(release);
+  assert.equal((await publicData()).current.downloadProvider, "vercel-blob");
+  let legacyProvider = false;
+  apkStorage.downloadUrl = async () => {
+    legacyProvider = true;
+    throw new AdminApiError(503, "Blob unavailable");
+  };
+  assert.equal((await publicRequest(`${release.fileUrl}-link`, "POST")).status, 503);
+  assert.equal(legacyProvider, true);
+});
 
 type Prepared = { ticket: string; pathname: string; fileName: string; fileSizeBytes: number };
 async function prepare(bytes: Buffer, releaseId = base.id, fileName = "Civil Craft.apk") {

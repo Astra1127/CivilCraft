@@ -222,6 +222,25 @@ test("external legacy links do not pretend to be tracked hosted APKs", async (t)
   assert.equal(row("Total downloads").props.value, (1_257).toLocaleString());
 });
 
+test("GitHub delivery labels historical counters and never reports a current download count", async (t) => {
+  const { row, renderer, state, render } = await mountRoute(t, {
+    releases: [{ ...release(), downloadProvider: "github" }],
+  });
+  assert.equal(row("Downloads").props.value, "Not tracked");
+  assert.equal(row("Total downloads"), undefined);
+  assert.equal(row("Historical website downloads").props.value, (1_257).toLocaleString());
+  assert.ok(text(renderer.root).includes("delivered by GitHub Releases and are not counted here"));
+  const cleanup = renderer.root
+    .findAllByType("button")
+    .find((node) => text(node) === "Clean old APKs");
+  assert.equal(cleanup.props.disabled, true);
+  state.downloadQuery = { data: undefined, isPending: false, isError: true, isFetching: false };
+  await render();
+  assert.equal(row("Downloads").props.value, "Not tracked");
+  assert.equal(row("Historical website downloads").props.value, "Unknown");
+  assert.deepEqual(state.mutations, []);
+});
+
 test("unavailable, failed, and loading stats never invent a zero or use stale cached data", async (t) => {
   const { row, renderer, state, render } = await mountRoute(t);
   for (const query of [

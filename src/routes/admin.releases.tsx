@@ -292,7 +292,7 @@ function AdminReleases() {
             value={
               !current
                 ? "—"
-                : !current.apkHosted
+                : !current.apkHosted || current.downloadProvider === "github"
                   ? "Not tracked"
                   : downloadStats
                     ? (Object.hasOwn(downloadStats.byRelease, current.id)
@@ -304,11 +304,21 @@ function AdminReleases() {
           />
           <DataRow
             tone="blueprint"
-            label="Total downloads"
+            label={
+              current?.downloadProvider === "github"
+                ? "Historical website downloads"
+                : "Total downloads"
+            }
             value={downloadStats ? downloadStats.total.toLocaleString() : unavailableCount}
           />
         </div>
         <div className="mt-3 space-y-2 border-t border-white/15 pt-3">
+          {current?.downloadProvider === "github" ? (
+            <p className="text-xs text-white/80">
+              Current APK downloads are delivered by GitHub Releases and are not counted here.
+              Website counts shown here cover earlier downloads only.
+            </p>
+          ) : null}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="min-w-0 text-xs text-white/80" role="status" aria-live="polite">
               {downloads.isPending
@@ -390,11 +400,12 @@ function AdminReleases() {
 
       <Panel title="Create draft build" icon={Package} bodyClassName="p-4 space-y-3">
         <p className="text-sm text-muted-foreground">
-          Only the current APK is retained after publication. Making a new build current permanently
-          removes older builds and their APK files. Save your own backups first.
+          {current?.downloadProvider === "github"
+            ? "GitHub release assets are managed in GitHub. This page does not delete GitHub assets. Keep your own backups."
+            : "Only the current APK is retained after publication. Making a new build current permanently removes older builds and their APK files. Save your own backups first."}
         </p>
         <Button
-          disabled={busy || !current?.apkHosted}
+          disabled={busy || !current?.apkHosted || current.downloadProvider === "github"}
           variant="outline"
           onClick={() => setCleanupConfirm(true)}
         >
@@ -629,9 +640,11 @@ function AdminReleases() {
 
                     <div className="space-y-1.5">
                       <Label htmlFor={`u-${r.id}`}>
-                        {r.apkHosted
-                          ? "Uploaded APK URL"
-                          : "Manual download URL (optional legacy link)"}
+                        {r.downloadProvider === "github"
+                          ? "GitHub APK download URL"
+                          : r.apkHosted
+                            ? "Uploaded APK URL"
+                            : "Manual download URL (optional legacy link)"}
                       </Label>
                       <Input
                         id={`u-${r.id}`}
@@ -641,9 +654,11 @@ function AdminReleases() {
                         onChange={(e) => update(r.id, { fileUrl: e.target.value || null })}
                       />
                       <p className="text-xs text-muted-foreground">
-                        {r.apkHosted
-                          ? "File name, size and URL are set by the verified upload. Upload another APK to replace it."
-                          : "Existing external download links are supported. Upload an APK to host the file for this build."}
+                        {r.downloadProvider === "github"
+                          ? "This download uses the reviewed GitHub Releases binding. Publish a new APK there before updating the website binding."
+                          : r.apkHosted
+                            ? "File name, size and URL are set by the verified upload. Upload another APK to replace it."
+                            : "Existing external download links are supported. Upload an APK to host the file for this build."}
                       </p>
                     </div>
 

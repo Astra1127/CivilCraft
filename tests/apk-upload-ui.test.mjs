@@ -132,6 +132,21 @@ async function drop(renderer, ...items) {
   assert.equal(prevented, true);
 }
 
+test("GitHub APK shows its managed preview and hides Blob upload controls", async (t) => {
+  const release = { ...savedRelease(), apkHosted: true, downloadProvider: "github" };
+  const { renderer } = await mountUpload(t, { release });
+  assert.equal(hasText(renderer, "GitHub Releases APK"), true);
+  assert.equal(hasText(renderer, "current.apk · 20 MB"), true);
+  assert.equal(hasText(renderer, "Publish the next APK there"), true);
+  assert.equal(renderer.root.findAllByType("input").length, 0);
+  assert.equal(dropZone(renderer), undefined);
+  assert.equal(button(renderer, "Upload APK"), undefined);
+  assert.equal(button(renderer, "Replace APK"), undefined);
+  const preview = renderer.root.findByType("ApkDownloadButton");
+  assert.equal(preview.props.url, "/api/admin/releases/saved-build/download");
+  assert.equal(preview.props.fileName, "current.apk");
+});
+
 test("single APK picker accepts a 51 MB file with generic MIME and uses a native keyboard button", async (t) => {
   const selected = file({ type: "application/octet-stream" });
   const uploads = [];

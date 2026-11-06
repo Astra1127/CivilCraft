@@ -5,6 +5,7 @@ import type { Release } from "./types.ts";
 import type { AdminUser } from "../admin-auth/types.ts";
 import { APK_CONTENT_TYPE } from "./apk.ts";
 import { apkStorage } from "./apk-storage.server.ts";
+import { githubApkStorage, resolveGithubApk } from "./github-apk.server.ts";
 import { validateApkArchive } from "./apk-validation.server.ts";
 import { apkPathSchema, createApkUploadTicket, readApkUploadTicket } from "./apk-ticket.server.ts";
 import type { HandleUploadPresignedBody } from "@vercel/blob/client";
@@ -101,6 +102,7 @@ async function announceVersion(notification: VersionAnnouncement) {
 
 function publicRelease(release: StoredRelease): Release {
   const { apk, ...fields } = release;
+  const github = resolveGithubApk(release);
   return {
     ...fields,
     ...(apk
@@ -109,6 +111,8 @@ function publicRelease(release: StoredRelease): Release {
           fileSizeBytes: apk.fileSizeBytes,
           fileUrl: `/api/releases/${encodeURIComponent(release.id)}/download`,
           apkHosted: true,
+          downloadProvider: github ? ("github" as const) : ("vercel-blob" as const),
+          ...(github ? { fileSha256: github.sha256 } : {}),
         }
       : {}),
   };
@@ -290,11 +294,14 @@ async function unlockedReleaseRequest(
           { error: "This APK is no longer available. Refresh the page for the current build." },
           404,
         );
-      const url = await apkStorage.downloadUrl(release.apk.storagePath);
+      const github = resolveGithubApk(release);
+      const url = github?.url ?? (await apkStorage.downloadUrl(release.apk.storagePath));
       // A metadata-only HEAD can succeed while actual Blob delivery is blocked.
       // Read only four bytes before allowing the browser to start its download.
-      await apkStorage.verifyDownload(url, release.apk.fileSizeBytes);
+      if (github) await githubApkStorage.verifyDownload(github);
+      else await apkStorage.verifyDownload(url, release.apk.fileSizeBytes);
       if (
+        !github &&
         shouldCountReleaseDownload(new Request(request.url, { headers: request.headers }), admin)
       ) {
         try {
@@ -333,8 +340,13 @@ async function unlockedReleaseRequest(
         headers.set("Content-Disposition", `attachment; filename="${release.apk.fileName}"`);
         return new Response(null, { headers });
       }
-      headers.set("Location", await apkStorage.downloadUrl(release.apk.storagePath));
-      if (shouldCountReleaseDownload(request, admin)) {
+      const github = resolveGithubApk(release);
+      if (github) await githubApkStorage.verifyDownload(github);
+      headers.set(
+        "Location",
+        github?.url ?? (await apkStorage.downloadUrl(release.apk.storagePath)),
+      );
+      if (!github && shouldCountReleaseDownload(request, admin)) {
         try {
           await releaseDownloadStats.record(release.id);
         } catch {

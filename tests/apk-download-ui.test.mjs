@@ -257,3 +257,35 @@ test("legacy external links remain normal navigation without a forced file downl
     await runtime.close();
   }
 });
+
+test("prepared GitHub APK starts a direct asset download without a GitHub page or login", async () => {
+  const url =
+    "https://github.com/Astra1127/CivilCraft/releases/download/android-2026-10-29/CivilCraft.apk";
+  const runtime = await mount(async () => prepared({ url }));
+  try {
+    await runtime.click();
+    assert.deepEqual(runtime.navigations, [url]);
+    assert.equal(runtime.calls.length, 1);
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("GitHub download preparation rejects other repositories, pages, query strings and credentials", async () => {
+  for (const url of [
+    "https://github.com/Someone/CivilCraft/releases/download/test/CivilCraft.apk",
+    "https://github.com/Astra1127/CivilCraft/releases/tag/test",
+    "https://github.com/Astra1127/CivilCraft/releases/download/test/CivilCraft.apk?token=bad",
+    "https://user@github.com/Astra1127/CivilCraft/releases/download/test/CivilCraft.apk",
+    "https://github.com.evil.test/Astra1127/CivilCraft/releases/download/test/CivilCraft.apk",
+  ]) {
+    const runtime = await mount(async () => prepared({ url }));
+    try {
+      await runtime.click();
+      assert.equal(runtime.navigations.length, 0);
+      assert.match(text(runtime.renderer.root), /temporarily unavailable/);
+    } finally {
+      await runtime.close();
+    }
+  }
+});

@@ -90,6 +90,9 @@ export interface Release {
   fileUrl: string | null;
   /** True for a server-verified APK hosted by this website; storage paths stay private. */
   apkHosted?: boolean;
+  /** Managed delivery provider; independent of release-note publication. */
+  downloadProvider?: "github" | "vercel-blob";
+  fileSha256?: string;
   minAndroid: string;
   minRequirements: string[];
   recommendedRequirements: string[];

@@ -5,6 +5,41 @@ Coins, Diamonds, payment webhooks, feedback, or staff authentication.
 
 ## Admin workflow
 
+### Current installer: GitHub Releases (2026-11-06)
+
+The existing `CivilCraft_10-29-26.apk` now uses the public GitHub release asset at
+`Astra1127/CivilCraft`, tag `android-2026-10-29`. Players click Download on the
+website and receive the APK directly; they do not need a GitHub account or visit
+the release page. APK bytes bypass Vercel Blob and Vercel function bodies.
+
+The reviewed binding in `src/lib/cms/github-apk.server.ts` matches only release
+`1db44dc0-eea1-43a1-8aeb-a4109fbf13e3`, version `BETA 0.0.0.6`, build `7`, Android
+code `13`, its original APK name/size, and its pre-cutover attachment. Future
+attachment replacements (including equal-sized ones) do not reuse this binding.
+The asset is 128,537,911 bytes, GitHub asset ID `715709073`, SHA-256
+`86e57ece9dfcbed4763108f0d66f035c9060e31eb080e147cc186bfc9608025c`.
+
+This source-controlled delivery binding avoids the suspended Blob-backed writer
+lock. It does not bypass that lock, write PlayFab release records, change the
+current release/version/notes, send subscriber emails, or delete the old Blob.
+Both old GET download links and the newer preparation buttons resolve the same
+asset. Public access still requires the release to be current; staff previews
+retain their existing authentication and origin checks.
+
+Preparation checks a four-byte ZIP prefix and exact range/size through bounded,
+allowlisted GitHub redirects. Successful checks are coalesced and cached for at
+most 60 seconds. Failures show an on-page Retry. Full-file hashes are checked at
+publication, not by downloading 123 MiB on every click. GitHub asset IDs and hashes
+are recorded for audit; never replace the asset under this tag. Publish a new tag
+for the next installer, verify its size/hash and Android code, and update the
+reviewed website binding before deployment. APK binaries belong in release
+assets, never Git commits. This is not an automatic GitHub upload integration.
+
+The admin shows GitHub hosting and disables Blob upload/cleanup for this bound
+installer. Existing download counters remain historical; GitHub deliveries do not
+read or write the suspended Blob counter. The legacy Blob upload workflow below
+remains available for other builds and requires working Blob quota.
+
 1. Sign in to the main website's staff dashboard and open **Game & Download**.
 2. Create a **draft build**, entering its real version and build number.
 3. Drop one APK onto that build's upload control, or use **Choose APK**.
