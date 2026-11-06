@@ -38,6 +38,12 @@ continue to download directly from GitHub.
 
 ## Staff workflow
 
+Production coordination draft established on 2026-11-06:
+`GITHUB_APK_CONTROL_RELEASE_ID=436078745`, tag `civilcraft-admin-control-v1`.
+This release is for coordination only; keep it unpublished and do not attach APKs.
+The normal GitHub-to-Vercel deployment connection picks up Production environment
+changes on the next deployment from `main`.
+
 1. Create a draft build with its real version, build label and Android version code.
 2. Choose an APK, then **Upload APK to GitHub**. Keep the page open while uploading
    and verifying. Upload progress is paced to respect GitHub's write limits.
