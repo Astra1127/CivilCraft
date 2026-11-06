@@ -80,8 +80,8 @@ export function ApkUpload({
       <section className="space-y-3 rounded-xl border-2 border-border bg-secondary/20 p-3">
         <h3 className="text-sm font-bold">GitHub Releases APK</h3>
         <p className="text-xs text-muted-foreground">
-          This APK is hosted on GitHub Releases. Publish the next APK there and update its reviewed
-          website delivery binding.
+          This APK is hosted on GitHub Releases. To replace it, publish a new GitHub release and ask
+          a site maintainer to update the website download.
         </p>
         <div className="space-y-1 rounded-lg border border-border bg-card px-3 py-2 text-xs">
           <p className="font-bold">

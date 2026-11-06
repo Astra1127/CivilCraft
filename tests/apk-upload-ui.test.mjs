@@ -137,7 +137,7 @@ test("GitHub APK shows its managed preview and hides Blob upload controls", asyn
   const { renderer } = await mountUpload(t, { release });
   assert.equal(hasText(renderer, "GitHub Releases APK"), true);
   assert.equal(hasText(renderer, "current.apk · 20 MB"), true);
-  assert.equal(hasText(renderer, "Publish the next APK there"), true);
+  assert.equal(hasText(renderer, "publish a new GitHub release"), true);
   assert.equal(renderer.root.findAllByType("input").length, 0);
   assert.equal(dropZone(renderer), undefined);
   assert.equal(button(renderer, "Upload APK"), undefined);
