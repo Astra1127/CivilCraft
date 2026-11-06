@@ -236,7 +236,10 @@ export async function releaseRequest(
   if (
     admin &&
     request.method === "POST" &&
-    new URL(request.url).pathname.startsWith("/api/admin/releases")
+    new URL(request.url).pathname.startsWith("/api/admin/releases") &&
+    !/^\/api\/admin\/releases\/[a-zA-Z0-9-]{1,64}\/download-link$/.test(
+      new URL(request.url).pathname,
+    )
   ) {
     try {
       return await releaseWriteLock.run(() => unlockedReleaseRequest(request, admin, actor));
@@ -274,6 +277,44 @@ async function unlockedReleaseRequest(
     const saved = await data();
     const state = read(saved);
     const download = path.match(/^\/api\/(?:admin\/)?releases\/([a-zA-Z0-9-]{1,64})\/download$/);
+    const downloadLink = path.match(
+      /^\/api\/(?:admin\/)?releases\/([a-zA-Z0-9-]{1,64})\/download-link$/,
+    );
+    if (downloadLink) {
+      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+      const release = state.releases.find(
+        (r) => r.id === downloadLink[1] && (admin || r.status === "current"),
+      );
+      if (!release?.apk)
+        return json(
+          { error: "This APK is no longer available. Refresh the page for the current build." },
+          404,
+        );
+      const url = await apkStorage.downloadUrl(release.apk.storagePath);
+      // A metadata-only HEAD can succeed while actual Blob delivery is blocked.
+      // Read only four bytes before allowing the browser to start its download.
+      await apkStorage.verifyDownload(url, release.apk.fileSizeBytes);
+      if (
+        shouldCountReleaseDownload(new Request(request.url, { headers: request.headers }), admin)
+      ) {
+        try {
+          await releaseDownloadStats.record(release.id);
+        } catch {
+          console.warn("[Release downloads] A download request could not be recorded.");
+        }
+      }
+      return Response.json(
+        { url, fileName: release.apk.fileName, fileSizeBytes: release.apk.fileSizeBytes },
+        {
+          headers: {
+            "Cache-Control": "private, no-store",
+            "Referrer-Policy": "no-referrer",
+            "X-Content-Type-Options": "nosniff",
+            Vary: "Cookie",
+          },
+        },
+      );
+    }
     if (download) {
       if (request.method !== "GET" && request.method !== "HEAD")
         return json({ error: "Method not allowed." }, 405);

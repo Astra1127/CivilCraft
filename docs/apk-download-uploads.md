@@ -36,11 +36,20 @@ These checks are **not** antivirus scanning, signing verification, or an Android
 installation test. Upload only trusted release builds and test installation on
 a device separately.
 
-Players use a stable website download endpoint. Only the current APK is public;
-draft previews require an authenticated staff session. The endpoint redirects
-to a private Blob GET capability that expires after five minutes and requests an
-attachment download. The response is not cached. The underlying object remains
-private rather than exposing a permanent public storage URL.
+Only the current APK is public; draft previews require an authenticated staff
+session. Public and admin download buttons POST to the corresponding
+`/api/(admin/)releases/{id}/download-link` endpoint. The server prepares a private
+Blob GET capability that expires after five minutes, then verifies a four-byte
+range with the APK MIME type, exact Content-Range/length and ZIP signature. A
+metadata-only HEAD is not used as evidence that storage can deliver the file.
+Ignored ranges and provider JSON errors are cancelled before reading the body.
+
+The browser validates the small link response before starting the direct Blob
+attachment download. Errors remain on the page with Retry instead of being saved
+as JSON files. Repeated clicks during preparation start one request. No full APK
+is buffered by the website or browser JavaScript. The link response is private
+and not cached; the underlying object stays private. The old GET redirect endpoint
+is retained for compatible direct links.
 
 ## Operational notes
 
@@ -60,3 +69,19 @@ Run `npm run test:apk`, the release/auth/public-content regression tests,
 `npx tsc --noEmit`, and `npm run build`. After deployment, upload a real APK to
 a draft, preview its download, and compare its SHA-256 hash with the local file.
 Confirm that the current public installer has not changed before publishing.
+
+## Download interruption investigated, 2026-11-06
+
+The current public download returned HTTP 503 with a JSON error, while its HEAD
+returned synthetic APK metadata. The previous anchor's unconditional `download`
+attribute caused the error to be saved as a file. Vercel's team dashboard showed
+Blob Data Transfer at 10.19 GB of the 10 GB Hobby allowance, with stored data only
+about 130 MB. Download traffic and retained storage are separate limits; deleting
+old files cannot reverse completed transfer usage. The provider's Hobby policy
+blocks Blob access when an included limit is exceeded.
+
+Download preparation and its explicit error UI prevent saving that JSON response.
+They do not increase quota, change billing, replace the current release, or move
+the APK to another host. A successful installed APK download must be verified
+after provider access is restored. Reference:
+https://vercel.com/docs/vercel-blob/usage-and-pricing#hobby

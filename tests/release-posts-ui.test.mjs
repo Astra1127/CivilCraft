@@ -134,7 +134,7 @@ test("quick component workflow: create draft, edit and publish; public Download 
     1,
   );
   assert.equal(
-    page.root.findAll((n) => n.type === "a" && n.props.download === true)[0].props.href,
+    page.root.findAll((n) => n.type === "ApkDownloadButton")[0].props.url,
     current.fileUrl,
   );
   assert.equal(current.build, "100");

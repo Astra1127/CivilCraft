@@ -394,3 +394,67 @@ test("APK verification rejects and cancels an incomplete bounded response", asyn
   assert.equal(metrics.reads, 2);
   assert.equal(metrics.cancels, 1);
 });
+
+test("download readiness checks only four APK bytes using a bounded direct GET", async () => {
+  agent
+    .get(privateOrigin)
+    .intercept({ path: `/${path}?download=1`, method: "GET" })
+    .reply((options) => {
+      assert.equal(
+        new Headers(options.headers as Record<string, string>).get("range"),
+        "bytes=0-3",
+      );
+      return {
+        statusCode: 206,
+        data: Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+        responseOptions: {
+          headers: { "content-type": APK_CONTENT_TYPE, "content-range": "bytes 0-3/128" },
+        },
+      };
+    });
+  await apkStorage.verifyDownload(`${privateOrigin}/${path}?download=1`, 128);
+});
+
+test("download readiness rejects provider JSON and ignored ranges before consuming a large file", async (context) => {
+  const metrics = observeRangeReads(context);
+  for (const [status, contentType, body, range] of [
+    [503, "application/json", Buffer.from('{"error":"store suspended"}'), undefined],
+    [200, APK_CONTENT_TYPE, Buffer.alloc(4096), undefined],
+    [206, "application/json", Buffer.from("json"), "bytes 0-3/128"],
+    [206, APK_CONTENT_TYPE, Buffer.from("wrong"), "bytes 0-4/128"],
+  ] as const) {
+    agent
+      .get(privateOrigin)
+      .intercept({ path: `/${path}`, method: "GET" })
+      .reply(status, body, {
+        headers: { "content-type": contentType, ...(range ? { "content-range": range } : {}) },
+      });
+    await assert.rejects(
+      apkStorage.verifyDownload(`${privateOrigin}/${path}`, 128),
+      /storage provider/,
+    );
+  }
+  assert.equal(metrics.reads, 0);
+  assert.equal(metrics.cancels, 4);
+});
+
+test("download readiness rejects malformed/truncated APK bytes and foreign targets", async () => {
+  for (const bytes of [Buffer.from("json"), Buffer.from([0x50, 0x4b, 0x03]), Buffer.alloc(4096)]) {
+    agent
+      .get(privateOrigin)
+      .intercept({ path: `/${path}`, method: "GET" })
+      .reply(206, bytes, {
+        headers: { "content-type": APK_CONTENT_TYPE, "content-range": "bytes 0-3/128" },
+      });
+    await assert.rejects(
+      apkStorage.verifyDownload(`${privateOrigin}/${path}`, 128),
+      /storage provider/,
+    );
+  }
+  for (const target of [
+    "https://evil.test/game.apk",
+    `${privateOrigin}/unrelated/file.apk`,
+    `http://apktest.private.blob.vercel-storage.com/${path}`,
+  ])
+    await assert.rejects(apkStorage.verifyDownload(target, 128), /temporarily unavailable/);
+});

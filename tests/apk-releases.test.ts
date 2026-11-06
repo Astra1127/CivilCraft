@@ -9,6 +9,7 @@ import { handlePlayFabAdminRequest } from "../src/lib/playfab/admin-api.server.t
 import { getAdminAuthConfig } from "../src/lib/admin-auth/config.server.ts";
 import { cookieName, issueAdminSession } from "../src/lib/admin-auth/session.server.ts";
 import { hashAdminPassword } from "../src/lib/admin-auth/password.server.ts";
+import { AdminApiError } from "../src/lib/playfab/admin-client.server.ts";
 
 const origin = "https://apk-releases.test";
 const passwordHash = await hashAdminPassword("apk-test-password");
@@ -86,6 +87,7 @@ beforeEach(() => {
     return uploadResult;
   };
   apkStorage.downloadUrl = async (pathname) => signedUrl(pathname);
+  apkStorage.verifyDownload = async () => undefined;
 });
 
 afterEach(() => {
@@ -325,6 +327,88 @@ test("finalize verifies the private blob then returns stable URLs without exposi
   assert.equal(head.headers.get("content-length"), String(apk().length));
   assert.match(head.headers.get("content-disposition") ?? "", /Civil-Craft\.apk/);
   assert.equal(await head.text(), "");
+});
+
+test("download preparation checks actual storage delivery, returns a short-lived link and counts once", async () => {
+  await initialize();
+  const prepared = await attach();
+  let verified = 0;
+  let counted = 0;
+  const before = JSON.stringify(records);
+  apkStorage.verifyDownload = async (url, size) => {
+    assert.equal(url, signedUrl(prepared.pathname));
+    assert.equal(size, apk().length);
+    verified++;
+  };
+  releaseDownloadStats.record = async (id) => {
+    assert.equal(verified, 1);
+    assert.equal(id, base.id);
+    counted++;
+  };
+  const response = await publicRequest("/api/releases/r1/download-link", "POST");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    url: signedUrl(prepared.pathname),
+    fileName: prepared.fileName,
+    fileSizeBytes: apk().length,
+  });
+  assert.equal(response.headers.get("content-disposition"), null);
+  assert.match(response.headers.get("cache-control") ?? "", /no-store/);
+  assert.equal(verified, 1);
+  assert.equal(counted, 1);
+  assert.equal(
+    JSON.stringify(records),
+    before,
+    "Read-only preparation must not edit a release or active pointer",
+  );
+});
+
+test("failed signing or Blob delivery returns a safe error without a download link or counted success", async () => {
+  await initialize();
+  await attach();
+  let counted = 0;
+  releaseDownloadStats.record = async () => {
+    counted++;
+  };
+  for (const failure of ["signing", "delivery"]) {
+    apkStorage.downloadUrl = async (pathname) => {
+      if (failure === "signing")
+        throw new AdminApiError(503, "APK downloads are temporarily unavailable.");
+      return signedUrl(pathname);
+    };
+    apkStorage.verifyDownload = async () => {
+      throw new AdminApiError(503, "APK downloads are temporarily unavailable.");
+    };
+    const response = await publicRequest("/api/releases/r1/download-link", "POST");
+    assert.equal(response.status, 503);
+    const body = await response.json();
+    assert.equal(body.error, "APK downloads are temporarily unavailable.");
+    assert.equal(body.url, undefined);
+    assert.equal(response.headers.get("location"), null);
+    assert.equal(response.headers.get("content-disposition"), null);
+  }
+  assert.equal(counted, 0);
+});
+
+test("download preparation keeps archived APKs private and admin previews behind origin and staff checks", async () => {
+  await initialize();
+  await attach();
+  assert.equal((await publicRequest("/api/releases/missing/download-link", "POST")).status, 404);
+  assert.equal((await publicRequest("/api/releases/r1/download-link")).status, 405);
+  const endpoint = "/api/admin/releases/r1/download-link";
+  assert.equal((await admin(endpoint, {}, { auth: false })).status, 401);
+  assert.equal((await admin(endpoint, {}, { origin: "https://other.test" })).status, 403);
+  releaseWriteLock.run = async () => {
+    throw new Error("Read-only download must not take the release writer lock");
+  };
+  let counted = 0;
+  releaseDownloadStats.record = async () => {
+    counted++;
+  };
+  assert.equal((await admin(endpoint, {})).status, 200);
+  assert.equal(counted, 0, "Admin previews are not public download counts");
+  records["civilcraft.website.v1.release-config"] = JSON.stringify({ currentId: null });
+  assert.equal((await publicRequest("/api/releases/r1/download-link", "POST")).status, 404);
 });
 
 test("APK completion rereads and preserves an Android version code edited during upload", async () => {

@@ -87,6 +87,7 @@ const deferred = () => {
 const validation = load("lib/cms/apk.ts");
 const androidVersion = load("lib/cms/android-version.ts");
 const { ApkUpload } = load("components/admin/ApkUpload.tsx", {
+  "@/components/common/ApkDownloadButton": { ApkDownloadButton: element("ApkDownloadButton") },
   "lucide-react": icons,
   "@/components/ui/button": { Button: element("button") },
   "@/lib/cms/apk": validation,

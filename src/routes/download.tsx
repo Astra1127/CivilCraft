@@ -3,6 +3,7 @@ import { useFaq } from "@/lib/cms/faq";
 import { createFileRoute } from "@tanstack/react-router";
 import { Download } from "lucide-react";
 import { EmptyState } from "@/components/common/States";
+import { ApkDownloadButton } from "@/components/common/ApkDownloadButton";
 import { PublicLayout } from "@/components/site/PublicLayout";
 import { SectionDivider } from "@/components/site/SectionDivider";
 import { GameProp, GameArt } from "@/components/site/GameProp";
@@ -41,9 +42,14 @@ function DownloadPage() {
   const updates = useReleasePosts();
   const release = updates.data?.initialized ? updates.data.current : legacyRelease;
   const latest = updates.data?.latest;
-  const legacyFaq = useCms((s) => s.faq.filter((f) => f.published).sort((a, b) => a.order - b.order));
+  const legacyFaq = useCms((s) =>
+    s.faq.filter((f) => f.published).sort((a, b) => a.order - b.order),
+  );
   const faqQuery = useFaq();
-  const faq = faqQuery.data && faqQuery.data.length > 0 ? faqQuery.data.filter((f) => f.published) : legacyFaq;
+  const faq =
+    faqQuery.data && faqQuery.data.length > 0
+      ? faqQuery.data.filter((f) => f.published)
+      : legacyFaq;
   const steps = useCms((s) => s.settings.installSteps);
 
   return (
@@ -81,12 +87,15 @@ function DownloadPage() {
               <>
                 <div className="mt-7 flex flex-wrap gap-3">
                   {release.fileUrl ? (
-                    <Button asChild size="lg" variant="gold">
-                      <a href={release.fileUrl} download>
-                        <Download className="mr-2 h-5 w-5" aria-hidden="true" />
-                        Download APK
-                      </a>
-                    </Button>
+                    <ApkDownloadButton
+                      url={release.fileUrl}
+                      fileName={release.fileName}
+                      size="lg"
+                      variant="gold"
+                    >
+                      <Download className="mr-2 h-5 w-5" aria-hidden="true" />
+                      Download APK
+                    </ApkDownloadButton>
                   ) : (
                     <Button size="lg" variant="gold" disabled>
                       <Download className="mr-2 h-5 w-5" aria-hidden="true" />

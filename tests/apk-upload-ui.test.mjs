@@ -35,6 +35,7 @@ const element =
 const icons = new Proxy({}, { get: (_, name) => element(`icon-${String(name)}`) });
 const formatBytes = (size) => `${size / (1024 * 1024)} MB`;
 const { ApkUpload } = load("components/admin/ApkUpload.tsx", {
+  "@/components/common/ApkDownloadButton": { ApkDownloadButton: element("ApkDownloadButton") },
   "lucide-react": icons,
   "@/components/ui/button": { Button: element("button") },
   "@/lib/cms/apk": validation,

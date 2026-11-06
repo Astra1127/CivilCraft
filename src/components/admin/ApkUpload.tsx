@@ -1,6 +1,7 @@
 import { CheckCircle2, FileUp, Loader2, Upload } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { ApkDownloadButton } from "@/components/common/ApkDownloadButton";
 import { MAX_APK_BYTES, validateApkSelection } from "@/lib/cms/apk";
 import { formatBytes } from "@/lib/cms/store";
 import type { Release } from "@/lib/cms/types";
@@ -93,13 +94,15 @@ export function ApkUpload({
           </p>
           <p className="break-all text-muted-foreground">{release.fileUrl}</p>
           {release.apkHosted ? (
-            <a
-              href={`/api/admin/releases/${encodeURIComponent(release.id)}/download`}
-              download
-              className="inline-block font-semibold text-gold underline underline-offset-2"
+            <ApkDownloadButton
+              url={`/api/admin/releases/${encodeURIComponent(release.id)}/download`}
+              fileName={release.fileName}
+              variant="link"
+              size="sm"
+              className="h-auto px-0 text-gold"
             >
               Preview APK download
-            </a>
+            </ApkDownloadButton>
           ) : null}
         </div>
       ) : null}

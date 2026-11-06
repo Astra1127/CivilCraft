@@ -4,6 +4,7 @@ import {
   list,
   del,
   BlobNotFoundError,
+  BlobStoreSuspendedError,
   issueSignedToken,
   presignUrl,
   getDownloadUrl,
@@ -127,25 +128,87 @@ export const apkStorage = {
     });
   },
   async downloadUrl(path: string) {
-    const validUntil = Date.now() + 5 * 60 * 1000;
-    const token = await issueSignedToken({ pathname: path, operations: ["get"], validUntil });
-    // Installed SDK runtime requires access even though its GET option type omits it.
-    const options = {
-      operation: "get" as const,
-      pathname: path,
-      access: "private" as const,
-      validUntil,
-    };
-    const { presignedUrl } = await presignUrl(token, options);
-    const url = new URL(presignedUrl);
+    apkPathSchema.parse(path);
+    try {
+      const validUntil = Date.now() + 5 * 60 * 1000;
+      const token = await issueSignedToken({ pathname: path, operations: ["get"], validUntil });
+      // Installed SDK runtime requires access even though its GET option type omits it.
+      const options = {
+        operation: "get" as const,
+        pathname: path,
+        access: "private" as const,
+        validUntil,
+      };
+      const { presignedUrl } = await presignUrl(token, options);
+      const url = new URL(presignedUrl);
+      if (
+        url.protocol !== "https:" ||
+        !url.hostname.endsWith(".private.blob.vercel-storage.com") ||
+        url.username ||
+        url.password ||
+        decodeURIComponent(url.pathname) !== `/${path}`
+      )
+        throw new AdminApiError(503, "The APK download is temporarily unavailable.");
+      return getDownloadUrl(url.href);
+    } catch (error) {
+      if (error instanceof BlobStoreSuspendedError)
+        throw new AdminApiError(
+          503,
+          "APK downloads are paused by our file-storage provider. Please try again later.",
+        );
+      throw new AdminApiError(503, "We couldn’t prepare the APK download. Please try again later.");
+    }
+  },
+  async verifyDownload(url: string, expectedSize: number): Promise<void> {
+    const target = new URL(url);
     if (
-      url.protocol !== "https:" ||
-      !url.hostname.endsWith(".private.blob.vercel-storage.com") ||
-      url.username ||
-      url.password ||
-      decodeURIComponent(url.pathname) !== `/${path}`
+      target.protocol !== "https:" ||
+      !target.hostname.endsWith(".private.blob.vercel-storage.com") ||
+      target.username ||
+      target.password ||
+      (target.port && target.port !== "443") ||
+      !apkPathSchema.safeParse(decodeURIComponent(target.pathname).slice(1)).success
     )
       throw new AdminApiError(503, "The APK download is temporarily unavailable.");
-    return getDownloadUrl(url.href);
+    try {
+      const response = await fetch(target, {
+        headers: { Range: "bytes=0-3" },
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!response.body) throw new Error("Missing APK response");
+      const reader = response.body.getReader();
+      try {
+        if (
+          response.status !== 206 ||
+          response.headers.get("content-range") !== `bytes 0-3/${expectedSize}` ||
+          response.headers.get("content-type")?.split(";")[0]?.trim() !== APK_CONTENT_TYPE
+        )
+          throw new Error("APK delivery unavailable");
+        const bytes: number[] = [];
+        while (true) {
+          const item = await reader.read();
+          if (item.done) break;
+          if (bytes.length + item.value.byteLength > 4) throw new Error("Unbounded APK response");
+          bytes.push(...item.value);
+        }
+        if (
+          bytes.length !== 4 ||
+          bytes[0] !== 0x50 ||
+          bytes[1] !== 0x4b ||
+          bytes[2] !== 0x03 ||
+          bytes[3] !== 0x04
+        )
+          throw new Error("APK bytes unavailable");
+      } finally {
+        await reader.cancel().catch(() => undefined);
+      }
+    } catch {
+      throw new AdminApiError(
+        503,
+        "The APK file is temporarily unavailable from our storage provider. Please try again later.",
+      );
+    }
   },
 };
