@@ -50,6 +50,8 @@ let rejectReceipt = false;
 let rogueRedirect = false;
 let deletes = 0;
 let publications = 0;
+let releasePatches: { id: number; body: Record<string, unknown> }[] = [];
+let prepareResponseFault: "tag" | "id" | "draft" | "body" | undefined;
 const wireAsset = ({ bytes: _bytes, ...fields }: RemoteAsset) => fields;
 const sha = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
@@ -66,6 +68,8 @@ beforeEach(() => {
   rogueRedirect = false;
   deletes = 0;
   publications = 0;
+  releasePatches = [];
+  prepareResponseFault = undefined;
   githubReleaseWriteLock.runNamed = async (_name, operation) => operation();
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -164,10 +168,22 @@ beforeEach(() => {
     }
     if (method === "PATCH") {
       const body = JSON.parse(String(init?.body));
+      releasePatches.push({ id: stage.id, body });
       if (rejectReceipt && String(body.body).includes("civilcraft-apk-complete-v1"))
         return Response.json({ message: "failure" }, { status: 503 });
       if (body.draft === false) publications++;
+      // Real GitHub resets a pending draft tag when a body-only PATCH omits it.
+      if (stage.draft && !Object.hasOwn(body, "tag_name"))
+        stage.tag_name = "untagged-f5e847d369ddfb702e39";
       Object.assign(stage, body);
+      if (prepareResponseFault && String(body.body).includes("civilcraft-apk-staging-v1")) {
+        const response = { ...stage };
+        if (prepareResponseFault === "tag") response.tag_name = "untagged-f5e847d369ddfb702e39";
+        if (prepareResponseFault === "id") response.id++;
+        if (prepareResponseFault === "draft") response.draft = false;
+        if (prepareResponseFault === "body") response.body = "unexpected";
+        return Response.json(response);
+      }
     }
     return Response.json(stage);
   };
@@ -403,4 +419,90 @@ test("activation checks the persisted hash and rejects changed or unexpected rel
   asset.digest = `sha256:${"0".repeat(64)}`;
   await assert.rejects(githubApkUploads.publish(verified), /unavailable or changed/);
   assert.equal(publications, 0);
+});
+
+test("all draft updates preserve the intended tag, including validation and publication", async () => {
+  const bytes = apk(GITHUB_APK_CHUNK_BYTES + 100);
+  const prepared = await upload(bytes);
+  const claim = readGithubApkUploadTicket(prepared.ticket, staff());
+  const verified = await githubApkUploads.finalize(prepared.ticket, staff());
+  await githubApkUploads.publish(verified);
+  assert.equal(releasePatches.length, 3);
+  for (const [index, patch] of releasePatches.entries()) {
+    assert.equal(patch.id, claim.githubReleaseId);
+    assert.equal(patch.body["tag_name"], claim.tag);
+    assert.equal(patch.body["target_commitish"], "main");
+    assert.equal(patch.body["draft"], index < 2);
+    assert.equal(patch.body["prerelease"], true);
+  }
+});
+
+test("an older pending upload recovers only its signed GitHub placeholder tag before retrying the same part", async () => {
+  const bytes = apk();
+  const prepared = await prepare(bytes);
+  const claim = readGithubApkUploadTicket(prepared.ticket, staff());
+  const stage = stages.get(claim.githubReleaseId)!;
+  const originalBody = stage.body;
+  stage.tag_name = "untagged-f5e847d369ddfb702e39";
+  const before = releasePatches.length;
+  await githubApkUploads.uploadChunk(prepared.ticket, staff(), 0, body(bytes));
+  assert.equal(releasePatches.length, before + 1);
+  assert.equal(stage.tag_name, claim.tag);
+  assert.equal(stage.body, originalBody);
+  assert.equal(stage.draft, true);
+  assert.deepEqual(uploadPosts, ["cc-part-00000"]);
+  const verified = await githubApkUploads.finalize(prepared.ticket, staff());
+  const receiptBody = stage.body;
+  stage.tag_name = "untagged-f5e847d369ddfb702e39";
+  const retried = await githubApkUploads.finalize(prepared.ticket, staff());
+  assert.equal(retried.assetId, verified.assetId);
+  assert.equal(stage.tag_name, claim.tag);
+  assert.equal(stage.body, receiptBody);
+  assert.equal(stage.draft, true);
+  assert.equal(publications, 0);
+});
+
+test("placeholder recovery never repairs an unsigned body, arbitrary rename, published release or changed ID", async () => {
+  const mutations = [
+    (stage: RemoteStage) => {
+      stage.tag_name = "someone-else-renamed-this";
+    },
+    (stage: RemoteStage) => {
+      stage.tag_name = "untagged-f5e847d369ddfb702e39";
+      stage.body = "changed";
+    },
+    (stage: RemoteStage) => {
+      stage.tag_name = "untagged-f5e847d369ddfb702e39";
+      stage.draft = false;
+    },
+    (stage: RemoteStage) => {
+      stage.id++;
+    },
+    (stage: RemoteStage) => {
+      stage.tag_name = "untagged-f5e847d369ddfb702e39";
+      stage.body = `<!-- civilcraft-apk-complete-v1:e30.${"0".repeat(64)} -->`;
+    },
+  ];
+  for (const mutate of mutations) {
+    const bytes = apk();
+    const prepared = await prepare(bytes);
+    const claim = readGithubApkUploadTicket(prepared.ticket, staff());
+    mutate(stages.get(claim.githubReleaseId)!);
+    const before = releasePatches.length;
+    await assert.rejects(
+      githubApkUploads.uploadChunk(prepared.ticket, staff(), 0, body(bytes)),
+      /no longer matches|record has changed/,
+    );
+    assert.equal(releasePatches.length, before);
+  }
+  assert.equal(uploadPosts.length, 0);
+  assert.equal(publications, 0);
+});
+
+test("prepare validates the PATCH identity and signed body before returning an upload ticket", async () => {
+  for (const fault of ["tag", "id", "draft", "body"] as const) {
+    prepareResponseFault = fault;
+    await assert.rejects(prepare(apk()), /could not finish/);
+  }
+  assert.equal(uploadPosts.length, 0);
 });

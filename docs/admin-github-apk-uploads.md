@@ -80,6 +80,10 @@ Any permanent GitHub backup deletion is a separate operator action.
 - A signed, non-secret verification receipt is saved before deleting temporary
   parts. Cleanup retries recover from partial completion. Drafts remain private
   until publication; no staging ticket or staff identifier is published.
+- Every draft update explicitly preserves its tag and verifies the returned
+  release identity. A provider-generated `untagged-…` draft can be repaired only
+  when its original signed ticket or verification receipt still matches; arbitrary
+  renamed releases or altered verification records are rejected.
 - Private previews obtain a short-lived GitHub CDN link server-side. The bearer
   credential is sent only to GitHub API/upload hosts, never the CDN or browser.
   Public downloads keep their bounded four-byte availability check and safe Retry UI.

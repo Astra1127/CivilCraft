@@ -234,10 +234,40 @@ async function readStage(
   claim: GithubApkUploadTicket,
   ticket: string,
 ): Promise<{ stage: Stage; receipt?: Receipt }> {
-  const stage = stageSchema.parse(await githubApi(`${root}/releases/${claim.githubReleaseId}`));
-  if (stage.id !== claim.githubReleaseId || stage.tag_name !== claim.tag)
+  let stage = stageSchema.parse(await githubApi(`${root}/releases/${claim.githubReleaseId}`));
+  if (stage.id !== claim.githubReleaseId)
     throw new AdminApiError(409, "The private upload no longer matches this build.");
   const receipt = readReceipt(stage, claim);
+  if (stage.tag_name !== claim.tag) {
+    // GitHub can replace an uncreated draft tag with its own placeholder when
+    // an older body-only PATCH omitted tag_name. Recover only this signed upload.
+    if (
+      !stage.draft ||
+      !/^untagged-[a-f0-9]{20}$/.test(stage.tag_name) ||
+      (!receipt && stage.body !== marker(stagingMarker, ticket))
+    )
+      throw new AdminApiError(409, "The private upload no longer matches this build.");
+    const expectedBody = stage.body;
+    stage = stageSchema.parse(
+      await githubApi(`${root}/releases/${claim.githubReleaseId}`, {
+        method: "PATCH",
+        body: {
+          tag_name: claim.tag,
+          target_commitish: "main",
+          draft: true,
+          prerelease: true,
+          body: expectedBody,
+        },
+      }),
+    );
+    if (
+      stage.id !== claim.githubReleaseId ||
+      stage.tag_name !== claim.tag ||
+      !stage.draft ||
+      stage.body !== expectedBody
+    )
+      throw new AdminApiError(409, "The private upload no longer matches this build.");
+  }
   if (!receipt && (!stage.draft || stage.body !== marker(stagingMarker, ticket)))
     throw new AdminApiError(
       409,
@@ -502,10 +532,26 @@ export const githubApkUploads = {
       expiresAt: Date.now() + lifetime,
     });
     const ticket = sign(claim, input.staffId, "ticket:");
-    await githubApi(`${root}/releases/${stage.id}`, {
-      method: "PATCH",
-      body: { body: marker(stagingMarker, ticket) },
-    });
+    const expectedBody = marker(stagingMarker, ticket);
+    const updated = stageSchema.parse(
+      await githubApi(`${root}/releases/${stage.id}`, {
+        method: "PATCH",
+        body: {
+          tag_name: tag,
+          target_commitish: "main",
+          draft: true,
+          prerelease: true,
+          body: expectedBody,
+        },
+      }),
+    );
+    if (
+      updated.id !== stage.id ||
+      updated.tag_name !== tag ||
+      !updated.draft ||
+      updated.body !== expectedBody
+    )
+      throw unavailable();
     return {
       ticket,
       chunkSize: GITHUB_APK_CHUNK_BYTES,
@@ -591,10 +637,26 @@ export const githubApkUploads = {
           sha256,
         };
         // This non-secret signed audit record commits verification before irreversible staging cleanup.
-        await githubApi(`${root}/releases/${claim.githubReleaseId}`, {
-          method: "PATCH",
-          body: { body: marker(receiptMarker, sign(receipt, staffId, "receipt:")) },
-        });
+        const receiptBody = marker(receiptMarker, sign(receipt, staffId, "receipt:"));
+        const verified = stageSchema.parse(
+          await githubApi(`${root}/releases/${claim.githubReleaseId}`, {
+            method: "PATCH",
+            body: {
+              tag_name: claim.tag,
+              target_commitish: "main",
+              draft: true,
+              prerelease: true,
+              body: receiptBody,
+            },
+          }),
+        );
+        if (
+          verified.id !== claim.githubReleaseId ||
+          verified.tag_name !== claim.tag ||
+          !verified.draft ||
+          verified.body !== receiptBody
+        )
+          throw unavailable();
       }
       if (
         !final ||
@@ -670,6 +732,8 @@ export const githubApkUploads = {
         await githubApi(`${root}/releases/${apk.githubReleaseId}`, {
           method: "PATCH",
           body: {
+            tag_name: apk.tag,
+            target_commitish: "main",
             name: `Civil Craft Android — ${apk.fileName}`,
             body: safeBody,
             draft: false,

@@ -656,7 +656,7 @@ function AdminReleases() {
                       />
                       <p className="text-xs text-muted-foreground">
                         {r.downloadProvider === "github"
-                          ? "This APK downloads from GitHub Releases. A site maintainer must connect each new release to the website."
+                          ? "File name, size and URL are set after verification. Use the APK upload control below to replace the file."
                           : r.apkHosted
                             ? "File name, size and URL are set by the verified upload. Upload another APK to replace it."
                             : "Existing external download links are supported. Upload an APK to host the file for this build."}
