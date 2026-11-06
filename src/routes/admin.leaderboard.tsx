@@ -4,7 +4,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AdminHeading, AdminPage, Panel } from "@/components/admin/ui";
 import { Button } from "@/components/ui/button";
 import { request } from "@/lib/playfab/admin-service";
-import { LEADERBOARD_CONTRACTS, type LeaderboardContract } from "@/lib/playfab/leaderboard-shared";
+import {
+  LEADERBOARD_CONTRACTS,
+  leaderboardContractLabel,
+  type LeaderboardContract,
+} from "@/lib/playfab/leaderboard-shared";
 import {
   parseLeaderboardVisibility,
   type LeaderboardVisibility,
@@ -86,7 +90,7 @@ export function AdminLeaderboardContracts() {
                       );
                     }}
                   />
-                  <span className="break-all">{id}</span>
+                  <span className="min-w-0 break-words">{leaderboardContractLabel(id)}</span>
                 </label>
               ))}
             </fieldset>

@@ -13,7 +13,12 @@ import {
   playFabAdmin,
   textValue,
 } from "./admin-client.server.ts";
-import { LEADERBOARD_PAGE_SIZE, DEFAULT_CONTRACT, DEFAULT_MODE } from "./leaderboard-shared.ts";
+import {
+  LEADERBOARD_PAGE_SIZE,
+  DEFAULT_CONTRACT,
+  DEFAULT_MODE,
+  LEGACY_LEADERBOARD_CONTRACTS,
+} from "./leaderboard-shared.ts";
 import type {
   LeaderboardPage,
   LeaderboardPeriod,
@@ -154,9 +159,23 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
     configured = !!adminGameConfig().secret;
     if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
     if (url.pathname === "/api/leaderboard/contracts") {
-      if (url.searchParams.size)
-        throw new AdminApiError(400, "Contract selection does not accept query parameters.");
-      return json(await getLeaderboardVisibility());
+      const regionalCatalog =
+        url.searchParams.size === 1 && url.searchParams.get("catalogVersion") === "2";
+      if (url.searchParams.size && !regionalCatalog)
+        throw new AdminApiError(400, "Choose a supported leaderboard catalog version.");
+      const selection = await getLeaderboardVisibility();
+      // Older APKs reject the whole response if even one unfamiliar ID appears.
+      // Retain their existing boards while newer clients opt into all regions.
+      return json(
+        regionalCatalog
+          ? selection
+          : {
+              ...selection,
+              contractIds: selection.contractIds.filter((id) =>
+                LEGACY_LEADERBOARD_CONTRACTS.some((legacy) => legacy === id),
+              ),
+            },
+      );
     }
     // Anonymous access is limited to the explicit, field-whitelisted endpoints.
     // Existing player/admin endpoints below retain their authentication checks.

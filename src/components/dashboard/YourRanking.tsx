@@ -3,7 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/lib/auth";
 import { getOwnStanding } from "@/lib/playfab/leaderboard";
-import { DEFAULT_CONTRACT, DEFAULT_MODE } from "@/lib/playfab/leaderboard-shared";
+import {
+  DEFAULT_CONTRACT,
+  DEFAULT_MODE,
+  leaderboardContractLabel,
+} from "@/lib/playfab/leaderboard-shared";
 import type { LeaderboardContract, LeaderboardMode } from "@/lib/playfab/leaderboard-shared";
 import { Button } from "@/components/ui/button";
 import { getLeaderboardContracts } from "@/lib/playfab/public-leaderboard";
@@ -43,7 +47,7 @@ export function YourRanking() {
               >
                 {contractIds.map((value) => (
                   <option key={value} value={value}>
-                    {value}
+                    {leaderboardContractLabel(value)}
                   </option>
                 ))}
               </select>

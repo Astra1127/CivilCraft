@@ -155,7 +155,7 @@ test("failed initial settings read offers retry without showing default checked 
     f.failRead(false);
     await act(async () => button(f, "Retry").props.onClick());
     await settle();
-    assert.equal(f.renderer.root.findAllByType("input").length, 9);
+    assert.equal(f.renderer.root.findAllByType("input").length, shared.LEADERBOARD_CONTRACTS.length);
     assert.ok(f.renderer.root.findAllByType("input").every((node) => !node.props.checked));
   } finally {
     await f.dispose();

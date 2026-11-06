@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate, useCms } from "@/lib/cms/store";
 import { request } from "@/lib/playfab/admin-service";
 import type { AdminAnalytics, AnalyticsSection } from "@/lib/playfab/analytics-types";
+import { DEFAULT_CONTRACT, leaderboardContractLabel } from "@/lib/playfab/leaderboard-shared";
 
 export const Route = createFileRoute("/admin/")({ component: AdminOverview });
 
@@ -265,7 +266,7 @@ function AdminOverview() {
           </Module>
         </Panel>
         <Panel
-          title="Top engineers / ShopKeeper / Efficient"
+          title={`Top engineers / ${leaderboardContractLabel(DEFAULT_CONTRACT)} / Efficient`}
           icon={Trophy}
           className="min-w-0"
           actions={
@@ -280,7 +281,7 @@ function AdminOverview() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <caption className="sr-only">
-                      ShopKeeper / Efficient: top five engineers
+                      {leaderboardContractLabel(DEFAULT_CONTRACT)} / Efficient: top five engineers
                     </caption>
                     <thead>
                       <tr className="border-b border-border text-left">

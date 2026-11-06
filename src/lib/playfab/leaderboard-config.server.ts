@@ -1,6 +1,6 @@
 import { AdminApiError } from "./admin-client.server.ts";
 import type { LeaderboardContract, LeaderboardMode } from "./leaderboard-shared.ts";
-// Exact allowlist from deployed CloudScript Revision 4.
+// Stable FNV-1a names shared with Unity and submitBridgeRunV1. Existing boards retain their scores.
 export const BRIDGE_STATISTICS = {
   ShopKeeper: {
     efficient: "CC_E_24A0506A7A79A0DB",
@@ -37,6 +37,42 @@ export const BRIDGE_STATISTICS = {
   MainContractSilas: {
     efficient: "CC_E_DD46490E01484D5A",
     strongest: "CC_S_DD46490E01484D5A",
+  },
+  MarshID: {
+    efficient: "CC_E_D6EE67B65EEF073D",
+    strongest: "CC_S_D6EE67B65EEF073D",
+  },
+  FordMainContract: {
+    efficient: "CC_E_BCAE90CADABA1B87",
+    strongest: "CC_S_BCAE90CADABA1B87",
+  },
+  BrooksMainContract: {
+    efficient: "CC_E_63EF9CAF706EA1D6",
+    strongest: "CC_S_63EF9CAF706EA1D6",
+  },
+  RonanMainContract: {
+    efficient: "CC_E_5A27416534D60004",
+    strongest: "CC_S_5A27416534D60004",
+  },
+  ClarkMainContract: {
+    efficient: "CC_E_3137FD2A6860E889",
+    strongest: "CC_S_3137FD2A6860E889",
+  },
+  ClarkOffsetRoad: {
+    efficient: "CC_E_4B0972A49F7127D7",
+    strongest: "CC_S_4B0972A49F7127D7",
+  },
+  MillsMainContract: {
+    efficient: "CC_E_A2F5945203D4B83B",
+    strongest: "CC_S_A2F5945203D4B83B",
+  },
+  MillsWorkersCrossing: {
+    efficient: "CC_E_6416AEF8A2BAB8BB",
+    strongest: "CC_S_6416AEF8A2BAB8BB",
+  },
+  MillsReconnectingArcadia: {
+    efficient: "CC_E_D774265AB8CA6C0E",
+    strongest: "CC_S_D774265AB8CA6C0E",
   },
 } as const satisfies Record<LeaderboardContract, Record<LeaderboardMode, string>>;
 export function bridgeStatistic(contract: string, mode: string): string {

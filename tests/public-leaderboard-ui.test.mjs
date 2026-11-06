@@ -207,6 +207,27 @@ test("single-player rankings retain measurements, colors and isolated paging ver
   }
 });
 
+test("contract choices show full story titles while requests retain permanent board IDs", async () => {
+  const f = fixture();
+  try {
+    await f.mount();
+    const options = f.renderer.root.findAllByType("option");
+    for (const id of shared.LEADERBOARD_CONTRACTS) {
+      const option = options.find((node) => node.props.value === id);
+      assert.ok(option, "Missing board " + id);
+      assert.equal(option.children.join(""), shared.leaderboardContractLabel(id));
+    }
+    await act(async () =>
+      f.renderer.root.findAllByType("select")[0].props.onChange({ target: { value: "MillsReconnectingArcadia" } }),
+    );
+    await settle();
+    assert.deepEqual(f.bridgeCalls.at(-1), ["MillsReconnectingArcadia", shared.DEFAULT_MODE, 0, undefined]);
+    assert.match(JSON.stringify(f.renderer.toJSON()), /Mills Main Contract 3 - Reconnecting Arcadia/);
+  } finally {
+    await f.dispose();
+  }
+});
+
 test("multiplayer tab fetches only its board, colors names and excludes draws from win rate", async () => {
   const f = fixture();
   try {

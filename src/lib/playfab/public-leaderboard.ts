@@ -6,7 +6,7 @@ import type {
 import { parseLeaderboardVisibility } from "./leaderboard-visibility";
 
 export async function getLeaderboardContracts() {
-  const response = await fetch("/api/leaderboard/contracts", {
+  const response = await fetch("/api/leaderboard/contracts?catalogVersion=2", {
     credentials: "omit",
     cache: "no-store",
   });

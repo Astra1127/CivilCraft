@@ -4,7 +4,11 @@ import { Button } from "@/components/ui/button";
 import { PlayerName } from "@/components/common/PlayerName";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { MultiplayerLeaderboard } from "./MultiplayerLeaderboard";
-import { DEFAULT_CONTRACT, DEFAULT_MODE } from "@/lib/playfab/leaderboard-shared";
+import {
+  DEFAULT_CONTRACT,
+  DEFAULT_MODE,
+  leaderboardContractLabel,
+} from "@/lib/playfab/leaderboard-shared";
 import type { LeaderboardContract, LeaderboardMode } from "@/lib/playfab/leaderboard-shared";
 import { getLeaderboardContracts, getPublicLeaderboard } from "@/lib/playfab/public-leaderboard";
 
@@ -79,7 +83,7 @@ function BridgeLeaderboard() {
           >
             {contractIds.map((value) => (
               <option key={value} value={value}>
-                {value}
+                {leaderboardContractLabel(value)}
               </option>
             ))}
           </select>

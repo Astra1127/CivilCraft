@@ -5,6 +5,32 @@ import {
   decodeBridgeScore,
 } from "../src/lib/playfab/leaderboard-config.server.ts";
 import { mapLeaderboard } from "../src/lib/playfab/leaderboard.server.ts";
+import {
+  LEADERBOARD_CONTRACTS,
+  LEADERBOARD_CONTRACT_LABELS,
+  leaderboardContractLabel,
+} from "../src/lib/playfab/leaderboard-shared.ts";
+
+test("all 18 playable and side boards use permanent-ID hashes and the updated story labels", () => {
+  assert.equal(LEADERBOARD_CONTRACTS.length, 18);
+  assert.equal(new Set(LEADERBOARD_CONTRACTS).size, 18);
+  assert.equal(Object.keys(LEADERBOARD_CONTRACT_LABELS).length, 18);
+  for (const id of LEADERBOARD_CONTRACTS) {
+    let hash = 14695981039346656037n;
+    for (let index = 0; index < id.length; index++) {
+      hash = BigInt.asUintN(64, (hash ^ BigInt(id.charCodeAt(index))) * 1099511628211n);
+    }
+    const suffix = hash.toString(16).toUpperCase().padStart(16, "0");
+    assert.equal(bridgeStatistic(id, "efficient"), "CC_E_" + suffix);
+    assert.equal(bridgeStatistic(id, "strongest"), "CC_S_" + suffix);
+    assert.notEqual(leaderboardContractLabel(id), id);
+  }
+  assert.equal(leaderboardContractLabel("SilasMainContract"), "Silas Main Contract 1 - The Community Connection");
+  assert.equal(leaderboardContractLabel("MainContractSilas"), "Silas Main Contract 2 - The Grand Gorge");
+  assert.equal(leaderboardContractLabel("MillsWorkersCrossing"), "Mills Main Contract 2 - Workers' Crossing");
+  assert.equal(leaderboardContractLabel("unknown-board"), "unknown-board");
+  assert.equal(leaderboardContractLabel("__proto__"), "__proto__");
+});
 
 test("Revision 4 codec decodes known runs and inclusive bounds in both modes", () => {
   assert.deepEqual(decodeBridgeScore(2135125720, "efficient"), { cost: 12345, peakStress: 58.2 });
