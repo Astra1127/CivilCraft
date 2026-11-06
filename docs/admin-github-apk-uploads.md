@@ -10,8 +10,13 @@ button without a GitHub account. This does not change game wallets or payments.
    **only Astra1127/CivilCraft selected**, **Contents: Read and write**, and an
    appropriate expiration. Metadata read access is included by GitHub. No Actions,
    administration, organization, or other-repository permissions are needed.
-   A collaborator who cannot select this repository needs its owner's help;
-   do not substitute an unnecessarily broad classic token.
+   A collaborator cannot use their own fine-grained token to write another
+   account's public repository. For the collaborator account, GitHub supports a
+   **classic** personal access token with **public_repo only** for this public
+   repository. This scope also covers other public repositories that account can
+   access; it cannot be restricted to just CivilCraft. The owner's selected-repo
+   fine-grained token remains the narrower option. Do not grant the broader
+   `repo`, `workflow`, organization, or repository-deletion scopes for this setup.
 2. Add the token privately to Vercel's **civil-craft** project as
    `GITHUB_APK_TOKEN`, **Production** only. Never paste it into chat, source code,
    browser-exposed configuration, or a `VITE_` variable. The credential authorizes
@@ -101,4 +106,6 @@ deliberately; do not claim the live integration passed based on mocked tests.
 
 References: [Vercel payload limit](https://vercel.com/docs/errors/function_payload_too_large),
 [GitHub release assets](https://docs.github.com/en/rest/releases/assets),
-[GitHub releases](https://docs.github.com/en/rest/releases/releases).
+[GitHub releases](https://docs.github.com/en/rest/releases/releases),
+[GitHub collaborator token limitations](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens),
+[public_repo scope](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps).
