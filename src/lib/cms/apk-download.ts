@@ -80,14 +80,20 @@ export async function prepareApkDownload(
       url.hostname.endsWith(".private.blob.vercel-storage.com") &&
       Boolean(url.searchParams.get("vercel-blob-signature")) &&
       Boolean(url.searchParams.get("vercel-blob-delegation"));
+    const privatePreview =
+      endpoint.startsWith("/api/admin/releases/") &&
+      url.hostname === "release-assets.githubusercontent.com" &&
+      /^\/github-production-release-asset\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(url.pathname) &&
+      Boolean(url.searchParams.get("jwt") || url.searchParams.get("sig")) &&
+      url.searchParams.get("response-content-disposition") === `attachment; filename=${fileName}`;
     if (
       url.protocol !== "https:" ||
-      (!github && !blob) ||
+      (!github && !blob && !privatePreview) ||
       url.username ||
       url.password ||
       (url.port && url.port !== "443") ||
       url.hash ||
-      decodeURIComponent(url.pathname).split("/").at(-1) !== fileName
+      (!privatePreview && decodeURIComponent(url.pathname).split("/").at(-1) !== fileName)
     )
       throw new Error();
     return url.href;

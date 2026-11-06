@@ -5,6 +5,12 @@ Coins, Diamonds, payment webhooks, feedback, or staff authentication.
 
 ## Admin workflow
 
+For the new staff upload integration, see
+[Admin GitHub APK uploads](./admin-github-apk-uploads.md). Once its private server
+connection is configured, staff can upload, preview and publish without updating
+source code for each installer. The original October binding below remains the
+compatible fallback during setup.
+
 ### Current installer: GitHub Releases (2026-11-06)
 
 The existing `CivilCraft_10-29-26.apk` now uses the public GitHub release asset at
@@ -32,8 +38,9 @@ most 60 seconds. Failures show an on-page Retry. Full-file hashes are checked at
 publication, not by downloading 123 MiB on every click. GitHub asset IDs and hashes
 are recorded for audit; never replace the asset under this tag. Publish a new tag
 for the next installer, verify its size/hash and Android code, and update the
-reviewed website binding before deployment. APK binaries belong in release
-assets, never Git commits. This is not an automatic GitHub upload integration.
+reviewed website binding before deployment when using that original fallback.
+APK binaries belong in release assets, never Git commits. New admin uploads use
+verified, server-owned attachment metadata instead.
 
 The admin shows GitHub hosting and disables Blob upload/cleanup for this bound
 installer. Existing download counters remain historical; GitHub deliveries do not

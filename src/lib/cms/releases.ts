@@ -3,6 +3,9 @@ import { contentFetch } from "./content";
 import type { Release } from "./types";
 import { APK_CONTENT_TYPE, validateApkSelection } from "./apk";
 import { uploadPresigned } from "@vercel/blob/client";
+import { useEffect, useRef } from "react";
+import { useAuth } from "../auth";
+import { createGithubApkUploader, type GithubUploadReadiness } from "./github-apk-upload";
 
 export type PublishedRelease = Pick<
   Release,
@@ -33,6 +36,12 @@ export function useReleasePosts() {
 }
 export function useAdminReleases() {
   const client = useQueryClient();
+  const { admin } = useAuth();
+  const scope = useRef<string | null>(admin?.id ?? null);
+  scope.current = admin?.id ?? null;
+  const github = useRef<ReturnType<typeof createGithubApkUploader> | null>(null);
+  if (!github.current) github.current = createGithubApkUploader(() => scope.current);
+  useEffect(() => () => github.current?.dispose(), [admin?.id]);
   const query = useQuery({
     queryKey: ["releases", "admin"],
     queryFn: () =>
@@ -40,6 +49,7 @@ export function useAdminReleases() {
         initialized: boolean;
         releases: Release[];
         emailNotifications?: ReleaseEmailReadiness;
+        githubUploads?: GithubUploadReadiness;
       }>("/api/admin/releases"),
     staleTime: 0,
   });
@@ -58,6 +68,20 @@ export function useAdminReleases() {
     onProgress?: (percentage: number) => void,
   ) => {
     validateApkSelection(file);
+    if (query.data?.githubUploads) {
+      if (!query.data.githubUploads.configured)
+        throw new Error(
+          query.data.githubUploads.message ??
+            "GitHub APK uploads need server setup before uploading.",
+        );
+      const finalized = await github.current!.upload<ReleaseMutationResult>(
+        releaseId,
+        file,
+        onProgress,
+      );
+      await client.invalidateQueries({ queryKey: ["releases"] });
+      return finalized;
+    }
     const prepared = await contentFetch<{ ticket: string; pathname: string }>(
       "/api/admin/releases/apk/prepare",
       {

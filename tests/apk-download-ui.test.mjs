@@ -289,3 +289,21 @@ test("GitHub download preparation rejects other repositories, pages, query strin
     }
   }
 });
+
+test("private GitHub draft previews accept a signed file only through the staff endpoint", async () => {
+  const url =
+    "https://release-assets.githubusercontent.com/github-production-release-asset/123/00000000-0000-4000-8000-000000000001?sig=temporary&response-content-disposition=attachment%3B%20filename%3DCivilCraft.apk";
+  for (const admin of [false, true]) {
+    const runtime = await mount(
+      async () => prepared({ url }),
+      admin ? { url: "/api/admin/releases/current-build/download" } : {},
+    );
+    try {
+      await runtime.click();
+      assert.equal(runtime.navigations.length, admin ? 1 : 0);
+      if (admin) assert.equal(runtime.navigations[0], url);
+    } finally {
+      await runtime.close();
+    }
+  }
+});

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createHash } from "node:crypto";
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
 import { smallBody } from "../playfab/request-body.server.ts";
 import type { Release } from "./types.ts";
@@ -6,6 +7,12 @@ import type { AdminUser } from "../admin-auth/types.ts";
 import { APK_CONTENT_TYPE } from "./apk.ts";
 import { apkStorage } from "./apk-storage.server.ts";
 import { githubApkStorage, resolveGithubApk } from "./github-apk.server.ts";
+import {
+  githubApkAttachmentSchema,
+  githubAttachmentMatchesRelease,
+} from "./github-apk-attachment.ts";
+import { githubUploadReadiness } from "./github-releases-api.server.ts";
+import { githubApkUploads, readGithubApkUploadTicket } from "./github-apk-upload.server.ts";
 import { validateApkArchive } from "./apk-validation.server.ts";
 import { apkPathSchema, createApkUploadTicket, readApkUploadTicket } from "./apk-ticket.server.ts";
 import type { HandleUploadPresignedBody } from "@vercel/blob/client";
@@ -56,6 +63,7 @@ const schema = z
     fileSizeBytes: z.number().nonnegative().nullable(),
     fileUrl: z.string().max(2000).nullable(),
     apk: apkSchema.optional(),
+    githubApk: githubApkAttachmentSchema.optional(),
     minAndroid: z.string().max(40),
     downloads: z.number().nonnegative(),
     minRequirements: z.array(z.string().max(300)).max(20),
@@ -101,14 +109,15 @@ async function announceVersion(notification: VersionAnnouncement) {
 }
 
 function publicRelease(release: StoredRelease): Release {
-  const { apk, ...fields } = release;
+  const { apk, githubApk: _githubApk, ...fields } = release;
   const github = resolveGithubApk(release);
+  const attachment = github ?? apk;
   return {
     ...fields,
-    ...(apk
+    ...(attachment
       ? {
-          fileName: apk.fileName,
-          fileSizeBytes: apk.fileSizeBytes,
+          fileName: attachment.fileName,
+          fileSizeBytes: attachment.fileSizeBytes,
           fileUrl: `/api/releases/${encodeURIComponent(release.id)}/download`,
           apkHosted: true,
           downloadProvider: github ? ("github" as const) : ("vercel-blob" as const),
@@ -144,6 +153,13 @@ function read(saved: Record<string, unknown>) {
             !release.apk.storagePath.endsWith(`/${release.apk.fileName}`))
         )
           throw new Error();
+        if (
+          release.githubApk &&
+          (!githubAttachmentMatchesRelease(release.githubApk, release.id) ||
+            release.githubApk.fileName !== release.fileName ||
+            release.githubApk.fileSizeBytes !== release.fileSizeBytes)
+        )
+          throw new Error();
         return {
           ...release,
           status:
@@ -167,6 +183,24 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { "Cache-Control": "no-store, private", Vary: "Cookie" },
   });
+
+function attachmentIdentity(release: StoredRelease): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        status: release.status,
+        version: release.version,
+        build: release.build,
+        androidVersionCode: release.androidVersionCode,
+        apk: release.apk ?? null,
+        githubApk: release.githubApk ?? null,
+        fileName: release.fileName,
+        fileSizeBytes: release.fileSizeBytes,
+        fileUrl: release.fileUrl,
+      }),
+    )
+    .digest("hex");
+}
 async function cleanupOldApks(keepId: string, previousPath?: string) {
   let deletedFiles = 0;
   const deadline = Date.now() + 20000;
@@ -243,6 +277,9 @@ export async function releaseRequest(
     new URL(request.url).pathname.startsWith("/api/admin/releases") &&
     !/^\/api\/admin\/releases\/[a-zA-Z0-9-]{1,64}\/download-link$/.test(
       new URL(request.url).pathname,
+    ) &&
+    !/^\/api\/admin\/releases\/github-apk\/(prepare|chunk|finalize)$/.test(
+      new URL(request.url).pathname,
     )
   ) {
     try {
@@ -280,6 +317,90 @@ async function unlockedReleaseRequest(
     }
     const saved = await data();
     const state = read(saved);
+    if (admin && path.startsWith(root + "/github-apk/")) {
+      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+      if (!actor) throw new AdminApiError(401, "Administrator sign-in is required.");
+      const readiness = githubUploadReadiness();
+      if (!readiness.configured) throw new AdminApiError(503, readiness.message);
+      if (!state.initialized) throw new AdminApiError(409, "Import existing releases first.");
+      if (path === root + "/github-apk/chunk") {
+        const value = new URL(request.url).searchParams.get("index");
+        if (!value || !/^(0|[1-9][0-9]{0,2})$/.test(value))
+          throw new AdminApiError(400, "Choose a valid upload part.");
+        const ticket = request.headers.get("x-apk-upload-ticket");
+        const claim = readGithubApkUploadTicket(ticket, actor.id);
+        const existing = state.releases.find((r) => r.id === claim.releaseId);
+        if (!existing || attachmentIdentity(existing) !== claim.previousAttachment)
+          throw new AdminApiError(
+            409,
+            "This build changed during the upload. Refresh before uploading again.",
+          );
+        return json(await githubApkUploads.uploadChunk(ticket, actor.id, Number(value), request));
+      }
+      const body = await smallBody(request);
+      if (path === root + "/github-apk/prepare") {
+        const input = z
+          .object({
+            releaseId: idSchema,
+            fileName: z.string().max(255),
+            fileSizeBytes: z.number().int(),
+          })
+          .parse(body);
+        const release = state.releases.find((r) => r.id === input.releaseId);
+        if (!release) throw new AdminApiError(404, "Release not found.");
+        return json(
+          await githubApkUploads.prepare({
+            ...input,
+            staffId: actor.id,
+            previousAttachment: attachmentIdentity(release),
+          }),
+        );
+      }
+      if (path !== root + "/github-apk/finalize")
+        return json({ error: "Endpoint not found." }, 404);
+      const claim = readGithubApkUploadTicket(body["ticket"], actor.id);
+      const existing = state.releases.find((r) => r.id === claim.releaseId);
+      if (!existing) throw new AdminApiError(404, "Release not found.");
+      if (existing.githubApk?.tag === claim.tag)
+        return json({ success: true, release: publicRelease(existing) });
+      if (attachmentIdentity(existing) !== claim.previousAttachment)
+        throw new AdminApiError(
+          409,
+          "Another edit changed this build. The current download was preserved.",
+        );
+      const attachment = githubApkAttachmentSchema.parse(
+        await githubApkUploads.finalize(body["ticket"], actor.id),
+      );
+      if (
+        attachment.tag !== claim.tag ||
+        attachment.githubReleaseId !== claim.githubReleaseId ||
+        attachment.fileName !== claim.fileName ||
+        attachment.fileSizeBytes !== claim.fileSizeBytes
+      )
+        throw new AdminApiError(409, "The verified upload does not match this build.");
+      return await releaseWriteLock.run(async () => {
+        const latest = read(await data()).releases.find((r) => r.id === claim.releaseId);
+        if (!latest) throw new AdminApiError(404, "Release not found.");
+        if (latest.githubApk?.tag === claim.tag)
+          return json({ success: true, release: publicRelease(latest) });
+        if (attachmentIdentity(latest) !== claim.previousAttachment)
+          throw new AdminApiError(
+            409,
+            "Another edit changed this build. The current download was preserved.",
+          );
+        const ready =
+          latest.status === "current" ? await githubApkUploads.publish(attachment) : attachment;
+        const updated: StoredRelease = {
+          ...latest,
+          githubApk: githubApkAttachmentSchema.parse(ready),
+          fileName: ready.fileName,
+          fileSizeBytes: ready.fileSizeBytes,
+          fileUrl: `/api/releases/${latest.id}/download`,
+        };
+        await save(prefix + latest.id, updated);
+        return json({ success: true, release: publicRelease(updated) });
+      });
+    }
     const download = path.match(/^\/api\/(?:admin\/)?releases\/([a-zA-Z0-9-]{1,64})\/download$/);
     const downloadLink = path.match(
       /^\/api\/(?:admin\/)?releases\/([a-zA-Z0-9-]{1,64})\/download-link$/,
@@ -289,17 +410,20 @@ async function unlockedReleaseRequest(
       const release = state.releases.find(
         (r) => r.id === downloadLink[1] && (admin || r.status === "current"),
       );
-      if (!release?.apk)
+      const github = release ? resolveGithubApk(release) : undefined;
+      const attachment = github ?? release?.apk;
+      if (!release || !attachment)
         return json(
           { error: "This APK is no longer available. Refresh the page for the current build." },
           404,
         );
-      const github = resolveGithubApk(release);
-      const url = github?.url ?? (await apkStorage.downloadUrl(release.apk.storagePath));
+      const url = github
+        ? await githubApkStorage.downloadUrl(github, admin)
+        : await apkStorage.downloadUrl(release.apk!.storagePath);
       // A metadata-only HEAD can succeed while actual Blob delivery is blocked.
       // Read only four bytes before allowing the browser to start its download.
-      if (github) await githubApkStorage.verifyDownload(github);
-      else await apkStorage.verifyDownload(url, release.apk.fileSizeBytes);
+      if (github) await githubApkStorage.verifyDownload(github, url);
+      else await apkStorage.verifyDownload(url, attachment.fileSizeBytes);
       if (
         !github &&
         shouldCountReleaseDownload(new Request(request.url, { headers: request.headers }), admin)
@@ -311,7 +435,7 @@ async function unlockedReleaseRequest(
         }
       }
       return Response.json(
-        { url, fileName: release.apk.fileName, fileSizeBytes: release.apk.fileSizeBytes },
+        { url, fileName: attachment.fileName, fileSizeBytes: attachment.fileSizeBytes },
         {
           headers: {
             "Cache-Control": "private, no-store",
@@ -328,7 +452,11 @@ async function unlockedReleaseRequest(
       const release = state.releases.find(
         (r) => r.id === download[1] && (admin || r.status === "current"),
       );
-      if (!release?.apk) return json({ error: "APK not found." }, 404);
+      const github = release ? resolveGithubApk(release) : undefined;
+      const attachment = github ?? release?.apk;
+      if (!release || !attachment) return json({ error: "APK not found." }, 404);
+      if (!admin && github?.published === false)
+        return json({ error: "This APK has not been published." }, 404);
       const headers = new Headers({
         "Cache-Control": "no-store, private",
         "Referrer-Policy": "no-referrer",
@@ -336,16 +464,15 @@ async function unlockedReleaseRequest(
       });
       if (request.method === "HEAD") {
         headers.set("Content-Type", APK_CONTENT_TYPE);
-        headers.set("Content-Length", String(release.apk.fileSizeBytes));
-        headers.set("Content-Disposition", `attachment; filename="${release.apk.fileName}"`);
+        headers.set("Content-Length", String(attachment.fileSizeBytes));
+        headers.set("Content-Disposition", `attachment; filename="${attachment.fileName}"`);
         return new Response(null, { headers });
       }
-      const github = resolveGithubApk(release);
-      if (github) await githubApkStorage.verifyDownload(github);
-      headers.set(
-        "Location",
-        github?.url ?? (await apkStorage.downloadUrl(release.apk.storagePath)),
-      );
+      const url = github
+        ? await githubApkStorage.downloadUrl(github, admin)
+        : await apkStorage.downloadUrl(release.apk!.storagePath);
+      if (github) await githubApkStorage.verifyDownload(github, url);
+      headers.set("Location", url);
       if (!github && shouldCountReleaseDownload(request, admin)) {
         try {
           await releaseDownloadStats.record(release.id);
@@ -360,6 +487,8 @@ async function unlockedReleaseRequest(
       if (!admin || request.method !== "POST") return json({ error: "Endpoint not found." }, 404);
       if (!actor) throw new AdminApiError(401, "Administrator sign-in is required.");
       if (!state.initialized) throw new AdminApiError(409, "Import existing releases first.");
+      if (githubUploadReadiness().configurationPresent && path.startsWith(root + "/apk/"))
+        throw new AdminApiError(409, "Use the GitHub APK upload control for this website.");
       const body = await smallBody(request);
       if (path === root + "/apk/prepare") {
         const input = z
@@ -469,6 +598,7 @@ async function unlockedReleaseRequest(
           ...state,
           releases: state.releases.map(publicRelease),
           emailNotifications: releaseEmailReadiness(),
+          githubUploads: githubUploadReadiness(),
         });
       const latest = state.releases
         .filter((r) => r.published)
@@ -495,7 +625,7 @@ async function unlockedReleaseRequest(
     if (body["action"] === "initialize") {
       if (state.initialized) return json(state);
       const releases = z.array(schema).max(20).parse(body["releases"]);
-      if (releases.some((r) => r.apk))
+      if (releases.some((r) => r.apk || r.githubApk))
         throw new AdminApiError(400, "Attach APK files through the upload control.");
       if (
         new Set(releases.map((r) => r.id)).size !== releases.length ||
@@ -512,6 +642,12 @@ async function unlockedReleaseRequest(
       if (body["action"] === "cleanup") {
         const config = readConfig(await data());
         if (!config.currentId) throw new AdminApiError(409, "No current APK to preserve.");
+        const current = read(await data()).releases.find((r) => r.id === config.currentId);
+        if (current && resolveGithubApk(current))
+          throw new AdminApiError(
+            409,
+            "GitHub release backups are managed separately. No files were removed.",
+          );
         return json({ success: true, cleanup: await cleanupOldApks(config.currentId) });
       } else if (body["action"] === "current") {
         const id = idSchema.parse(body["id"]);
@@ -520,13 +656,21 @@ async function unlockedReleaseRequest(
         const config = readConfig(fresh);
         const chosen = latest.releases.find((r) => r.id === id);
         if (!chosen) throw new AdminApiError(404, "Release not found.");
-        if (!chosen.apk && !chosen.fileUrl?.trim())
+        if (!chosen.apk && !chosen.githubApk && !chosen.fileUrl?.trim())
           throw new AdminApiError(
             400,
             "Attach an APK or download link before making this build current.",
           );
         const active = latest.releases.find((r) => r.status === "current");
-        if (chosen.apk) {
+        const github = resolveGithubApk(chosen);
+        if (chosen.githubApk && chosen.githubApk.tag !== "android-2026-10-29") {
+          const published = githubApkAttachmentSchema.parse(
+            await githubApkUploads.publish(chosen.githubApk),
+          );
+          await save(prefix + chosen.id, { ...chosen, githubApk: published });
+        } else if (github) {
+          await githubApkStorage.verifyDownload(github);
+        } else if (chosen.apk) {
           const blob = await apkStorage.head(chosen.apk.storagePath);
           if (
             blob.pathname !== chosen.apk.storagePath ||
@@ -570,7 +714,7 @@ async function unlockedReleaseRequest(
         });
         return json({
           success: true,
-          cleanup: chosen.apk ? await cleanupOldApks(id) : undefined,
+          cleanup: chosen.apk && !github ? await cleanupOldApks(id) : undefined,
           notification:
             changed && notification
               ? await announceVersion(notification)
@@ -593,7 +737,7 @@ async function unlockedReleaseRequest(
         // A separate durable tombstone prevents stale saves/uploads from restoring
         // a deleted record. Retain small private metadata, not the APK bytes.
         await save(deletedPrefix + id, { id, deletedAt: new Date().toISOString() });
-        if (chosen.apk) {
+        if (chosen.apk && !resolveGithubApk(chosen)) {
           try {
             await apkStorage.remove(chosen.apk.storagePath);
           } catch {
@@ -608,7 +752,7 @@ async function unlockedReleaseRequest(
         }
       } else if (body["action"] === "save") {
         const input = object(body["release"]);
-        if (Object.hasOwn(input, "apk"))
+        if (Object.hasOwn(input, "apk") || Object.hasOwn(input, "githubApk"))
           throw new AdminApiError(400, "APK storage references cannot be supplied by the browser.");
         const release = schema.parse(body["release"]);
         const fresh = await data();
@@ -618,6 +762,17 @@ async function unlockedReleaseRequest(
             "This build was deleted. Refresh before making further changes.",
           );
         const previous = read(fresh).releases.find((r) => r.id === release.id);
+        const reviewed = previous && !previous.githubApk ? resolveGithubApk(previous) : undefined;
+        const githubAttachment =
+          previous?.githubApk ??
+          (reviewed && previous?.apk
+            ? githubApkAttachmentSchema.parse({
+                ...reviewed,
+                tag: "android-2026-10-29",
+                published: true,
+                uploadedAt: previous.apk.uploadedAt,
+              })
+            : undefined);
         await save(prefix + release.id, {
           ...release,
           // Older clients may edit notes without understanding this new field.
@@ -626,14 +781,22 @@ async function unlockedReleaseRequest(
             ? release.androidVersionCode
             : (previous?.androidVersionCode ?? null),
           status: previous?.status ?? "draft",
-          ...(previous?.apk
+          ...(githubAttachment
             ? {
-                apk: previous.apk,
-                fileName: previous.apk.fileName,
-                fileSizeBytes: previous.apk.fileSizeBytes,
+                githubApk: githubAttachment,
+                ...(previous?.apk ? { apk: previous.apk } : {}),
+                fileName: githubAttachment.fileName,
+                fileSizeBytes: githubAttachment.fileSizeBytes,
                 fileUrl: `/api/releases/${release.id}/download`,
               }
-            : {}),
+            : previous?.apk
+              ? {
+                  apk: previous.apk,
+                  fileName: previous.apk.fileName,
+                  fileSizeBytes: previous.apk.fileSizeBytes,
+                  fileUrl: `/api/releases/${release.id}/download`,
+                }
+              : {}),
         });
         if (
           previous?.status === "current" &&

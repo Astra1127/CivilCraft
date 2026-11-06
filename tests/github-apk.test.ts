@@ -6,6 +6,7 @@ import {
   type GithubApkBinding,
 } from "../src/lib/cms/github-apk.server.ts";
 import { AdminApiError } from "../src/lib/playfab/admin-client.server.ts";
+import type { GithubApkAttachment } from "../src/lib/cms/github-apk-attachment.ts";
 
 let instant = Date.parse("2026-11-06T04:00:00Z");
 beforeEach((context) => {
@@ -38,6 +39,64 @@ function binding(): GithubApkBinding {
   assert.ok(value);
   return value;
 }
+function managed(published: boolean): GithubApkBinding {
+  const tag = "cc-apk-managed-00000000-0000-4000-8000-000000000001";
+  const apk: GithubApkAttachment = {
+    tag,
+    githubReleaseId: 45,
+    assetId: 46,
+    fileName: "managed.apk",
+    fileSizeBytes: 128537911,
+    sha256: "a".repeat(64),
+    uploadedAt: "2026-11-06T04:00:00Z",
+    published,
+    url: `https://github.com/Astra1127/CivilCraft/releases/download/${tag}/managed.apk`,
+  };
+  const value = resolveGithubApk({
+    id: "managed",
+    version: "1.0",
+    build: "1",
+    fileName: apk.fileName,
+    fileSizeBytes: apk.fileSizeBytes,
+    githubApk: apk,
+  });
+  assert.ok(value);
+  return value;
+}
+
+test("managed public APK downloads need no server token; private previews require staff and never send bearer to CDN", async (t) => {
+  assert.equal(await githubApkStorage.downloadUrl(managed(true)), managed(true).url);
+  await assert.rejects(githubApkStorage.downloadUrl(managed(false)), /not been published/);
+  const oldToken = process.env["GITHUB_APK_TOKEN"],
+    oldControl = process.env["GITHUB_APK_CONTROL_RELEASE_ID"];
+  process.env["GITHUB_APK_TOKEN"] = "private-test-token";
+  process.env["GITHUB_APK_CONTROL_RELEASE_ID"] = "99";
+  t.after(() => {
+    if (oldToken === undefined) delete process.env["GITHUB_APK_TOKEN"];
+    else process.env["GITHUB_APK_TOKEN"] = oldToken;
+    if (oldControl === undefined) delete process.env["GITHUB_APK_CONTROL_RELEASE_ID"];
+    else process.env["GITHUB_APK_CONTROL_RELEASE_ID"] = oldControl;
+  });
+  let calls = 0;
+  t.mock.method(globalThis, "fetch", async (input: unknown, init?: RequestInit) => {
+    calls++;
+    if (String(input).startsWith("https://api.github.com/")) {
+      assert.equal(
+        String(input),
+        "https://api.github.com/repos/Astra1127/CivilCraft/releases/assets/46",
+      );
+      assert.equal(new Headers(init?.headers).get("authorization"), "Bearer private-test-token");
+      return new Response(null, { status: 302, headers: { location: asset } });
+    }
+    assert.equal(String(input), asset);
+    assert.equal(new Headers(init?.headers).get("authorization"), null);
+    return range();
+  });
+  const privateUrl = await githubApkStorage.downloadUrl(managed(false), true);
+  assert.equal(privateUrl, asset);
+  await githubApkStorage.verifyDownload(managed(false), privateUrl);
+  assert.equal(calls, 2);
+});
 function range(body: BodyInit = new Uint8Array([0x50, 0x4b, 0x03, 0x04]), headers = {}) {
   return new Response(body, {
     status: 206,

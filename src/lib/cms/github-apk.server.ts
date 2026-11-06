@@ -1,5 +1,11 @@
 import { AdminApiError } from "../playfab/admin-client.server.ts";
 import { APK_CONTENT_TYPE } from "./apk.ts";
+import {
+  githubApkAttachmentSchema,
+  githubAttachmentMatchesRelease,
+  type GithubApkAttachment,
+} from "./github-apk-attachment.ts";
+import { githubConfig } from "./github-releases-api.server.ts";
 
 export interface GithubApkBinding {
   readonly releaseId: string;
@@ -9,6 +15,8 @@ export interface GithubApkBinding {
   readonly sha256: string;
   readonly assetId: number;
   readonly githubReleaseId: number;
+  readonly published?: boolean;
+  readonly tag?: string;
 }
 
 type ReleaseIdentity = {
@@ -18,6 +26,7 @@ type ReleaseIdentity = {
   androidVersionCode?: number | null;
   fileName: string | null;
   fileSizeBytes: number | null;
+  githubApk?: GithubApkAttachment | undefined;
   apk?:
     | {
         storagePath: string;
@@ -57,6 +66,17 @@ const binding: GithubApkBinding = Object.freeze({
 });
 
 export function resolveGithubApk(release: ReleaseIdentity): GithubApkBinding | undefined {
+  if (release.githubApk) {
+    const parsed = githubApkAttachmentSchema.safeParse(release.githubApk);
+    if (
+      !parsed.success ||
+      !githubAttachmentMatchesRelease(parsed.data, release.id) ||
+      parsed.data.fileName !== release.fileName ||
+      parsed.data.fileSizeBytes !== release.fileSizeBytes
+    )
+      return undefined;
+    return { ...parsed.data, releaseId: release.id };
+  }
   const apk = release.apk;
   const uploadedAt = apk ? Date.parse(apk.uploadedAt) : NaN;
   if (
@@ -83,9 +103,13 @@ export function resolveGithubApk(release: ReleaseIdentity): GithubApkBinding | u
 const unavailable = "The APK download is temporarily unavailable from GitHub. Please try again.";
 const TTL_MS = 60_000;
 const TIMEOUT_MS = 8_000;
-let cache: { key: string; verifiedUntil: number; pending?: Promise<void> } | undefined;
+const cache = new Map<string, { verifiedUntil: number; pending?: Promise<void> }>();
 
 function reviewedBinding(value: GithubApkBinding): boolean {
+  if (value.tag) {
+    const parsed = githubApkAttachmentSchema.safeParse(value);
+    return parsed.success && githubAttachmentMatchesRelease(parsed.data, value.releaseId);
+  }
   return (
     value.releaseId === binding.releaseId &&
     value.fileName === binding.fileName &&
@@ -97,7 +121,7 @@ function reviewedBinding(value: GithubApkBinding): boolean {
   );
 }
 
-function allowedTarget(target: URL): boolean {
+function allowedTarget(target: URL, expectedUrl: string): boolean {
   if (
     target.protocol !== "https:" ||
     target.username ||
@@ -106,18 +130,18 @@ function allowedTarget(target: URL): boolean {
     target.hash
   )
     return false;
-  if (target.hostname === "github.com") return target.href === binding.url;
+  if (target.hostname === "github.com") return target.href === expectedUrl;
   return (
     target.hostname === "release-assets.githubusercontent.com" &&
     /^\/github-production-release-asset\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+$/.test(target.pathname)
   );
 }
 
-async function probe(value: GithubApkBinding, signal: AbortSignal): Promise<void> {
-  let target = new URL(value.url);
+async function probe(value: GithubApkBinding, url: string, signal: AbortSignal): Promise<void> {
+  let target = new URL(url);
   for (let redirects = 0; redirects <= 2; redirects++) {
     signal.throwIfAborted();
-    if (!allowedTarget(target)) throw new Error("Unexpected APK host or path");
+    if (!allowedTarget(target, value.url)) throw new Error("Unexpected APK host or path");
     const response = await fetch(target, {
       method: "GET",
       credentials: "omit",
@@ -179,7 +203,7 @@ async function probe(value: GithubApkBinding, signal: AbortSignal): Promise<void
   throw new Error("Too many APK redirects");
 }
 
-async function boundedProbe(value: GithubApkBinding): Promise<void> {
+async function boundedProbe(value: GithubApkBinding, url: string): Promise<void> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
@@ -189,7 +213,7 @@ async function boundedProbe(value: GithubApkBinding): Promise<void> {
     }, TIMEOUT_MS);
   });
   try {
-    await Promise.race([probe(value, controller.signal), deadline]);
+    await Promise.race([probe(value, url, controller.signal), deadline]);
   } finally {
     clearTimeout(timer);
     controller.abort();
@@ -197,22 +221,59 @@ async function boundedProbe(value: GithubApkBinding): Promise<void> {
 }
 
 export const githubApkStorage = {
-  async verifyDownload(value: GithubApkBinding): Promise<void> {
+  async downloadUrl(value: GithubApkBinding, admin = false): Promise<string> {
     if (!reviewedBinding(value)) throw new AdminApiError(503, unavailable);
-    const key = binding.url;
-    if (cache?.key === key) {
-      if (cache.pending) return cache.pending;
-      if (cache.verifiedUntil > Date.now()) return;
+    if (!value.tag || value.published) return value.url;
+    if (!admin) throw new AdminApiError(404, "This APK has not been published.");
+    const config = githubConfig();
+    const response = await fetch(
+      `https://api.github.com/repos/${config.repository}/releases/assets/${value.assetId}`,
+      {
+        headers: {
+          Accept: "application/octet-stream",
+          Authorization: `Bearer ${config.token}`,
+          "X-GitHub-Api-Version": "2026-03-10",
+          "User-Agent": "CivilCraft-APK-Admin",
+        },
+        redirect: "manual",
+        cache: "no-store",
+        credentials: "omit",
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      },
+    );
+    await response.body?.cancel().catch(() => undefined);
+    const location = response.headers.get("location");
+    if (
+      ![302, 307].includes(response.status) ||
+      !location ||
+      !allowedTarget(new URL(location), value.url) ||
+      new URL(location).hostname !== "release-assets.githubusercontent.com"
+    )
+      throw new AdminApiError(
+        503,
+        "The private APK preview is temporarily unavailable. Please retry.",
+      );
+    return location;
+  },
+  async verifyDownload(value: GithubApkBinding, url = value.url): Promise<void> {
+    if (!reviewedBinding(value)) throw new AdminApiError(503, unavailable);
+    const key = `${value.assetId}:${value.sha256}:${url}`;
+    const existing = cache.get(key);
+    if (existing) {
+      if (existing.pending) return existing.pending;
+      if (existing.verifiedUntil > Date.now()) return;
     }
-    // One reviewed asset and one pending probe; failures never become cached readiness.
-    const entry: NonNullable<typeof cache> = { key, verifiedUntil: 0 };
-    cache = entry;
-    entry.pending = boundedProbe(binding)
+    // Bound retained readiness across successive admin uploads and signed previews.
+    if (cache.size >= 8) cache.delete(cache.keys().next().value!);
+    const entry: { verifiedUntil: number; pending?: Promise<void> } = { verifiedUntil: 0 };
+    cache.set(key, entry);
+    const checked = Object.freeze({ ...value });
+    entry.pending = boundedProbe(checked, url)
       .then(() => {
         entry.verifiedUntil = Date.now() + TTL_MS;
       })
       .catch(() => {
-        if (cache === entry) cache = undefined;
+        if (cache.get(key) === entry) cache.delete(key);
         throw new AdminApiError(503, unavailable);
       })
       .finally(() => {

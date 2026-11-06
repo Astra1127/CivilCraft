@@ -59,7 +59,8 @@ function AdminReleases() {
     {
       id: "archived",
       title: "Backups",
-      description: "Old builds awaiting permanent storage cleanup. Keep backups outside Vercel.",
+      description:
+        "Previous build records. GitHub APK backups remain in GitHub; keep your own copies too.",
       releases: releases.filter((r) => r.status === "archived").sort(byDate),
     },
     {
@@ -705,6 +706,7 @@ function AdminReleases() {
                     <ApkUpload
                       release={saved}
                       disabled={busy}
+                      githubUploads={query.data?.githubUploads}
                       onUpload={(file, onProgress) => uploadApk(saved, file, onProgress)}
                     />
                   </div>
@@ -768,7 +770,7 @@ function AdminReleases() {
             ? `Delete v${deleteTarget.version} build ${deleteTarget.build}?`
             : "Delete build?"
         }
-        description={`The build record and its ${deleteTarget?.published ? "published " : ""}release notes will be removed${deleteTarget?.published ? " from What's New" : ""}. Its uploaded APK will be permanently deleted from storage. Save your own backup first. The active download stays available.`}
+        description={`The build record and its ${deleteTarget?.published ? "published " : ""}release notes will be removed${deleteTarget?.published ? " from What's New" : ""}. ${deleteTarget?.downloadProvider === "github" ? "Its APK backup remains in GitHub Releases." : "Its uploaded APK will be permanently deleted from storage. Save your own backup first."} The active download stays available.`}
         confirmLabel="Delete build"
         onConfirm={() => void deleteBuild()}
       />
@@ -782,7 +784,7 @@ function AdminReleases() {
             ? `Make v${currentTarget.version} build ${currentTarget.build} current?`
             : "Make build current?"
         }
-        description={`This replaces the active download with the selected build. For hosted APKs, all other builds and their APK files are permanently deleted after the new download is verified. Save backups yourself first.${currentTarget && current?.version.trim() !== currentTarget.version.trim() ? " Players who opted in and confirmed their contact email will be queued for a version update when email delivery is configured." : " The version is unchanged, so no new version email is queued."}`}
+        description={`This replaces the active download with the selected build. ${currentTarget?.downloadProvider === "github" ? "The verified APK will be published on GitHub Releases. Other GitHub APK backups will be kept." : "For hosted APKs, all other builds and their APK files are permanently deleted after the new download is verified. Save backups yourself first."}${currentTarget && current?.version.trim() !== currentTarget.version.trim() ? " Players who opted in and confirmed their contact email will be queued for a version update when email delivery is configured." : " The version is unchanged, so no new version email is queued."}`}
         confirmLabel="Make current"
         destructive={false}
         onConfirm={() => {

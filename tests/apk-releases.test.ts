@@ -3,6 +3,10 @@ import { after, afterEach, beforeEach, test } from "node:test";
 import { releaseRequest } from "../src/lib/cms/releases.server.ts";
 import { apkStorage } from "../src/lib/cms/apk-storage.server.ts";
 import { githubApkStorage } from "../src/lib/cms/github-apk.server.ts";
+import {
+  githubApkUploads,
+  readGithubApkUploadTicket,
+} from "../src/lib/cms/github-apk-upload.server.ts";
 import { releaseWriteLock } from "../src/lib/cms/release-write-lock.server.ts";
 import { releaseDownloadStats } from "../src/lib/cms/release-download-stats.server.ts";
 import { APK_CONTENT_TYPE, MAX_APK_BYTES } from "../src/lib/cms/apk.ts";
@@ -30,6 +34,12 @@ const originalFetch = globalThis.fetch;
 const originalDateNow = Date.now;
 const originalStorage = { ...apkStorage };
 const originalGithubVerify = githubApkStorage.verifyDownload;
+const originalGithubUrl = githubApkStorage.downloadUrl;
+const originalGithubUploads = { ...githubApkUploads };
+const originalGithubEnv = {
+  token: process.env["GITHUB_APK_TOKEN"],
+  control: process.env["GITHUB_APK_CONTROL_RELEASE_ID"],
+};
 const originalLock = releaseWriteLock.run;
 const originalDownloadRecord = releaseDownloadStats.record;
 const uploadResult = {
@@ -47,6 +57,8 @@ let storageReads: [string, number, number][] = [];
 let uploadCalls = 0;
 
 beforeEach(() => {
+  delete process.env["GITHUB_APK_TOKEN"];
+  delete process.env["GITHUB_APK_CONTROL_RELEASE_ID"];
   releaseWriteLock.run = async (task) => task();
   releaseDownloadStats.record = async () => undefined;
   apkStorage.listReleases = async () =>
@@ -60,6 +72,15 @@ beforeEach(() => {
   storageReads = [];
   uploadCalls = 0;
   globalThis.fetch = async (_url, init) => {
+    if (String(_url).startsWith("https://api.github.com/repos/Astra1127/CivilCraft/releases")) {
+      const body = JSON.parse(String(init?.body));
+      return Response.json({
+        id: 999,
+        tag_name: body.tag_name ?? "stage",
+        body: body.body,
+        draft: true,
+      });
+    }
     assert.match(
       String(_url),
       /\.playfabapi\.com\/Admin\/(GetTitleInternalData|SetTitleInternalData)$/,
@@ -99,6 +120,12 @@ afterEach(() => {
   Date.now = originalDateNow;
   Object.assign(apkStorage, originalStorage);
   githubApkStorage.verifyDownload = originalGithubVerify;
+  githubApkStorage.downloadUrl = originalGithubUrl;
+  Object.assign(githubApkUploads, originalGithubUploads);
+  if (originalGithubEnv.token === undefined) delete process.env["GITHUB_APK_TOKEN"];
+  else process.env["GITHUB_APK_TOKEN"] = originalGithubEnv.token;
+  if (originalGithubEnv.control === undefined) delete process.env["GITHUB_APK_CONTROL_RELEASE_ID"];
+  else process.env["GITHUB_APK_CONTROL_RELEASE_ID"] = originalGithubEnv.control;
 });
 after(() => {
   for (const [key, value] of Object.entries(previous)) {
@@ -303,6 +330,212 @@ test("replacing even the same-sized APK expires the reviewed GitHub delivery", a
 });
 
 type Prepared = { ticket: string; pathname: string; fileName: string; fileSizeBytes: number };
+function enableGithub() {
+  process.env["GITHUB_APK_TOKEN"] = "test-github-token-server-only";
+  process.env["GITHUB_APK_CONTROL_RELEASE_ID"] = "99";
+}
+async function prepareGithub() {
+  const response = await admin("/api/admin/releases/github-apk/prepare", {
+    releaseId: base.id,
+    fileName: "new.apk",
+    fileSizeBytes: 5000,
+  });
+  assert.equal(response.status, 200, await response.clone().text());
+  const prepared = await response.json();
+  const claim = readGithubApkUploadTicket(prepared.ticket, getAdminAuthConfig()!.users[0]!.id);
+  const attachment = {
+    tag: claim.tag,
+    githubReleaseId: claim.githubReleaseId,
+    assetId: 1234,
+    fileName: claim.fileName,
+    fileSizeBytes: claim.fileSizeBytes,
+    sha256: "a".repeat(64),
+    uploadedAt: new Date().toISOString(),
+    published: false,
+    url: `https://github.com/Astra1127/CivilCraft/releases/download/${claim.tag}/${claim.fileName}`,
+  };
+  return { prepared, claim, attachment };
+}
+
+test("GitHub endpoints retain staff/origin gates and never accept forged attachment metadata", async () => {
+  await initialize();
+  enableGithub();
+  for (const endpoint of ["prepare", "chunk", "finalize"]) {
+    const path = `/api/admin/releases/github-apk/${endpoint}`;
+    assert.equal((await admin(path, {}, { auth: false })).status, 401);
+    assert.equal((await admin(path, {}, { origin: "https://foreign.test" })).status, 403);
+  }
+  const ready = (await adminData()).githubUploads;
+  assert.equal(ready.configured, true);
+  assert.equal(JSON.stringify(ready).includes(process.env["GITHUB_APK_TOKEN"]!), false);
+  assert.equal(
+    (await admin("/api/admin/releases", { action: "save", release: { ...base, githubApk: {} } }))
+      .status,
+    400,
+  );
+  assert.equal(
+    (
+      await admin("/api/admin/releases/apk/prepare", {
+        releaseId: base.id,
+        fileName: "old.apk",
+        fileSizeBytes: 5000,
+      })
+    ).status,
+    409,
+  );
+});
+
+test("editing the original release retains GitHub delivery when version labels change", async () => {
+  seedGithubRelease();
+  const original = (await adminData()).releases[0];
+  const response = await admin("/api/admin/releases", {
+    action: "save",
+    release: { ...original, build: "updated-label", notes: "Reviewed notes" },
+  });
+  assert.equal(response.status, 200, await response.clone().text());
+  const persisted = rawRelease(original.id);
+  assert.equal(persisted.githubApk.tag, "android-2026-10-29");
+  assert.equal(persisted.githubApk.assetId, 715709073);
+  assert.equal(persisted.build, "updated-label");
+  assert.equal((await publicData()).current.downloadProvider, "github");
+});
+
+test("new GitHub chunks use a staff-bound ticket and reject edits to the prepared build", async () => {
+  await initialize();
+  enableGithub();
+  const { prepared } = await prepareGithub();
+  let received = 0;
+  githubApkUploads.uploadChunk = async (value, actor, index, request) => {
+    assert.equal(value, prepared.ticket);
+    assert.equal(actor, getAdminAuthConfig()!.users[0]!.id);
+    assert.equal(index, 0);
+    assert.equal(request.headers.get("content-type"), "application/octet-stream");
+    assert.equal((await request.arrayBuffer()).byteLength, 5000);
+    received++;
+    return { success: true, index: 0, uploadedBytes: 5000 };
+  };
+  const config = getAdminAuthConfig()!;
+  const issued = await issueAdminSession(config, config.users[0]!);
+  const request = () =>
+    new Request(origin + "/api/admin/releases/github-apk/chunk?index=0", {
+      method: "POST",
+      headers: {
+        origin,
+        cookie: `${cookieName(config)}=${issued}`,
+        "content-type": "application/octet-stream",
+        "x-apk-upload-ticket": prepared.ticket,
+      },
+      body: new Uint8Array(5000),
+    });
+  assert.equal((await handlePlayFabAdminRequest(request()))?.status, 200);
+  const newer = rawRelease();
+  newer.build = "different";
+  records["civilcraft.website.v1.releases." + base.id] = JSON.stringify(newer);
+  assert.equal((await handlePlayFabAdminRequest(request()))?.status, 409);
+  assert.equal(received, 1);
+});
+
+test("GitHub current replacement publishes verified bytes before metadata commit and retries without publishing twice", async () => {
+  await initialize();
+  enableGithub();
+  const { prepared, attachment } = await prepareGithub();
+  let finalized = 0,
+    published = 0;
+  githubApkUploads.finalize = async () => {
+    finalized++;
+    return attachment;
+  };
+  githubApkUploads.publish = async (value) => {
+    published++;
+    assert.equal(rawRelease().fileName, "legacy.apk");
+    return { ...value, published: true };
+  };
+  const result = await admin("/api/admin/releases/github-apk/finalize", {
+    ticket: prepared.ticket,
+  });
+  assert.equal(result.status, 200, await result.clone().text());
+  assert.equal(rawRelease().githubApk.assetId, attachment.assetId);
+  assert.equal(rawRelease().githubApk.published, true);
+  assert.equal(rawRelease().notes, base.notes);
+  assert.equal((await publicData()).current.downloadProvider, "github");
+  assert.equal(JSON.stringify(await publicData()).includes("githubReleaseId"), false);
+  assert.equal(
+    (await admin("/api/admin/releases/github-apk/finalize", { ticket: prepared.ticket })).status,
+    200,
+  );
+  assert.equal(finalized, 1);
+  assert.equal(published, 1);
+  assert.equal(rawRelease().version, base.version);
+  assert.equal(
+    JSON.parse(records["civilcraft.website.v1.release-config"]!).notification,
+    undefined,
+  );
+});
+
+test("draft GitHub upload stays private until Make current and stale note saves preserve the server attachment", async () => {
+  await initialize();
+  records["civilcraft.website.v1.release-config"] = JSON.stringify({ currentId: null });
+  enableGithub();
+  const { prepared, attachment } = await prepareGithub();
+  let published = 0;
+  githubApkUploads.finalize = async () => attachment;
+  githubApkUploads.publish = async (value) => {
+    published++;
+    return { ...value, published: true };
+  };
+  assert.equal(
+    (await admin("/api/admin/releases/github-apk/finalize", { ticket: prepared.ticket })).status,
+    200,
+  );
+  assert.equal(published, 0);
+  assert.equal(rawRelease().githubApk.published, false);
+  assert.equal((await publicRequest(`/api/releases/${base.id}/download-link`, "POST")).status, 404);
+  assert.equal(
+    (
+      await admin("/api/admin/releases", {
+        action: "save",
+        release: { ...base, notes: "Edited notes" },
+      })
+    ).status,
+    200,
+  );
+  assert.equal(rawRelease().githubApk.assetId, attachment.assetId);
+  assert.equal(rawRelease().fileName, attachment.fileName);
+  assert.equal(
+    (await admin("/api/admin/releases", { action: "current", id: base.id })).status,
+    200,
+  );
+  assert.equal(published, 1);
+  assert.equal(rawRelease().githubApk.published, true);
+  assert.equal((await publicData()).current.id, base.id);
+});
+
+test("concurrent edits and failed publication preserve the active APK", async () => {
+  for (const failure of ["concurrent", "publication"]) {
+    records = {};
+    await initialize();
+    enableGithub();
+    const { prepared, attachment } = await prepareGithub();
+    githubApkUploads.finalize = async () => {
+      if (failure === "concurrent") {
+        const newer = rawRelease();
+        newer.build = "newer";
+        records["civilcraft.website.v1.releases." + base.id] = JSON.stringify(newer);
+      }
+      return attachment;
+    };
+    githubApkUploads.publish = async () => {
+      throw new AdminApiError(503, "GitHub publication unavailable");
+    };
+    const response = await admin("/api/admin/releases/github-apk/finalize", {
+      ticket: prepared.ticket,
+    });
+    assert.equal(response.status, failure === "concurrent" ? 409 : 503);
+    assert.equal(rawRelease().fileUrl, base.fileUrl);
+    assert.equal(rawRelease().githubApk, undefined);
+    assert.equal(JSON.parse(records["civilcraft.website.v1.release-config"]!).currentId, base.id);
+  }
+});
 async function prepare(bytes: Buffer, releaseId = base.id, fileName = "Civil Craft.apk") {
   const response = await admin("/api/admin/releases/apk/prepare", {
     releaseId,

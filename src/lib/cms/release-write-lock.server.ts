@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { put, del } from "@vercel/blob";
 import { AdminApiError } from "../playfab/admin-client.server.ts";
+import { githubUploadReadiness } from "./github-releases-api.server.ts";
+import { githubReleaseWriteLock } from "./github-release-write-lock.server.ts";
 
 const pathname = "civilcraft/release-control/write-lock.json";
 export const releaseLockStorage = { put, del };
@@ -8,6 +10,11 @@ export const releaseLockStorage = { put, del };
  * leaves a hold for operator review; never race a live writer by expiring its lock. */
 export const releaseWriteLock = {
   async run<T>(task: () => Promise<T>): Promise<T> {
+    const github = githubUploadReadiness();
+    if (github.configurationPresent) {
+      if (!github.configured) throw new AdminApiError(503, github.message);
+      return githubReleaseWriteLock.run(task);
+    }
     let etag: string;
     try {
       const lock = await releaseLockStorage.put(

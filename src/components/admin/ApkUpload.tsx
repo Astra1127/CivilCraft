@@ -5,6 +5,7 @@ import { ApkDownloadButton } from "@/components/common/ApkDownloadButton";
 import { MAX_APK_BYTES, validateApkSelection } from "@/lib/cms/apk";
 import { formatBytes } from "@/lib/cms/store";
 import type { Release } from "@/lib/cms/types";
+import type { GithubUploadReadiness } from "@/lib/cms/github-apk-upload";
 import { cn } from "@/lib/utils";
 
 type UploadStatus = "idle" | "uploading" | "verifying" | "complete" | "failed";
@@ -12,10 +13,12 @@ type UploadStatus = "idle" | "uploading" | "verifying" | "complete" | "failed";
 export function ApkUpload({
   release,
   disabled = false,
+  githubUploads,
   onUpload,
 }: {
   release: Release;
   disabled?: boolean;
+  githubUploads?: GithubUploadReadiness | undefined;
   onUpload: (file: File, onProgress: (percentage: number) => void) => Promise<void>;
 }) {
   const inputId = useId();
@@ -28,7 +31,8 @@ export function ApkUpload({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const uploading = status === "uploading" || status === "verifying";
-  const locked = disabled || uploading;
+  const githubMode = githubUploads !== undefined;
+  const locked = disabled || uploading || (githubMode && !githubUploads.configured);
 
   const selectFiles = (files: FileList | null) => {
     if (locked) return;
@@ -75,7 +79,7 @@ export function ApkUpload({
     }
   };
 
-  if (release.downloadProvider === "github")
+  if (release.downloadProvider === "github" && !githubMode)
     return (
       <section className="space-y-3 rounded-xl border-2 border-border bg-secondary/20 p-3">
         <h3 className="text-sm font-bold">GitHub Releases APK</h3>
@@ -105,18 +109,51 @@ export function ApkUpload({
   return (
     <section className="space-y-3 rounded-xl border-2 border-border bg-secondary/20 p-3">
       <div className="space-y-1">
-        <h3 className="text-sm font-bold">{release.apkHosted ? "Replace APK" : "Upload APK"}</h3>
+        <h3 className="text-sm font-bold">
+          {githubMode
+            ? release.fileUrl
+              ? release.status === "current"
+                ? "Replace current APK"
+                : "Replace APK on GitHub"
+              : "Upload APK to GitHub"
+            : release.apkHosted
+              ? "Replace APK"
+              : "Upload APK"}
+        </h3>
         <p id={`${inputId}-help`} className="text-xs text-muted-foreground">
-          Select one .apk file, up to {formatBytes(MAX_APK_BYTES)}. The saved download changes after
-          the upload is verified. Replaced APK files are permanently deleted; keep your own backups.
-          For a draft, choose Make current after upload to retire older releases.
+          {githubMode ? (
+            <>
+              Select one .apk file, up to {formatBytes(MAX_APK_BYTES)}.{" "}
+              {release.status === "current"
+                ? "Uploading here replaces the public APK after verification. Create a draft build to preview before publishing."
+                : "The existing public download stays available. Preview this APK after verification, then choose Make current when ready."}{" "}
+              Keep this page open until verification finishes.
+            </>
+          ) : (
+            <>
+              Select one .apk file, up to {formatBytes(MAX_APK_BYTES)}. The saved download changes
+              after the upload is verified. Replaced APK files are permanently deleted; keep your
+              own backups. For a draft, choose Make current after upload to retire older releases.
+            </>
+          )}
         </p>
+        {githubMode && !githubUploads.configured ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {githubUploads.message ??
+              "GitHub APK uploads need server setup before uploading. The current download remains available."}
+          </p>
+        ) : null}
       </div>
 
       {release.fileUrl ? (
         <div className="space-y-1 rounded-lg border border-border bg-card px-3 py-2 text-xs">
           <p className="font-bold">
-            {release.apkHosted ? "Uploaded APK" : "Existing download"}: {release.fileName ?? "APK"}
+            {release.downloadProvider === "github"
+              ? "GitHub Releases APK"
+              : release.apkHosted
+                ? "Uploaded APK"
+                : "Existing download"}
+            : {release.fileName ?? "APK"}
             {release.fileSizeBytes !== null ? ` · ${formatBytes(release.fileSizeBytes)}` : ""}
           </p>
           <p className="break-all text-muted-foreground">{release.fileUrl}</p>
@@ -202,7 +239,9 @@ export function ApkUpload({
                   ? "Uploading…"
                   : status === "failed"
                     ? "Retry upload"
-                    : "Upload APK"}
+                    : githubMode && release.status === "current"
+                      ? "Replace current APK"
+                      : "Upload APK"}
             </Button>
             <Button
               type="button"

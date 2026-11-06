@@ -147,6 +147,52 @@ test("GitHub APK shows its managed preview and hides Blob upload controls", asyn
   assert.equal(preview.props.fileName, "current.apk");
 });
 
+test("configured admin GitHub uploads allow replacing the current APK while keeping its preview", async (t) => {
+  const selected = file();
+  const gate = deferred();
+  let sent = false;
+  const { renderer } = await mountUpload(t, {
+    release: { ...savedRelease(), apkHosted: true, downloadProvider: "github" },
+    githubUploads: { configured: true },
+    onUpload: async (_, report) => {
+      report(100);
+      sent = true;
+      await gate.promise;
+    },
+  });
+  assert.equal(hasText(renderer, "Replace current APK"), true);
+  assert.equal(hasText(renderer, "replaces the public APK after verification"), true);
+  assert.equal(renderer.root.findAllByType("input").length, 1);
+  assert.ok(renderer.root.findByType("ApkDownloadButton"));
+  await pick(renderer, selected);
+  let request;
+  await act(() => {
+    request = button(renderer, "Replace current APK").props.onClick();
+  });
+  assert.equal(sent, true);
+  assert.equal(hasText(renderer, "Upload sent. Verifying the APK and saving its download…"), true);
+  assert.equal(hasText(renderer, "APK verified and attached"), false);
+  await act(async () => {
+    gate.resolve();
+    await request;
+  });
+  assert.equal(hasText(renderer, "APK verified and attached to this build."), true);
+});
+
+test("GitHub setup errors disable uploads without disabling the existing APK preview", async (t) => {
+  const { renderer } = await mountUpload(t, {
+    release: { ...savedRelease(), apkHosted: true, downloadProvider: "github" },
+    githubUploads: {
+      configured: false,
+      message: "Ask a site maintainer to connect GitHub uploads.",
+    },
+  });
+  assert.equal(dropZone(renderer).props.disabled, true);
+  assert.equal(fileInput(renderer).props.disabled, true);
+  assert.equal(hasText(renderer, "Ask a site maintainer to connect GitHub uploads."), true);
+  assert.ok(renderer.root.findByType("ApkDownloadButton"));
+});
+
 test("single APK picker accepts a 51 MB file with generic MIME and uses a native keyboard button", async (t) => {
   const selected = file({ type: "application/octet-stream" });
   const uploads = [];

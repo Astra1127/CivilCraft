@@ -379,6 +379,26 @@ test("delete confirmation explains permanent APK removal; cancel performs no mut
   assert.equal(state.releases.length, 3);
 });
 
+test("GitHub build deletion and publication describe retained APK backups truthfully", async (t) => {
+  const { renderer } = await mountRoute(t, {
+    releases: [
+      current(),
+      { ...draft(), downloadProvider: "github" },
+      { ...publishedBackup(), downloadProvider: "github" },
+    ],
+  });
+  await act(() => deleteButton(renderer, "backup").props.onClick());
+  const confirmation = openDialog(renderer, "Delete build");
+  assert.match(confirmation.props.description, /backup remains in GitHub/);
+  assert.doesNotMatch(confirmation.props.description, /APK will be permanently deleted/);
+  await act(() => confirmation.props.onOpenChange(false));
+  await act(() => button(card(renderer, "draft"), "Make current").props.onClick());
+  const publish = openDialog(renderer, "Make current");
+  assert.match(publish.props.description, /published on GitHub Releases/);
+  assert.match(publish.props.description, /backups will be kept/);
+  assert.doesNotMatch(publish.props.description, /permanently deleted/);
+});
+
 test("confirmed deletion removes draft and published backups while protecting the current build", async (t) => {
   for (const id of ["draft", "backup"]) {
     await t.test(id, async (subtest) => {
