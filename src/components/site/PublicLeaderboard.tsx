@@ -10,22 +10,186 @@ import {
   leaderboardContractLabel,
 } from "@/lib/playfab/leaderboard-shared";
 import type { LeaderboardContract, LeaderboardMode } from "@/lib/playfab/leaderboard-shared";
-import { getLeaderboardContracts, getPublicLeaderboard } from "@/lib/playfab/public-leaderboard";
+import {
+  getLeaderboardContracts,
+  getPublicLeaderboard,
+  getPublicOverallLeaderboard,
+} from "@/lib/playfab/public-leaderboard";
 
-export function PublicLeaderboard() {
+export type SinglePlayerView = "overall" | "contracts";
+
+export interface PublicLeaderboardProps {
+  initialView?: SinglePlayerView;
+  onViewChange?: (view: SinglePlayerView) => void;
+}
+
+export function PublicLeaderboard({
+  initialView = "contracts",
+  onViewChange,
+}: PublicLeaderboardProps = {}) {
+  const [view, setView] = useState<SinglePlayerView>(initialView);
+
+  const handleViewChange = (nextView: SinglePlayerView) => {
+    setView(nextView);
+    onViewChange?.(nextView);
+  };
+
   return (
     <Tabs defaultValue="single-player" className="space-y-6">
       <TabsList aria-label="Leaderboard game mode" className="h-auto flex-wrap">
         <TabsTrigger value="single-player">Single-player</TabsTrigger>
         <TabsTrigger value="multiplayer">Multiplayer</TabsTrigger>
       </TabsList>
-      <TabsContent value="single-player">
-        <BridgeLeaderboard />
+      <TabsContent value="single-player" className="space-y-6">
+        <div
+          role="group"
+          aria-label="Single-player leaderboard view"
+          className="flex flex-wrap items-center gap-2 rounded-xl border-2 border-border bg-card/60 p-1.5"
+        >
+          <Button
+            type="button"
+            variant={view === "overall" ? "gold" : "outline"}
+            size="sm"
+            className={
+              view === "overall"
+                ? "font-bold shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }
+            onClick={() => handleViewChange("overall")}
+          >
+            Overall Leaderboard
+          </Button>
+          <Button
+            type="button"
+            variant={view === "contracts" ? "gold" : "outline"}
+            size="sm"
+            className={
+              view === "contracts"
+                ? "font-bold shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }
+            onClick={() => handleViewChange("contracts")}
+          >
+            Quest / Level Leaderboards
+          </Button>
+        </div>
+
+        {view === "overall" ? <OverallLeaderboard /> : <BridgeLeaderboard />}
       </TabsContent>
       <TabsContent value="multiplayer">
         <MultiplayerLeaderboard />
       </TabsContent>
     </Tabs>
+  );
+}
+
+export function OverallLeaderboard() {
+  const [starts, setStarts] = useState([0]);
+  const [version, setVersion] = useState<number>();
+  const start = starts[starts.length - 1]!;
+
+  const query = useQuery({
+    queryKey: ["public-overall-leaderboard", start, version],
+    queryFn: () => getPublicOverallLeaderboard(start, 20, version),
+  });
+
+  return (
+    <div className="panel min-w-0 p-5 sm:p-8">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">Overall Leaderboard</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Global cross-game rankings of all CivilCraft engineers, ranked by cumulative career
+            score.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          disabled={query.isFetching}
+          onClick={() => {
+            if (start === 0 && version === undefined) void query.refetch();
+            else {
+              setStarts([0]);
+              setVersion(undefined);
+            }
+          }}
+        >
+          Refresh
+        </Button>
+      </div>
+
+      {query.isPending ? (
+        <p role="status">Loading overall rankings…</p>
+      ) : query.isError ? (
+        <div role="alert" className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Unable to load the overall leaderboard. Please try Refresh.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => void query.refetch()}>
+            Retry
+          </Button>
+        </div>
+      ) : !query.data?.entries.length ? (
+        <p>
+          No overall rankings recorded yet. Complete bridge contracts in CivilCraft to join the
+          leaderboard.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b-2 border-border">
+                {["Rank", "Player", "Total score", "Bridges built", "Challenges solved"].map(
+                  (title) => (
+                    <th key={title} scope="col" className="px-3 py-3">
+                      {title}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {query.data.entries.map((entry) => (
+                <tr key={`${entry.rank}:${entry.displayName}`} className="border-b border-border">
+                  <td className="px-3 py-4 font-bold">{entry.rank}</td>
+                  <td className="max-w-48 break-words px-3 py-4">
+                    <PlayerName name={entry.displayName} />
+                  </td>
+                  <td className="px-3 py-4 font-display font-bold text-gold">
+                    {entry.totalScore.toLocaleString()}
+                  </td>
+                  <td className="px-3 py-4">{entry.bridgesCompleted.toLocaleString()}</td>
+                  <td className="px-3 py-4">{entry.challengesCompleted.toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <Button
+          variant="outline"
+          disabled={starts.length === 1 || query.isFetching}
+          onClick={() => setStarts((pages) => pages.slice(0, -1))}
+        >
+          Previous
+        </Button>
+        <span className="text-sm">Page {starts.length}</span>
+        <Button
+          variant="outline"
+          disabled={query.isFetching || query.isError || query.data?.nextStart == null}
+          onClick={() => {
+            if (query.data?.nextStart == null) return;
+            const nextStart = query.data.nextStart;
+            setVersion(query.data.version ?? undefined);
+            setStarts((pages) => [...pages, nextStart]);
+          }}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
   );
 }
 

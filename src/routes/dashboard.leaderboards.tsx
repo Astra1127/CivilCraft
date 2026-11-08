@@ -11,10 +11,10 @@ function LeaderboardsPage() {
       <header>
         <h1 className="text-3xl">Leaderboards</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Compare your single-player bridges and multiplayer match records.
+          Compare overall player standings, quest contract bridges, and multiplayer records.
         </p>
       </header>
-      <PublicLeaderboard />
+      <PublicLeaderboard initialView="overall" />
     </div>
   );
 }

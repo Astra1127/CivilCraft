@@ -2,8 +2,12 @@ import type {
   LeaderboardContract,
   LeaderboardMode,
   MultiplayerLeaderboardPage,
+  OverallLeaderboardEntry,
+  OverallLeaderboardPage,
 } from "./leaderboard-shared";
 import { parseLeaderboardVisibility } from "./leaderboard-visibility";
+
+export type { OverallLeaderboardEntry, OverallLeaderboardPage };
 
 export async function getLeaderboardContracts() {
   const response = await fetch("/api/leaderboard/contracts?catalogVersion=2", {
@@ -42,5 +46,20 @@ export async function getPublicMultiplayerLeaderboard(): Promise<MultiplayerLead
     cache: "no-store",
   });
   if (!response.ok) throw new Error("Unable to load multiplayer rankings. Please try again.");
+  return response.json();
+}
+
+export async function getPublicOverallLeaderboard(
+  start = 0,
+  pageSize = 20,
+  version?: number,
+): Promise<OverallLeaderboardPage> {
+  const query = new URLSearchParams({ start: String(start), pageSize: String(pageSize) });
+  if (version !== undefined) query.set("version", String(version));
+  const response = await fetch(`/api/leaderboard/public/overall?${query}`, {
+    credentials: "omit",
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error("Unable to load overall rankings. Please try again.");
   return response.json();
 }

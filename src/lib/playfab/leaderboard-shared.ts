@@ -14,6 +14,20 @@ export interface LeaderboardPage {
   nextStart: number | null;
 }
 
+export interface OverallLeaderboardEntry {
+  rank: number;
+  displayName: string;
+  totalScore: number;
+  bridgesCompleted: number;
+  challengesCompleted: number;
+}
+
+export interface OverallLeaderboardPage {
+  entries: OverallLeaderboardEntry[];
+  version: number | null;
+  nextStart: number | null;
+}
+
 export interface MultiplayerLeaderboardEntry {
   rank: number;
   displayName: string;

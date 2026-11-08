@@ -52,12 +52,14 @@ export function AdminLeaderboardContracts() {
     <AdminPage>
       <AdminHeading
         title="Leaderboard Contracts"
-        description="Choose which contracts appear in the website and in-game leaderboards."
+        description="Choose which quest and level contracts appear in the website and in-game leaderboards. Overall player standings are calculated from global player stats and rank all engineers across the game."
       />
-      <Panel title="Displayed contracts">
+      <Panel title="Displayed quest / level contracts">
         <p className="mb-4 text-sm text-muted-foreground">
-          Checked contracts appear in both ranking modes. Uncheck every contract to hide all
-          contract rankings. Players see changes when they reopen or refresh leaderboards.
+          Checked contracts appear in both single-player ranking modes (Most efficient &amp;
+          Strongest). Uncheck every contract to hide contract rankings. Note: The Overall
+          Leaderboard reflects global career score across all contracts and challenges. Players see
+          changes when they reopen or refresh leaderboards.
         </p>
         {query.isPending ? (
           <p role="status">Loading contracts…</p>
