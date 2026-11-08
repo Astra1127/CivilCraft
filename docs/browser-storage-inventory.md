@@ -15,7 +15,7 @@ Audited from source on October 30, 2026, before adding the cookie notice. This i
 
 No IndexedDB usage or browser advertising/analytics tracker initialization was found in the application source. Existing external requests include Google Fonts, PlayFab and configured service integrations; absence of tracker code does not establish the behavior of deployment infrastructure. Server-side game statistics and download counts are distinct from browser tracking storage.
 
-The previous inventory incorrectly listed `civilcraft.session.end_reason.v1`, `civilcraft.cms.v1`, `unlocked-levels-<playFabId>`, and an underscore-form admin cookie name. The table above reflects current source.
+The previous inventory incorrectly listed `civilcraft.session.end_reason.v1`, `civilcraft.cms.v1`, `unlocked-levels-<playFabId>`, and an underscore-form admin cookie name (`civilcraft_admin_session`). The table above reflects current source.
 
 ## Notice addition
 

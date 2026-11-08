@@ -22,6 +22,7 @@ const statePrefix = "civilcraft.website.v1.message-state.";
 const notificationPrefix = "civilcraft.website.v1.message-notifications.";
 const idSchema = z.string().uuid();
 const statusSchema = z.enum(["New", "In Progress", "Resolved"]);
+const testimonialStatusSchema = z.enum(["Pending", "Approved", "Rejected"]);
 const messageSchema = contactSchema.extend({
   inquiryType: z.enum([...inquiryTypes, ...feedbackCategories]),
   email: contactSchema.shape.email.or(z.literal("")),
@@ -33,6 +34,8 @@ const messageSchema = contactSchema.extend({
     .regex(/^[a-f0-9]{1,32}$/i)
     .nullable()
     .default(null),
+  rating: z.number().int().min(1).max(5).optional(),
+  allowPublicTestimonial: z.boolean().optional(),
 });
 const replyInput = z.object({
   action: z.literal("reply"),
@@ -48,6 +51,11 @@ const replySchema = z.object({
 });
 const changeSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("status"), id: idSchema, status: statusSchema }),
+  z.object({
+    action: z.literal("testimonial_status"),
+    id: idSchema,
+    status: testimonialStatusSchema,
+  }),
   z.object({ action: z.literal("delete"), id: idSchema }),
   replyInput,
 ]);
@@ -106,9 +114,30 @@ function thread(
     );
     if (parsed.success) status = parsed.data;
   }
+  let allowPublicTestimonial = message.allowPublicTestimonial ?? false;
+  if (data[statePrefix + message.id + ".allowPublicTestimonial"] != null) {
+    try {
+      const parsedBool = JSON.parse(
+        String(data[statePrefix + message.id + ".allowPublicTestimonial"]),
+      );
+      if (typeof parsedBool === "boolean") allowPublicTestimonial = parsedBool;
+    } catch {
+      // ignore
+    }
+  }
+  let testimonialStatus: z.infer<typeof testimonialStatusSchema> = "Pending";
+  if (data[statePrefix + message.id + ".testimonialStatus"] != null) {
+    const parsedT = testimonialStatusSchema.safeParse(
+      JSON.parse(String(data[statePrefix + message.id + ".testimonialStatus"])),
+    );
+    if (parsedT.success) testimonialStatus = parsedT.data;
+  }
   return {
     ...message,
     status,
+    rating: message.rating,
+    allowPublicTestimonial,
+    testimonialStatus: allowPublicTestimonial ? testimonialStatus : undefined,
     replies,
     ...(admin ? { notificationStatus: notification(data, message.id) } : {}),
   };
@@ -162,6 +191,50 @@ const json = (body: unknown, status = 200) =>
 export async function messageRequest(request: Request, admin = false): Promise<Response | null> {
   const url = new URL(request.url),
     path = url.pathname;
+  if (path === "/api/testimonials" && request.method === "GET") {
+    const data = await records();
+    const testimonials = Object.entries(data)
+      .filter(([key, value]) => key.startsWith(prefix) && value != null)
+      .map(([key, value]) => {
+        try {
+          return parseRecord(key, value);
+        } catch {
+          return null;
+        }
+      })
+      .filter((m): m is NonNullable<typeof m> => m !== null)
+      .filter((m) => {
+        if (data[statePrefix + m.id + ".deleted"] === "true") return false;
+        const threadData = thread(data, m, false);
+        return (
+          threadData.allowPublicTestimonial === true && threadData.testimonialStatus === "Approved"
+        );
+      })
+      .map((m) => {
+        const threadData = thread(data, m, false);
+        let cleanName = m.name.replace(/Engineer\s+[a-f0-9]{8,32}/gi, "Arcadia Engineer").trim();
+        if (!cleanName || cleanName.toLowerCase().includes("@")) cleanName = "Civil Engineer";
+        return {
+          id: m.id,
+          displayName: cleanName.slice(0, 50),
+          message: m.message,
+          rating: threadData.rating,
+          inquiryType: m.inquiryType,
+          createdAt: m.createdAt,
+        };
+      })
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+    return Response.json(
+      { testimonials },
+      {
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          "X-Content-Type-Options": "nosniff",
+        },
+      },
+    );
+  }
   const player = path === "/api/player/messages";
   if (admin ? path !== "/api/admin/messages" : path !== "/api/contact" && !player) return null;
   try {
@@ -177,9 +250,10 @@ export async function messageRequest(request: Request, admin = false): Promise<R
         request.headers.get("sec-fetch-site") === "cross-site")
     )
       return json({ error: "This request is not permitted." }, 403);
+    const ticket = request.headers.get("authorization")?.match(/^Bearer (\S+)$/)?.[1] ?? null;
     const owner = admin ? null : await playerId(request, !player);
     if (player && request.method === "GET" && url.searchParams.get("action") === "eligibility")
-      return json({ eligible: await hasAcceptedCivilCraftRun(owner!) });
+      return json({ eligible: await hasAcceptedCivilCraftRun(owner!, ticket) });
     if (request.method === "GET") {
       const data = await records();
       const requested = url.searchParams.get("id");
@@ -198,10 +272,30 @@ export async function messageRequest(request: Request, admin = false): Promise<R
       return json({ messages });
     }
     const body = await smallBody(request);
+    if (player && object(body)["action"] === "toggle_testimonial_consent") {
+      const toggleSchema = z.object({
+        action: z.literal("toggle_testimonial_consent"),
+        id: idSchema,
+        allowPublicTestimonial: z.boolean(),
+      });
+      const parsed = toggleSchema.parse(body);
+      const data = await records(),
+        key = prefix + parsed.id;
+      if (data[key] == null || data[statePrefix + parsed.id + ".deleted"] === "true")
+        throw new AdminApiError(404, "Contact message not found.");
+      const message = parseRecord(key, data[key]);
+      if (message.ownerId !== owner) throw new AdminApiError(404, "Contact message not found.");
+      await save(
+        statePrefix + parsed.id + ".allowPublicTestimonial",
+        parsed.allowPublicTestimonial,
+      );
+      return json({ success: true, allowPublicTestimonial: parsed.allowPublicTestimonial });
+    }
     if (player && object(body)["action"] === "feedback") {
       limitFeedback(owner!);
       const input = feedbackSchema.parse(body);
-      if (!(await hasAcceptedCivilCraftRun(owner!))) throw new AdminApiError(403, feedbackLocked);
+      if (!(await hasAcceptedCivilCraftRun(owner!, ticket)))
+        throw new AdminApiError(403, feedbackLocked);
       const profile = object(
         (
           await playFabAdmin("Server/GetPlayerProfile", {
@@ -225,10 +319,15 @@ export async function messageRequest(request: Request, admin = false): Promise<R
             ? profile["DisplayName"].slice(0, 100)
             : "Engineer " + owner,
         email: typeof email === "string" ? email : "",
+        rating: input.rating,
+        allowPublicTestimonial: input.allowPublicTestimonial,
       };
       const id = randomUUID(),
         createdAt = new Date().toISOString();
       await save(prefix + id, { ...content, id, ownerId: owner, createdAt, status: "New" });
+      if (input.allowPublicTestimonial) {
+        await save(statePrefix + id + ".testimonialStatus", "Pending");
+      }
       const notificationStatus = await notify(id, "admin", { ...content, createdAt });
       return json({ id, notificationStatus }, 201);
     }
@@ -277,8 +376,11 @@ export async function messageRequest(request: Request, admin = false): Promise<R
       );
       return json({ success: true, id: reply.id, notificationStatus }, 201);
     }
-    if (change.action === "status") await save(statePrefix + message.id + ".status", change.status);
-    else {
+    if (change.action === "status") {
+      await save(statePrefix + message.id + ".status", change.status);
+    } else if (change.action === "testimonial_status") {
+      await save(statePrefix + message.id + ".testimonialStatus", change.status);
+    } else {
       await save(statePrefix + message.id + ".deleted", true);
       await save(key, null);
       for (const replyKey of Object.keys(data).filter((k) =>

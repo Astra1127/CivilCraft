@@ -38,6 +38,19 @@ export const feedbackSchema = contactSchema
   .extend({
     action: z.literal("feedback"),
     inquiryType: z.enum(feedbackCategories),
+    rating: z.number().int().min(1).max(5).optional(),
+    allowPublicTestimonial: z.boolean().default(false),
   })
   .strict();
 export type FeedbackInput = z.infer<typeof feedbackSchema>;
+
+export type TestimonialStatus = "Pending" | "Approved" | "Rejected";
+
+export interface PublicTestimonial {
+  id: string;
+  displayName: string;
+  message: string;
+  rating?: number;
+  inquiryType: string;
+  createdAt: string;
+}

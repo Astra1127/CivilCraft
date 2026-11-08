@@ -76,14 +76,24 @@ export async function adminPlayerMessages(request: Request): Promise<unknown | n
   return { message };
 }
 export async function handlePlayerMessages(request: Request): Promise<Response | null> {
-  if (new URL(request.url).pathname !== "/api/player/messages") return null;
+  const url = new URL(request.url);
+  if (url.pathname !== "/api/player/messages") return null;
+  if (url.searchParams.has("action")) return null;
   const headers = {
     "Cache-Control": "no-store, private",
     Vary: "Authorization",
     "X-Content-Type-Options": "nosniff",
   };
-  if (request.method !== "GET")
+  if (request.method !== "GET") {
+    if (
+      request.headers.get("origin") ||
+      request.headers.get("sec-fetch-site") ||
+      request.headers.get("sec-fetch-mode")
+    ) {
+      return null;
+    }
     return Response.json({ error: "Method not allowed." }, { status: 405, headers });
+  }
   try {
     const { playFabId } = await authenticatePaymentPlayer(request);
     return Response.json({ messages: await list(playFabId) }, { headers });

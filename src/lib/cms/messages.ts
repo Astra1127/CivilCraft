@@ -1,7 +1,12 @@
 import { currentSessionTicket, requireSessionTicket } from "@/lib/playfab/client";
 import { useQuery } from "@tanstack/react-query";
 import { contentFetch } from "./content";
-import type { ContactInput, FeedbackInput } from "./message-types";
+import type {
+  ContactInput,
+  FeedbackInput,
+  PublicTestimonial,
+  TestimonialStatus,
+} from "./message-types";
 import type { ContactMessage, MessageStatus } from "./types";
 
 export const messageService = {
@@ -22,6 +27,7 @@ export const messageService = {
   change(
     change:
       | { action: "status"; id: string; status: MessageStatus }
+      | { action: "testimonial_status"; id: string; status: TestimonialStatus }
       | { action: "delete"; id: string }
       | { action: "reply"; id: string; message: string },
   ) {
@@ -50,7 +56,7 @@ export function usePlayerMessages(playerId: string) {
     queryKey: ["player-contact-messages", playerId],
     enabled: !!playerId,
     queryFn: () =>
-      contentFetch<{ messages: ContactMessage[] }>("/api/player/messages", {
+      contentFetch<{ messages: ContactMessage[] }>("/api/player/messages?action=conversations", {
         headers: { Authorization: "Bearer " + requireSessionTicket() },
       }),
     staleTime: 0,
@@ -69,6 +75,20 @@ export function replyAsPlayer(id: string, message: string) {
     },
     body: JSON.stringify({ action: "reply", id, message }),
   });
+}
+
+export function toggleTestimonialConsent(id: string, allowPublicTestimonial: boolean) {
+  return contentFetch<{ success: boolean; allowPublicTestimonial: boolean }>(
+    "/api/player/messages",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + requireSessionTicket(),
+      },
+      body: JSON.stringify({ action: "toggle_testimonial_consent", id, allowPublicTestimonial }),
+    },
+  );
 }
 
 export function useFeedbackEligibility(playerId: string) {
@@ -91,5 +111,15 @@ export function submitPlayerFeedback(input: FeedbackInput) {
       Authorization: "Bearer " + requireSessionTicket(),
     },
     body: JSON.stringify(input),
+  });
+}
+
+export function useTestimonials() {
+  return useQuery({
+    queryKey: ["public-testimonials"],
+    queryFn: () => contentFetch<{ testimonials: PublicTestimonial[] }>("/api/testimonials"),
+    staleTime: 10_000,
+    refetchOnWindowFocus: true,
+    retry: 1,
   });
 }

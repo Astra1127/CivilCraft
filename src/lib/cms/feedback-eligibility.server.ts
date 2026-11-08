@@ -7,11 +7,13 @@ export const progressUnavailable =
 export const feedbackLocked =
   "Play CivilCraft and complete a bridge-building challenge to unlock game feedback.";
 
-/** Accepted client-reported statistic, NOT independently verified completion.
- * Call only with a session-derived identity. GetPlayerStatistics reads stored
- * records, unlike AroundUser's synthetic unranked entries.
+/** Accepted client-reported statistic or game progress, NOT independently verified completion.
+ * Call only with a session-derived identity.
  */
-export async function hasAcceptedCivilCraftRun(playFabId: string): Promise<boolean> {
+export async function hasAcceptedCivilCraftRun(
+  playFabId: string,
+  sessionTicket?: string | null,
+): Promise<boolean> {
   try {
     const modes = new Map<string, LeaderboardMode>(
       Object.values(BRIDGE_STATISTICS).flatMap(
@@ -22,12 +24,13 @@ export async function hasAcceptedCivilCraftRun(playFabId: string): Promise<boole
           ] as [string, LeaderboardMode][],
       ),
     );
+    // 1. Check bridge contract statistics first
     const result = await playFabAdmin("Server/GetPlayerStatistics", {
       PlayFabId: playFabId,
       StatisticNames: [...modes.keys()],
     });
     if (!Array.isArray(result["Statistics"])) throw new Error("Invalid statistics response");
-    return result["Statistics"].some((raw) => {
+    const hasContractRun = result["Statistics"].some((raw) => {
       const stat = object(raw),
         mode = modes.get(String(stat["StatisticName"]));
       if (!mode || typeof stat["Value"] !== "number") return false;
@@ -38,6 +41,84 @@ export async function hasAcceptedCivilCraftRun(playFabId: string): Promise<boole
         return false;
       }
     });
+    if (hasContractRun) return true;
+
+    // 2. Check general bridge & challenge completion statistics
+    try {
+      const generalStats = await playFabAdmin("Server/GetPlayerStatistics", {
+        PlayFabId: playFabId,
+        StatisticNames: ["BridgesCompleted", "ChallengesCompleted"],
+      });
+      if (Array.isArray(generalStats["Statistics"])) {
+        const hasGeneralStat = generalStats["Statistics"].some((raw) => {
+          const stat = object(raw);
+          const name = String(stat["StatisticName"]);
+          const val = Number(stat["Value"]);
+          return (
+            Number.isFinite(val) &&
+            (name === "BridgesCompleted" || name === "ChallengesCompleted") &&
+            val >= 1
+          );
+        });
+        if (hasGeneralStat) return true;
+      }
+    } catch {
+      // Ignore if unsupported or missing in current test environment
+    }
+
+    // 3. Check UserData for bridge completion recorded by Unity
+    try {
+      const userData = await playFabAdmin("Server/GetUserData", {
+        PlayFabId: playFabId,
+        Keys: ["BridgesCompleted", "ChallengesCompleted", "MapProgress"],
+      });
+      const data = object(userData["Data"]);
+      const num = (k: string) => {
+        const v = object(data[k])["Value"];
+        if (typeof v === "number") return v;
+        if (typeof v === "string") {
+          const p = Number.parseInt(v, 10);
+          return Number.isFinite(p) ? p : null;
+        }
+        return null;
+      };
+      const bridges = num("BridgesCompleted");
+      if (bridges !== null && bridges >= 1) return true;
+      const challenges = num("ChallengesCompleted");
+      if (challenges !== null && challenges >= 1) return true;
+
+      const mapProgressRaw = object(data["MapProgress"])["Value"];
+      if (typeof mapProgressRaw === "string" && mapProgressRaw.trim()) {
+        try {
+          const map = JSON.parse(mapProgressRaw);
+          if (typeof map === "object" && map !== null) {
+            if (
+              Number(map.missionsCompleted) > 0 ||
+              Number(map.overallPercent) > 0 ||
+              map.completed === true
+            ) {
+              return true;
+            }
+            if (Array.isArray(map.regions)) {
+              const hasCompletedRegion = map.regions.some((item: unknown) => {
+                const r = object(item);
+                return (
+                  Boolean(r["completed"] ?? r["Completed"]) ||
+                  Number(r["missionsCompleted"] ?? r["MissionsCompleted"]) > 0
+                );
+              });
+              if (hasCompletedRegion) return true;
+            }
+          }
+        } catch {
+          // ignore invalid json
+        }
+      }
+    } catch {
+      // Ignore if UserData endpoint unavailable
+    }
+
+    return false;
   } catch {
     throw new AdminApiError(503, progressUnavailable);
   }

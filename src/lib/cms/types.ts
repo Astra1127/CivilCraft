@@ -38,6 +38,7 @@ export interface FaqEntry {
 }
 
 export type MessageStatus = "New" | "In Progress" | "Resolved";
+export type TestimonialStatus = "Pending" | "Approved" | "Rejected";
 
 export interface ContactMessage {
   id: string;
@@ -51,6 +52,9 @@ export interface ContactMessage {
   ownerId?: string | null;
   replies?: ContactReply[];
   notificationStatus?: string;
+  rating?: number;
+  allowPublicTestimonial?: boolean;
+  testimonialStatus?: TestimonialStatus;
 }
 
 export interface ContactReply {

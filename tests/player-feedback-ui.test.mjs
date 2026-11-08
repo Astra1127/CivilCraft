@@ -143,3 +143,46 @@ test("submission failure retains text and shows server retry error", async () =>
   assert.deepEqual(notifications, []);
   await act(() => tree.unmount());
 });
+
+test("feedback form includes star rating picker and testimonial consent checkbox", async () => {
+  let tree, submitted;
+  const notifications = [];
+  const Component = load(
+    { data: { eligible: true }, isPending: false, isError: false },
+    async (input) => {
+      submitted = input;
+      return { id: "saved-feedback-2" };
+    },
+    notifications,
+  );
+  await act(() => {
+    tree = create(React.createElement(Component, { playerId: "AAA", onSubmitted: async () => {} }));
+  });
+  // Checkbox starts unchecked (default false)
+  const checkbox = tree.root.findByType("input");
+  assert.equal(checkbox.props.type, "checkbox");
+  assert.equal(checkbox.props.checked, false);
+
+  // Check the testimonial checkbox
+  await act(() => checkbox.props.onChange({ target: { checked: true } }));
+
+  // Pick 4 stars (buttons with role="radio")
+  const starButtons = tree.root.findAll((el) => el.props.role === "radio");
+  assert.equal(starButtons.length, 5);
+  await act(() => starButtons[3].props.onClick());
+
+  // Fill in required fields
+  await act(() =>
+    tree.root.findByType("Input").props.onChange({ target: { value: "Truss bridge mechanics" } }),
+  );
+  await act(() =>
+    tree.root
+      .findByType("Textarea")
+      .props.onChange({ target: { value: "The visual stress feedback is great." } }),
+  );
+
+  await act(() => tree.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  assert.equal(submitted.rating, 4);
+  assert.equal(submitted.allowPublicTestimonial, true);
+  await act(() => tree.unmount());
+});

@@ -8,6 +8,7 @@ import {
   Gauge,
   Hammer,
   Smartphone,
+  Star,
   Target,
   Wrench,
 } from "lucide-react";
@@ -17,6 +18,7 @@ import { GameProp, GameArt } from "@/components/site/GameProp";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
+import { useTestimonials } from "@/lib/cms/messages";
 import canyonPanorama from "@/assets/canyon-panorama.jpg";
 import worldBreak from "@/assets/world-break-strip.png";
 
@@ -606,6 +608,9 @@ function HomePage() {
         />
       </div>
 
+      {/* ---------- TESTIMONIALS ---------- */}
+      <TestimonialsSection />
+
       {/* ---------- TEAM TEASER ---------- */}
       <section className="border-y-2 border-border bg-background py-11">
         <div className="mx-auto grid max-w-6xl items-center gap-6 px-4 sm:px-6 md:grid-cols-[minmax(0,auto)_minmax(0,1fr)_auto]">
@@ -714,5 +719,105 @@ function StepLink({ dir = "right" }: { dir?: "right" | "left" | "down" }) {
         {dir === "right" ? "›" : "‹"}
       </span>
     </div>
+  );
+}
+
+function TestimonialsSection() {
+  const { data, isLoading } = useTestimonials();
+  const testimonials = data?.testimonials ?? [];
+
+  if (isLoading) {
+    return (
+      <section
+        className="border-y-2 border-border bg-secondary/30 py-12"
+        aria-label="Player Testimonials"
+      >
+        <div className="mx-auto max-w-6xl px-4 text-center sm:px-6">
+          <p className="animate-pulse text-sm text-muted-foreground">
+            Checking player experiences...
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section
+      className="border-y-2 border-border bg-secondary/30 py-12"
+      aria-labelledby="testimonials-heading"
+    >
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div className="mx-auto max-w-2xl text-center">
+          <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">
+            Player Voices
+          </p>
+          <h2 id="testimonials-heading" className="mt-2 text-3xl sm:text-4xl">
+            What Engineers Are Saying
+          </h2>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Real feedback from players building, testing, and mastering bridge mechanics across
+            Arcadia.
+          </p>
+        </div>
+
+        {testimonials.length > 0 ? (
+          <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {testimonials.map((t) => (
+              <div key={t.id} className="panel hover-lift flex flex-col justify-between p-6">
+                <div>
+                  {t.rating ? (
+                    <div
+                      className="mb-3 flex items-center gap-1 text-gold"
+                      aria-label={`${t.rating} out of 5 stars`}
+                    >
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                          key={star}
+                          className={`h-4 w-4 ${
+                            star <= (t.rating ?? 0)
+                              ? "fill-gold text-gold"
+                              : "text-muted-foreground/30"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                  <p className="text-sm italic leading-relaxed text-foreground/90">
+                    &ldquo;{t.message}&rdquo;
+                  </p>
+                </div>
+                <div className="mt-5 flex items-center justify-between gap-2 border-t border-border/70 pt-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-display text-sm font-semibold text-foreground">
+                      {t.displayName}
+                    </p>
+                    <p className="text-xs text-muted-foreground">CivilCraft Engineer</p>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 text-[10px]">
+                    {t.inquiryType}
+                  </Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="panel mx-auto mt-8 max-w-xl space-y-3 p-8 text-center">
+            <h3 className="font-display text-lg">Be the First to Share Your Experience</h3>
+            <p className="text-sm text-muted-foreground">
+              Complete bridge challenges in CivilCraft, then submit your feedback from the Player
+              Dashboard to be featured here!
+            </p>
+            <div className="pt-2">
+              <Button asChild variant="gold" size="sm">
+                <Link to="/download">
+                  <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Download CivilCraft
+                </Link>
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

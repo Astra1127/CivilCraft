@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
+import { Star } from "lucide-react";
 import { toast } from "sonner";
 import { useFeedbackEligibility, submitPlayerFeedback } from "@/lib/cms/messages";
 import { feedbackSchema, feedbackCategories } from "@/lib/cms/message-types";
@@ -19,6 +20,8 @@ export function FeedbackForm({
   const [inquiryType, setCategory] = useState<string>(feedbackCategories[0]);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
+  const [rating, setRating] = useState<number>(5);
+  const [allowPublicTestimonial, setAllowPublicTestimonial] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   return (
@@ -33,8 +36,13 @@ export function FeedbackForm({
           <p role="alert" className="text-sm">
             We couldn't verify your game progress right now. Please try again later.
           </p>
-          <Button variant="outline" size="sm" onClick={() => eligibility.refetch()}>
-            Retry
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={eligibility.isFetching}
+            onClick={() => eligibility.refetch()}
+          >
+            {eligibility.isFetching ? "Checking..." : "Retry"}
           </Button>
         </div>
       ) : !eligibility.data?.eligible ? (
@@ -42,12 +50,19 @@ export function FeedbackForm({
           <p className="text-sm text-muted-foreground">
             Play CivilCraft and complete a bridge-building challenge to unlock game feedback.
           </p>
-          <Button asChild variant="gold" size="sm">
-            <Link to="/download">Download CivilCraft</Link>
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => eligibility.refetch()}>
-            Check again
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="gold" size="sm">
+              <Link to="/download">Download CivilCraft</Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={eligibility.isFetching}
+              onClick={() => eligibility.refetch()}
+            >
+              {eligibility.isFetching ? "Checking..." : "Check again"}
+            </Button>
+          </div>
         </div>
       ) : (
         <form
@@ -60,6 +75,8 @@ export function FeedbackForm({
               inquiryType,
               subject,
               message,
+              rating,
+              allowPublicTestimonial,
             });
             if (!parsed.success) {
               setError(parsed.error.issues[0]?.message ?? "Check your feedback fields.");
@@ -71,6 +88,8 @@ export function FeedbackForm({
               const result = await submitPlayerFeedback(parsed.data);
               setSubject("");
               setMessage("");
+              setRating(5);
+              setAllowPublicTestimonial(false);
               toast.success("Feedback sent");
               await onSubmitted(result.id);
             } catch (cause) {
@@ -99,6 +118,34 @@ export function FeedbackForm({
               ))}
             </select>
           </div>
+
+          <div className="space-y-1.5">
+            <Label>Rating</Label>
+            <div className="flex items-center gap-1.5" role="radiogroup" aria-label="Game rating">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setRating(star)}
+                  disabled={sending}
+                  className="rounded p-1 text-gold transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-gold"
+                  aria-label={`${star} star${star > 1 ? "s" : ""}`}
+                  aria-checked={rating === star}
+                  role="radio"
+                >
+                  <Star
+                    className={`h-6 w-6 ${
+                      star <= rating ? "fill-gold text-gold" : "text-muted-foreground/40"
+                    }`}
+                  />
+                </button>
+              ))}
+              <span className="ml-2 text-xs font-semibold text-muted-foreground">
+                {rating} of 5 stars
+              </span>
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="feedback-subject">Subject</Label>
             <Input
@@ -124,6 +171,34 @@ export function FeedbackForm({
               disabled={sending}
             />
           </div>
+
+          <div className="rounded-lg border border-border/80 bg-secondary/30 p-3.5">
+            <div className="flex items-start gap-2.5">
+              <input
+                type="checkbox"
+                id="feedback-public-testimonial"
+                checked={allowPublicTestimonial}
+                onChange={(e) => setAllowPublicTestimonial(e.target.checked)}
+                disabled={sending}
+                className="mt-1 h-4 w-4 rounded border-border text-gold focus:ring-gold"
+              />
+              <div className="space-y-1">
+                <Label
+                  htmlFor="feedback-public-testimonial"
+                  className="cursor-pointer font-semibold"
+                >
+                  Feature my feedback as a player testimonial on the homepage
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  If selected, an administrator will review your feedback before featuring it. Your
+                  rating, message, and display name may appear publicly. Your email, PlayFab ID, and
+                  internal account data are never shown. You can revoke this permission anytime from
+                  your dashboard.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <Button variant="gold" type="submit" disabled={sending}>
             {sending ? "Sending..." : "Send Feedback"}
           </Button>
