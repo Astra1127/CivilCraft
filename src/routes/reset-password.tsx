@@ -107,7 +107,7 @@ function ResetPasswordForm({
             />
           </div>
           <div className="panel p-6 sm:p-8">
-            <BrandMark />
+            <BrandMark size="auth" />
             <h1 className="mt-6 text-3xl">
               {success ? "Password Updated" : "Reset Your Password"}
             </h1>

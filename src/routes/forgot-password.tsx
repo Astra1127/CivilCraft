@@ -83,7 +83,7 @@ function ForgotPasswordPage() {
           </div>
 
           <div className="panel p-6 sm:p-8">
-            <BrandMark />
+            <BrandMark size="auth" />
             <h1 className="mt-6 text-3xl">Forgot Your Password?</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               Enter the email address on your Civil Craft account and we'll send a recovery link.

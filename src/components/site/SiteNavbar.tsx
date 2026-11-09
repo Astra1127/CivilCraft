@@ -62,9 +62,13 @@ export function SiteNavbar() {
     <header className="sticky top-0 z-40 border-b-2 border-border bg-card/95 backdrop-blur">
       <nav
         aria-label="Main"
-        className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-2.5 sm:gap-3 sm:px-6"
+        className="mx-auto flex max-w-6xl items-center gap-2 px-3 py-1.5 sm:gap-3 sm:px-6 sm:py-2"
       >
-        <Link to="/" className="min-w-0 flex-1 xl:flex-none" aria-label="Civil Craft home">
+        <Link
+          to="/"
+          className="flex min-w-0 flex-1 items-center xl:flex-none"
+          aria-label="Civil Craft home"
+        >
           <BrandMark />
         </Link>
 

@@ -22,7 +22,7 @@ export function SiteFooter() {
 
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[minmax(0,1fr)_auto]">
         <div className="min-w-0">
-          <BrandMark />
+          <BrandMark size="footer" />
           {(() => {
             const links = (["facebook", "youtube", "discord"] as const).filter(
               (k) => settings.social[k],

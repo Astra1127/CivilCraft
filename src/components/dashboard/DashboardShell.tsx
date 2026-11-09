@@ -132,9 +132,9 @@ export function DashboardShell({
   return (
     <div className={cn("min-h-dvh bg-background", admin ? "" : "blueprint")}>
       <header className="sticky top-0 z-40 border-b-2 border-border bg-card/95 backdrop-blur">
-        <div className="mx-auto grid max-w-[1400px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-3 py-2 sm:px-6 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-3 lg:py-3">
+        <div className="mx-auto grid max-w-[1400px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-3 py-1.5 sm:px-6 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:gap-3 lg:py-2">
           <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 lg:col-span-1">
-            <Link to="/" className="min-w-0" aria-label="Civil Craft home">
+            <Link to="/" className="flex min-w-0 items-center" aria-label="Civil Craft home">
               <BrandMark />
             </Link>
             <Sheet open={open} onOpenChange={setOpen}>

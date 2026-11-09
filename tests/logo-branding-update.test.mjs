@@ -44,9 +44,26 @@ test("BrandMark renders main_logo image without old text branding", () => {
   assert.equal(img.props.height, 1024);
   assert.match(img.props.className, /object-contain/);
 
+  // Must render enlarged navigation dimensions by default
+  assert.match(img.props.className, /w-\[110px\]/);
+  assert.match(img.props.className, /md:w-\[132px\]/);
+  assert.match(img.props.className, /-my-2/);
+  assert.match(img.props.className, /translate-y-\[2px\]/);
+
   // Must NOT contain old text branding
   assert.doesNotMatch(serialized, /Civil Craft: Bridge Edition/i);
   assert.doesNotMatch(serialized, /Bridge Edition/i);
+});
+
+test("BrandMark with size='footer' retains compact footer sizing", () => {
+  let tree;
+  act(() => {
+    tree = create(React.createElement(BrandMark, { size: "footer" }));
+  });
+  const root = tree.root;
+  const img = root.findByType("img");
+  assert.match(img.props.className, /h-10/);
+  assert.match(img.props.className, /sm:h-12/);
 });
 
 test("Favicon assets exist in public folder with correct sizes and formats", () => {

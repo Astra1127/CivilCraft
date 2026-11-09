@@ -65,7 +65,7 @@ function AdminLoginPage() {
   return (
     <div className="blueprint grid min-h-dvh place-items-center bg-background px-4 py-12">
       <div className="panel w-full min-w-0 max-w-md p-6 sm:p-8">
-        <BrandMark />
+        <BrandMark size="auth" />
         <div className="mt-6 flex items-center gap-2 text-gold">
           <ShieldCheck className="h-5 w-5" aria-hidden="true" />
           <p className="text-xs font-extrabold uppercase tracking-[0.18em]">Restricted area</p>

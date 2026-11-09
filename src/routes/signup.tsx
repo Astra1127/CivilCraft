@@ -173,7 +173,7 @@ function SignupPage() {
           </div>
 
           <div className="panel order-1 p-6 sm:p-8">
-            <BrandMark />
+            <BrandMark size="auth" />
 
             {registeredEmail ? (
               <div className="mt-6 space-y-5">

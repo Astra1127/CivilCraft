@@ -106,7 +106,7 @@ function LoginPage() {
 
           <div className="panel p-6 sm:p-8">
             <div className="flex items-start justify-between gap-3">
-              <BrandMark />
+              <BrandMark size="auth" />
               <DemoBadge />
             </div>
             <h1 className="mt-6 text-3xl">Welcome Back, Engineer!</h1>
