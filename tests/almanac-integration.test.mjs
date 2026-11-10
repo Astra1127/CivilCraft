@@ -67,6 +67,85 @@ test("lesson state needs explicit records; contract concepts do not unlock lesso
     }).lessonRecords,
     [{ lessonId: "LESSON002", state: "discovered" }],
   );
+  assert.deepEqual(
+    parseEducation({
+      lessonRecords: [
+        "civil-craft-torsion-lesson-v1",
+        "duplicate",
+        { lessonId: "duplicate", state: "completed" },
+      ],
+    }).lessonRecords,
+    [{ lessonId: "civil-craft-torsion-lesson-v1", state: "discovered" }],
+  );
+});
+
+test("compact game projections retain current contracts, progress, and exact photo bindings", () => {
+  const resultId = "0123456789abcdef".repeat(2);
+  const sha256 = "fedcba9876543210".repeat(4);
+  const snapshot = Buffer.from(resultId + sha256, "hex").toString("base64");
+  const contract = {
+    levelId: "ClarkMainContract",
+    details: ["Freight Channel", "completed", ["tension", "compression"]],
+    completion: {
+      details: ["suspension", 3],
+      completedAt: "2026-11-10T12:00:00Z",
+      snapshot,
+    },
+  };
+  const project = (level = contract, encoding = 1) =>
+    parseAlmanacProgress(
+      JSON.stringify({
+        publisherVersion: 2,
+        contractEncoding: encoding,
+        regions: [
+          {
+            regionId: "industrial-zone",
+            name: "Industrial Zone",
+            status: "current",
+            levels: [
+              level,
+              { levelId: "ClarkOffsetRoad", details: ["Offset Road", "current", []] },
+            ],
+          },
+        ],
+        lessonRecords: ["civil-craft-suspension-bridge-lesson-v1"],
+        discoveredMaterials: ["wood_beam", "SteelBeam"],
+        quizAttempts: [attempt],
+      }),
+    );
+  const journey = project();
+  const [completed, current] = journey.regions[0].levels;
+  assert.equal(journey.levelsCompleted, 1);
+  assert.equal(journey.levelsTotal, 2);
+  assert.equal(completed.levelName, "Freight Channel");
+  assert.equal(completed.completion.score, 3);
+  assert.equal(completed.completion.completedAt, "2026-11-10T12:00:00Z");
+  assert.deepEqual(completed.engineeringConceptIds, ["tension", "compression"]);
+  assert.equal(current.status, "current");
+  assert.equal(current.completion, undefined);
+  assert.deepEqual(completed.completion.snapshotAlbum, {
+    storage: "archive-v1",
+    fileName: "bridge-photos-v1.zip",
+    contractId: "ClarkMainContract",
+    regionId: "industrial-zone",
+    resultId,
+    entryName: `bridge-${resultId}.png`,
+    sha256,
+  });
+  assert.deepEqual(journey.discoveredMaterials, ["wood_beam", "SteelBeam"]);
+  assert.equal(journey.lessonRecords[0].state, "discovered");
+  assert.equal(journey.quizAttempts[0].attemptId, attempt.attemptId);
+
+  for (const invalid of [
+    { snapshot: "invalid" },
+    { resultId: "a".repeat(32) },
+    { snapshot: null },
+    { details: ["suspension", null] },
+  ]) {
+    const level = { ...contract, completion: { ...contract.completion, ...invalid } };
+    assert.equal(project(level).regions[0].levels[0].completion.snapshotAlbum, undefined);
+  }
+  assert.equal(project(contract, 2).regions[0].levels[0].completion, undefined);
 });
 test("verified story chain ignores conflicting catalog/stage metadata and keeps side contracts separate", () => {
   for (const [index, id] of [

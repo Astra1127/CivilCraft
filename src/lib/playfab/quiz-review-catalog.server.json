@@ -20,7 +20,12 @@
         {
           "questionId": "compression",
           "question": "What type of force does an arch primarily carry when weight is applied?",
-          "choices": ["Tension", "Torsion", "Compression", "Shear"],
+          "choices": [
+            "Tension",
+            "Torsion",
+            "Compression",
+            "Shear"
+          ],
           "correctIndex": 2
         },
         {
@@ -188,6 +193,140 @@
       ]
     },
     {
+      "quizId": "civil-craft-final-integrated-application-quiz-v1",
+      "contentFingerprint": "e8f1b63809bfaf1304267251a0424d34076a1220262024c6ea57e5c38d137a67",
+      "title": "Final Integrated Application Quiz",
+      "questions": [
+        {
+          "questionId": "final-load-transfer",
+          "question": "What is the main purpose of load transfer in a bridge?",
+          "choices": [
+            "To distribute decorative elements across the bridge.",
+            "To prevent vehicles from changing position.",
+            "To carry applied loads through structural components toward supports and the ground.",
+            "To keep every bridge member under the same force."
+          ],
+          "correctIndex": 2,
+          "explanation": "Loads travel through the roadway, connected members, and supports toward the ground. The forces need not be equal in every member."
+        },
+        {
+          "questionId": "final-structural-forces",
+          "question": "Which set contains the structural forces reviewed throughout the Engineer's journey?",
+          "choices": [
+            "Bending, tension, compression, and shear.",
+            "Friction, buoyancy, magnetism, and gravity.",
+            "Expansion, evaporation, condensation, and contraction.",
+            "Acceleration, velocity, momentum, and displacement."
+          ],
+          "correctIndex": 0,
+          "explanation": "Bending, tension, compression, and shear describe important ways a structure responds to loading. Their effects depend on the load and the structural arrangement."
+        },
+        {
+          "questionId": "final-moving-load",
+          "question": "Why must an Engineer consider a vehicle's position when testing a bridge?",
+          "choices": [
+            "Vehicle position determines the bridge's material color.",
+            "Vehicle position eliminates the need for structural supports.",
+            "Vehicle position prevents all members from experiencing stress.",
+            "Vehicle position can change how loads and structural responses are distributed."
+          ],
+          "correctIndex": 3,
+          "explanation": "A moving vehicle changes where its weight acts. Observe the entire crossing because different vehicle positions can load different parts of the bridge."
+        },
+        {
+          "questionId": "final-off-center-load",
+          "question": "A vehicle travels closer to one side of a bridge instead of along its center. Which structural effect should the Engineer consider?",
+          "choices": [
+            "The bridge automatically becomes stronger on both sides.",
+            "The off-center load may cause twisting due to torsion.",
+            "The vehicle's weight no longer acts on the bridge.",
+            "The bridge experiences compression only, regardless of its design."
+          ],
+          "correctIndex": 1,
+          "explanation": "An off-center load can create a twisting effect called torsion. Engineers consider how the bridge's connected components resist that effect."
+        },
+        {
+          "questionId": "final-failure-review",
+          "question": "After a bridge fails its simulation, what should the Engineer do before testing again?",
+          "choices": [
+            "Ignore the results and rebuild the same design.",
+            "Add materials randomly until the bridge passes.",
+            "Review the results, identify the weak component, and improve the design.",
+            "Remove all supports so the load is distributed evenly."
+          ],
+          "correctIndex": 2,
+          "explanation": "Use the results to locate the first problem, review its load path and connections, then make a reasoned change before retesting."
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-integrated-application-quiz-v1",
+      "contentFingerprint": "a91aa1240844009fdfb2c67bf2dd40725af4497622e8ccbc452e9a7629153fa0",
+      "title": "Integrated Application Quiz",
+      "questions": [
+        {
+          "questionId": "load-transfer",
+          "question": "Why must a bridge transfer loads safely through its structural members and supports?",
+          "choices": [
+            "To make the bridge look more symmetrical.",
+            "To eliminate the vehicle's weight.",
+            "To carry the applied loads safely toward the supports and ground.",
+            "To ensure that every member experiences exactly the same force."
+          ],
+          "correctIndex": 2,
+          "explanation": "A connected load path carries the applied loads through members and supports toward the ground."
+        },
+        {
+          "questionId": "structural-forces",
+          "question": "Which set contains structural effects or forces that an engineer should consider when designing a bridge?",
+          "choices": [
+            "Bending, tension, compression, and shear.",
+            "Color, texture, shape, and decoration.",
+            "Speed, fuel consumption, and engine temperature.",
+            "Sound, lighting, and road markings."
+          ],
+          "correctIndex": 0,
+          "explanation": "Bending, tension, compression, and shear describe structural effects or forces that can influence a real bridge's response."
+        },
+        {
+          "questionId": "moving-loads",
+          "question": "Why should an engineer observe a bridge throughout the entire vehicle crossing?",
+          "choices": [
+            "The vehicle becomes lighter as it approaches the opposite end.",
+            "The supports stop carrying loads once the vehicle reaches the middle.",
+            "The bridge experiences the same structural response at every vehicle position.",
+            "The forces and structural response can change as the vehicle moves."
+          ],
+          "correctIndex": 3,
+          "explanation": "A moving load changes position, so the forces carried by individual members can change throughout the crossing."
+        },
+        {
+          "questionId": "torsion",
+          "question": "When should an engineer consider the possibility of <b><#E09500>Torsion</color></b>?",
+          "choices": [
+            "When the bridge is painted a different color.",
+            "When a load acts away from the center and may cause the structure to twist.",
+            "When the bridge has no vehicles crossing it.",
+            "When the road is completely straight."
+          ],
+          "correctIndex": 1,
+          "explanation": "An off-center load can create a twisting moment. The position of the load matters as well as its weight."
+        },
+        {
+          "questionId": "structural-safety",
+          "question": "During the bus test, the bridge shows excessive deformation and one member appears unable to carry the load safely. What should the engineer do?",
+          "choices": [
+            "Ignore the result if the bus is almost across.",
+            "Rebuild the entire bridge without checking the results.",
+            "Review the test results, identify the weak component, and adjust the design.",
+            "Remove all supports to allow the bridge to move freely."
+          ],
+          "correctIndex": 2,
+          "explanation": "Inspect where the problem begins, improve the weak area or load path, and test the revised bridge again."
+        }
+      ]
+    },
+    {
       "quizId": "civil-craft-load-distribution-quiz-v1",
       "contentFingerprint": "f8bac87865e287a37f4c5363224e3bae04e6588b4ad5d0c9433f45a5f43fb719",
       "title": "Load Distribution Quiz",
@@ -286,7 +425,12 @@
         {
           "questionId": "main-cables",
           "question": "What type of force do the <b><#E09500>main cables</color></b> of a suspension bridge primarily carry?",
-          "choices": ["Tension", "Compression", "Bending", "Torsion"],
+          "choices": [
+            "Tension",
+            "Compression",
+            "Bending",
+            "Torsion"
+          ],
           "correctIndex": 0,
           "explanation": "The main cables primarily carry tension: a pulling force."
         },
@@ -503,6 +647,140 @@
       ]
     },
     {
+      "quizId": "civil-craft-structural-failure-quiz-v1",
+      "contentFingerprint": "2dacb5c636fd7eaf230894f32d2689fb6e04aef154ee9341ee72650e9dc4b636",
+      "title": "Structural Failure Quiz",
+      "questions": [
+        {
+          "questionId": "structural-failure",
+          "question": "What is <b><#E09500>Structural Failure</color></b> in bridge engineering?",
+          "choices": [
+            "The normal movement of a bridge under a passing vehicle.",
+            "The distribution of forces between structural supports.",
+            "The process of transferring loads toward the ground.",
+            "When a structure or component can no longer safely resist applied forces or perform its intended function."
+          ],
+          "correctIndex": 3,
+          "explanation": "Structural failure means a structure or component can no longer safely resist the required forces or do its intended job."
+        },
+        {
+          "questionId": "causes-of-failure",
+          "question": "What can cause a structural member or connection to fail?",
+          "choices": [
+            "Applied loads exceeding its safe capacity.",
+            "Loads remaining within its allowable limits.",
+            "Structural members safely carrying the required forces.",
+            "Supports adequately resisting the applied loads."
+          ],
+          "correctIndex": 0,
+          "explanation": "A member or connection can fail when the demand exceeds the capacity it can safely provide."
+        },
+        {
+          "questionId": "warning-signs",
+          "question": "Which of the following may indicate that a bridge is experiencing <b><#E09500>Structural Failure</color></b>?",
+          "choices": [
+            "Normal elastic movement within safe limits.",
+            "Balanced support reactions under the required load.",
+            "Excessive deformation, cracking, or buckling.",
+            "Structural members safely resisting the applied forces."
+          ],
+          "correctIndex": 2,
+          "explanation": "Excessive deformation, cracking, or buckling can indicate failure in a real structure. Normal movement within safe limits is different."
+        },
+        {
+          "questionId": "component-failure",
+          "question": "Which statement about structural failure is correct?",
+          "choices": [
+            "Structural failure always causes the entire bridge to collapse immediately.",
+            "Failure can begin in an individual structural member or connection.",
+            "Structural failure occurs only when the roadway breaks apart.",
+            "A bridge cannot experience structural failure while its supports remain standing."
+          ],
+          "correctIndex": 1,
+          "explanation": "A single member or connection may fail before the entire bridge collapses. Finding the first problem helps explain what happened."
+        },
+        {
+          "questionId": "failure-analysis",
+          "question": "If a bridge fails during the Mobile Crane test, what should the engineer do before modifying the design?",
+          "choices": [
+            "Replace every structural component without checking the results.",
+            "Increase the bridge's length without identifying the cause.",
+            "Repeat the same design without making adjustments.",
+            "Observe where the failure begins and identify which part needs improvement."
+          ],
+          "correctIndex": 3,
+          "explanation": "Study where the first problem began, then improve the area that needs attention and test the design again."
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-suspension-bridge-quiz-v1",
+      "contentFingerprint": "794a83db2a5ed235e68dafdce2cd316c534e22870271860ff6dbb73c8551ebc2",
+      "title": "Suspension Bridge Quiz",
+      "questions": [
+        {
+          "questionId": "suspension-bridge",
+          "question": "What is the main structural characteristic of a <b><#E09500>Suspension Bridge</color></b>?",
+          "choices": [
+            "It uses only horizontal beams to carry the roadway.",
+            "It uses curved arches to support the roadway.",
+            "It uses main cables supported by towers, with hangers connecting the cables to the roadway.",
+            "It uses triangular members without cables."
+          ],
+          "correctIndex": 2,
+          "explanation": "The roadway hangs from main cables, which pass over towers and pull against anchorages."
+        },
+        {
+          "questionId": "hangers",
+          "question": "What is the main function of the <b><#E09500>Hangers</color></b> in a Suspension Bridge?",
+          "choices": [
+            "To transfer loads from the roadway to the main cables.",
+            "To resist the pulling forces at the cable anchorages.",
+            "To carry compressive forces directly into the ground.",
+            "To replace the main cables supporting the roadway."
+          ],
+          "correctIndex": 0,
+          "explanation": "Hangers connect the roadway to the main cables and carry the roadway's load up to them."
+        },
+        {
+          "questionId": "main-cables",
+          "question": "What type of force do the <b><#E09500>Main Cables</color></b> primarily carry?",
+          "choices": [
+            "Compression",
+            "Bending",
+            "Shear",
+            "Tension"
+          ],
+          "correctIndex": 3,
+          "explanation": "The main cables resist pulling forces, so they work primarily in tension."
+        },
+        {
+          "questionId": "towers-and-anchorages",
+          "question": "Which statement correctly describes the roles of <b><#E09500>Towers and Anchorages</color></b>?",
+          "choices": [
+            "Towers carry tension, while anchorages support the roadway directly.",
+            "Towers primarily carry compression, while anchorages resist the cables' pulling forces.",
+            "Towers eliminate the need for cables, while anchorages support the hangers.",
+            "Towers carry only bending forces, while anchorages transfer vehicle loads to the deck."
+          ],
+          "correctIndex": 1,
+          "explanation": "Towers transfer compression toward their foundations. Anchorages hold the cable ends against tension."
+        },
+        {
+          "questionId": "structural-connections",
+          "question": "Why must the roadway, hangers, main cables, towers, and anchorages be properly connected?",
+          "choices": [
+            "To ensure every component experiences exactly the same force.",
+            "To prevent the roadway from carrying any vehicle weight.",
+            "To allow the components to work together and transfer loads safely toward the ground.",
+            "To eliminate the need for structural supports."
+          ],
+          "correctIndex": 2,
+          "explanation": "Proper connections create a continuous path for the vehicle's load to reach the ground."
+        }
+      ]
+    },
+    {
       "quizId": "civil-craft-tension-compression-quiz-v1",
       "contentFingerprint": "5324f064dc03cc662b05abf360f42bb97600e04f11344f7d7935648e770de477",
       "title": "Tension & Compression Quiz",
@@ -566,6 +844,73 @@
           ],
           "correctIndex": 1,
           "explanation": "Members must withstand the forces from the intended loads, including the vehicle and its cargo."
+        }
+      ]
+    },
+    {
+      "quizId": "civil-craft-torsion-quiz-v1",
+      "contentFingerprint": "dfbaf90a976c8ff18fb6846d8c67c3810529090e2c9fe187fc09345f1a512b4a",
+      "title": "Torsion Quiz",
+      "questions": [
+        {
+          "questionId": "torsion",
+          "question": "What is <b><#E09500>Torsion</color></b> in structural engineering?",
+          "choices": [
+            "A force that stretches a structural member along its length.",
+            "A force that compresses a structural member downward.",
+            "A force that causes a structural member to bend vertically.",
+            "A twisting effect caused by a moment acting around a structural member's longitudinal axis."
+          ],
+          "correctIndex": 3,
+          "explanation": "Torsion twists a member around its longitudinal axis. It differs from axial stretching, compression, and vertical bending."
+        },
+        {
+          "questionId": "off-center-loading",
+          "question": "What can happen when a vehicle travels closer to one side of a bridge instead of near the center?",
+          "choices": [
+            "The load can create an uneven structural response and cause twisting.",
+            "The vehicle's weight is automatically reduced.",
+            "The bridge stops experiencing bending forces.",
+            "The supports no longer carry the vehicle's load."
+          ],
+          "correctIndex": 0,
+          "explanation": "An off-center load can produce a twisting moment as well as downward loading. Its weight still needs to reach the supports."
+        },
+        {
+          "questionId": "twisting-moment",
+          "question": "What can increase the <b><#E09500>twisting effect</color></b> caused by an off-center vehicle load?",
+          "choices": [
+            "Reducing the vehicle's weight while keeping its position unchanged.",
+            "Moving the vehicle closer to the structure's center of resistance.",
+            "Increasing the distance between the applied load and the structure's center of resistance.",
+            "Removing the load from the bridge."
+          ],
+          "correctIndex": 2,
+          "explanation": "For the same force, a greater sideways distance from the center of resistance creates a larger twisting moment."
+        },
+        {
+          "questionId": "vehicle-position",
+          "question": "Why is the position of the traffic lane important when designing a bridge?",
+          "choices": [
+            "It determines the color of the structural materials.",
+            "It affects how the vehicle's load acts on the structure and whether twisting may occur.",
+            "It eliminates the need to consider structural forces.",
+            "It ensures that every structural member carries exactly the same load."
+          ],
+          "correctIndex": 1,
+          "explanation": "Lane position changes where the vehicle's weight acts. Engineers consider the resulting load path and possible twisting moment."
+        },
+        {
+          "questionId": "structural-safety",
+          "question": "What may happen if a bridge cannot safely resist the <b><#E09500>Torsion</color></b> caused by an off-center load?",
+          "choices": [
+            "The bridge automatically becomes more stable.",
+            "The twisting forces disappear without affecting the structure.",
+            "The vehicle's weight becomes evenly distributed regardless of its position.",
+            "The structure may experience excessive twisting, cracking, or failure."
+          ],
+          "correctIndex": 3,
+          "explanation": "Excessive torsion can deform or damage a real structure. A bridge's shape, connections, and supports affect its resistance."
         }
       ]
     },

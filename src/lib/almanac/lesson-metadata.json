@@ -60,7 +60,23 @@
       "npc": "Brooks",
       "kind": "contract",
       "order": 70,
-      "contractIds": []
+      "contractIds": ["BrooksMainContract"]
+    },
+    {
+      "id": "clark-freight",
+      "title": "Clark — Freight Channel",
+      "npc": "Clark",
+      "kind": "contract",
+      "order": 74,
+      "contractIds": ["ClarkMainContract"]
+    },
+    {
+      "id": "clark-offset",
+      "title": "Clark — Offset Road",
+      "npc": "Clark",
+      "kind": "contract",
+      "order": 75,
+      "contractIds": ["ClarkOffsetRoad"]
     },
     {
       "id": "mills-equipment",
@@ -68,7 +84,7 @@
       "npc": "Mills",
       "kind": "contract",
       "order": 80,
-      "contractIds": []
+      "contractIds": ["MillsMainContract"]
     }
   ],
   "lessons": [
@@ -152,6 +168,7 @@
     },
     {
       "key": "concept:structural-failure",
+      "gameLessonId": "civil-craft-structural-failure-lesson-v1",
       "conceptId": "structural-failure",
       "category": "engineering",
       "stageId": "mills-equipment",
@@ -178,6 +195,22 @@
       "gameLessonId": "civil-craft-tension-compression-lesson-v1",
       "category": "engineering",
       "order": 30,
+      "conceptIds": []
+    },
+    {
+      "key": "civil-craft-torsion-lesson-v1",
+      "gameLessonId": "civil-craft-torsion-lesson-v1",
+      "category": "engineering",
+      "stageId": "clark-offset",
+      "order": 10,
+      "conceptIds": []
+    },
+    {
+      "key": "civil-craft-suspension-bridge-lesson-v1",
+      "gameLessonId": "civil-craft-suspension-bridge-lesson-v1",
+      "category": "engineering",
+      "stageId": "clark-freight",
+      "order": 10,
       "conceptIds": []
     },
     {

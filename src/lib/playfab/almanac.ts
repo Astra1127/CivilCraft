@@ -31,12 +31,23 @@ export const EMPTY_JOURNEY: AlmanacJourney = {
   discoveredMaterials: [],
 };
 
+function decodeAlbumBinding(value: unknown): { resultId: string; sha256: string } | undefined {
+  // 16 result ID bytes plus 32 digest bytes, in hexadecimal byte order.
+  if (typeof value !== "string" || !/^[A-Za-z0-9+/]{64}$/.test(value)) return undefined;
+  const bytes = atob(value);
+  const hex = Array.from(bytes, (byte) => byte.charCodeAt(0).toString(16).padStart(2, "0")).join(
+    "",
+  );
+  return { resultId: hex.slice(0, 32), sha256: hex.slice(32) };
+}
+
 /** Safely parse AlmanacProgress JSON written by Unity */
 export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
   if (!raw || !raw.trim()) return EMPTY_JOURNEY;
   try {
     const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (!parsed || typeof parsed !== "object") return EMPTY_JOURNEY;
+    const compactContracts = parsed["publisherVersion"] === 2 && parsed["contractEncoding"] === 1;
 
     let rawRegions: unknown[] = [];
     let explicitCompleted: number | undefined;
@@ -92,8 +103,12 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
 
       const levels: AlmanacLevel[] = rawLevels.map((l, lIdx) => {
         const lobj = (l && typeof l === "object" ? l : {}) as Record<string, unknown>;
+        const details =
+          compactContracts && Array.isArray(lobj["details"]) ? lobj["details"] : undefined;
         const levelId = String(lobj["levelId"] ?? lobj["LevelId"] ?? lobj["id"] ?? `level_${lIdx}`);
-        const rawLevelName = lobj["levelName"] ?? lobj["LevelName"] ?? lobj["name"];
+        const rawLevelName = details
+          ? details[0]
+          : (lobj["levelName"] ?? lobj["LevelName"] ?? lobj["name"]);
         const levelName = typeof rawLevelName === "string" ? rawLevelName : undefined;
         const rawOrder = lobj["order"] ?? lobj["Order"];
         const order = typeof rawOrder === "number" ? rawOrder : lIdx + 1;
@@ -104,22 +119,40 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
             (typeof rawStage === "number" && Number.isSafeInteger(rawStage) && rawStage > 0
               ? rawStage
               : undefined));
-        const rawLStatus = String(lobj["status"] ?? lobj["Status"] ?? "unknown").toLowerCase();
+        const rawLStatus = String(
+          details ? details[1] : (lobj["status"] ?? lobj["Status"] ?? "unknown"),
+        ).toLowerCase();
         const lstatus = (
           ["completed", "current", "locked"].includes(rawLStatus) ? rawLStatus : "unknown"
         ) as AlmanacLevel["status"];
-        const rawConceptIds = lobj["engineeringConceptIds"] ?? lobj["EngineeringConceptIds"];
+        const rawConceptIds = details
+          ? details[2]
+          : (lobj["engineeringConceptIds"] ?? lobj["EngineeringConceptIds"]);
         const conceptIds = Array.isArray(rawConceptIds) ? (rawConceptIds as string[]) : [];
 
         const comp = (lobj["completion"] ?? lobj["Completion"]) as
           Record<string, unknown> | undefined;
         let completion: PlayerLevelCompletion | undefined;
-        const completionState =
-          comp && typeof comp === "object" && !Array.isArray(comp)
+        const compactCompletion =
+          details &&
+          Array.isArray(comp?.["details"]) &&
+          comp["details"].length === 2 &&
+          typeof comp["details"][0] === "string" &&
+          (comp["details"][1] === null ||
+            (Number.isSafeInteger(comp["details"][1]) && comp["details"][1] >= 0))
+            ? comp["details"]
+            : undefined;
+        const completionState = compactCompletion
+          ? "success"
+          : comp && typeof comp === "object" && !Array.isArray(comp)
             ? (comp["status"] ?? comp["Status"])
             : undefined;
-        const rawScore = comp?.["score"] ?? comp?.["Score"];
-        const rawBridge = comp?.["bridgeTypeId"] ?? comp?.["BridgeTypeId"];
+        const rawScore = compactCompletion
+          ? compactCompletion[1]
+          : (comp?.["score"] ?? comp?.["Score"]);
+        const rawBridge = compactCompletion
+          ? compactCompletion[0]
+          : (comp?.["bridgeTypeId"] ?? comp?.["BridgeTypeId"]);
         const completedAt = comp?.["completedAt"] ?? comp?.["CompletedAt"];
         // Completed status plus real payload is required. A missing date does not invalidate a completion.
         const hasEvidence =
@@ -144,11 +177,30 @@ export function parseAlmanacProgress(raw: string | undefined): AlmanacJourney {
           (completionState === undefined || completionState === "success")
         ) {
           const rawUrl = comp["completionScreenshotUrl"] ?? comp["CompletionScreenshotUrl"];
-          const snapshot = comp["snapshot"] as Record<string, unknown> | undefined;
-          const resultId =
+          const explicitResultId =
             typeof comp["resultId"] === "string" && /^[a-f0-9]{32}$/.test(comp["resultId"])
               ? comp["resultId"]
               : undefined;
+          const binding =
+            compactCompletion && comp["resultId"] === undefined
+              ? decodeAlbumBinding(comp["snapshot"])
+              : undefined;
+          const resultId = explicitResultId ?? binding?.resultId;
+          // Album reads still verify the full identity and checksum against the
+          // manifest. Legacy album references keep their existing validation.
+          const snapshot = compactCompletion
+            ? binding
+              ? {
+                  storage: "archive-v1",
+                  fileName: "bridge-photos-v1.zip",
+                  contractId: levelId,
+                  regionId,
+                  resultId,
+                  entryName: `bridge-${resultId}.png`,
+                  sha256: binding.sha256,
+                }
+              : undefined
+            : (comp["snapshot"] as Record<string, unknown> | undefined);
           const scoreKnown =
             comp["scoreKnown"] !== false &&
             typeof rawScore === "number" &&

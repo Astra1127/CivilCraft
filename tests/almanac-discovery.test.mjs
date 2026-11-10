@@ -332,21 +332,14 @@ test("Engineering cards require lesson sync even after tutorial completion and p
     view.root
       .findAll((node) => node.type === "p" && node.props["data-lesson-state"])
       .map((node) => node.props["data-lesson-state"]);
-  assert.deepEqual(states(), [
-    "pending",
-    "pending",
-    "pending",
-    "pending",
-    "unlocked",
-    "pending",
-    "pending",
-    "pending",
-    "pending",
-    "pending",
-    "pending",
-    "pending",
-    "pending",
-  ]);
+  assert.equal(
+    states().length,
+    lessonCatalog.lessons.filter((l) => l.category === "engineering").length,
+  );
+  assert.deepEqual(
+    states().filter((state) => state !== "pending"),
+    ["unlocked"],
+  );
   assert.equal(view.root.findAllByType("details").length, 1);
   assert.doesNotMatch(
     JSON.stringify(view.toJSON()),
@@ -359,6 +352,21 @@ test("Engineering cards require lesson sync even after tutorial completion and p
   });
   assert.equal(states().filter((state) => state === "encountered").length, 0);
   assert.equal(view.root.findAllByType("details").length, 1);
+  const torsion = "civil-craft-torsion-lesson-v1";
+  await act(async () => {
+    view.update(
+      React.createElement(GameLessons, {
+        journey: {
+          ...journey,
+          lessonRecords: [...journey.lessonRecords, { lessonId: torsion, state: "discovered" }],
+        },
+        playerId: "p",
+      }),
+    );
+  });
+  const card = view.root.findByProps({ id: lessonNavigation.lessonAnchorId(torsion) });
+  assert.equal(card.findByType("details").type, "details");
+  assert.equal(view.root.findAllByType("details").length, 2);
   await act(async () => view.unmount());
 });
 

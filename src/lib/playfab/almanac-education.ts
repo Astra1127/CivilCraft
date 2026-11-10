@@ -104,12 +104,16 @@ export function parseEducation(value: unknown): {
     });
   }
   const lessons = Array.isArray(root["lessonRecords"]) ? root["lessonRecords"].slice(0, 1000) : [];
-  for (const value of lessons) {
-    const r = object(value);
+  // A compact string is an explicit discovery. Older object records may
+  // distinguish a completed lesson from a discovery.
+  const records = lessons.map((value) =>
+    typeof value === "string" ? { lessonId: value, state: "discovered" } : object(value),
+  );
+  for (const r of records) {
     if (
       text(r["lessonId"]) &&
       (r["state"] === "discovered" || r["state"] === "completed") &&
-      lessons.filter((v) => object(v)["lessonId"] === r["lessonId"]).length === 1
+      records.filter((v) => v["lessonId"] === r["lessonId"]).length === 1
     )
       lessonRecords.push({ lessonId: r["lessonId"], state: r["state"] });
   }
