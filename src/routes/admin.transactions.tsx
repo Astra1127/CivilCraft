@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { RefreshCw, Receipt, Info } from "lucide-react";
+import { RefreshCw, Receipt } from "lucide-react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -82,13 +82,6 @@ function AdminTransactions() {
           </Button>
         }
       />
-      <div className="flex items-center gap-3 rounded-xl border border-gold/50 bg-gold/10 p-3 text-sm">
-        <Info className="h-5 w-5 shrink-0" />
-        <span>
-          <strong>Simulation only — no real money is charged.</strong> Read-only purchase records;
-          this page cannot grant currency.
-        </span>
-      </div>
       {query.isPending ? (
         <LoadingState label="Loading simulated transactions…" rows={3} />
       ) : query.isError ? (

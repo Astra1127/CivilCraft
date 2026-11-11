@@ -1,5 +1,7 @@
 export type PaymentOrderStatus = "pending" | "paid" | "fulfilled" | "failed" | "cancelled";
 
+export type ReceiptEmailStatus = "pending" | "sending" | "sent" | "failed";
+
 export type RewardCurrency = "CO" | "DI";
 
 export interface CurrencyReward {
@@ -83,6 +85,11 @@ export interface PaymentOrder {
   webhookEventId: string | null;
   checkoutUrl?: string | null;
   error?: string | null;
+  paymentMethod?: string | null | undefined;
+  paymentReference?: string | null | undefined;
+  receiptEmailStatus?: ReceiptEmailStatus | null | undefined;
+  receiptEmailSentAt?: string | null | undefined;
+  receiptEmailError?: string | null | undefined;
 }
 
 export interface PaymentProduct {

@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Coins, Diamond, Gift, PackageOpen, Receipt, RotateCcw, Star } from "lucide-react";
-import { DemoBadge } from "@/components/common/DemoBadge";
 import { SectionHeading } from "@/components/common/PageHeader";
 import { ErrorState, LoadingState } from "@/components/common/States";
 import { SLOT_META } from "@/components/dashboard/CharacterPreview";
@@ -103,7 +102,6 @@ function TransactionsPage() {
       <SectionHeading
         title="Purchase History"
         description="View the items and game content acquired through your Civil Craft account."
-        action={<DemoBadge />}
       />
 
       {q.isPending ? (

@@ -29,6 +29,12 @@ export function isPayMongoConfigured(): boolean {
   }
 }
 
+/** Determines whether PayMongo is operating in test mode (default). */
+export function isPayMongoTestMode(): boolean {
+  const { secretKey } = getPayMongoConfig();
+  return secretKey.startsWith("sk_test_") || !secretKey.startsWith("sk_live_");
+}
+
 /** A hosted payment cannot start without a verified callback and explicit return origin. */
 export function requirePayMongoCheckoutReady(): PayMongoConfig {
   const config = getPayMongoConfig();

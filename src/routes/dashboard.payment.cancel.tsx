@@ -100,7 +100,7 @@ function PaymentCancelPage() {
                 ? "We cannot yet confirm the currency credit for this purchase. Do not pay again. Contact support with the order reference below so we can check it safely."
                 : isFulfilled
                   ? `${reward.rewardAmount.toLocaleString()} ${currencyLabel(reward.rewardCurrency)} were credited to your game account.`
-                  : "Closing checkout does not confirm a payment or grant currency. If you completed a simulated payment, check Transactions for its verified status before trying again."}
+                  : "Closing checkout does not confirm a payment or grant currency. Check Transactions for its verified status before trying again."}
             </p>
 
             {orderId ? (

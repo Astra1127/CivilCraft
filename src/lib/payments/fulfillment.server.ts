@@ -19,6 +19,7 @@ import {
   repairGameCoinOrder,
   withLegacyCoinGate,
 } from "../game-wallet/index.server.ts";
+import { sendPurchaseReceiptEmail } from "../email/purchase-receipt.server.ts";
 
 export function getCoinsCurrencyCode(): string {
   const code = (process.env["PLAYFAB_COINS_CURRENCY_CODE"] || "CO").trim().toUpperCase();
@@ -337,6 +338,16 @@ export async function processPayMongoWebhook(
       throw new CoinGrantReviewRequired();
     if (order.status === "fulfilled") {
       await markEventProcessed(event.id, order.orderId);
+      if (order.receiptEmailStatus !== "sent" && !order.receiptEmailSentAt) {
+        try {
+          await sendPurchaseReceiptEmail({ order, paymentSession: verifiedSession });
+        } catch (emailErr) {
+          console.error(
+            "[payment/fulfillment] Non-fatal receipt email error on idempotent retry:",
+            emailErr,
+          );
+        }
+      }
       return { status: 200, body: { success: true, idempotent: true, orderId: order.orderId } };
     }
     if (reward.rewardCurrency === "CO" && ![1, 2, 3].includes(order.coinReceiptVersion ?? 0))
@@ -365,15 +376,26 @@ export async function processPayMongoWebhook(
       const result = await withLegacyCoinGate(order.playFabId, grantLegacy);
       alreadyGranted = result.alreadyGranted;
     }
-    await updateOrderStatus(order.orderId, {
+    const updatedFulfilledOrder = await updateOrderStatus(order.orderId, {
       status: "fulfilled",
       paidAt,
       fulfilledAt: new Date().toISOString(),
       webhookEventId: event.id,
       error: null,
       fulfillmentReviewRequired: false,
+      receiptEmailStatus: "pending",
     });
     await markEventProcessed(event.id, order.orderId);
+
+    // Send purchase confirmation email after authoritative fulfillment
+    try {
+      await sendPurchaseReceiptEmail({
+        order: updatedFulfilledOrder || order,
+        paymentSession: verifiedSession,
+      });
+    } catch (emailErr) {
+      console.error("[payment/fulfillment] Non-fatal receipt email error:", emailErr);
+    }
     return {
       status: 200,
       body: {

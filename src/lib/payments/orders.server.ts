@@ -1,9 +1,22 @@
 import crypto from "node:crypto";
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
-import type { PaymentOrder } from "./types.ts";
+import type { PaymentOrder, ReceiptEmailStatus } from "./types.ts";
 
 const ORDER_PREFIX = "civilcraft.website.v1.payment-orders.";
 const EVENT_PREFIX = "civilcraft.website.v1.payment-events.";
+const RECEIPT_CLAIM_PREFIX = "civilcraft.website.v1.payment-receipt-claims.";
+
+export interface ReceiptEmailClaim {
+  orderId: string;
+  status: "sending" | "sent" | "failed";
+  updatedAt: string;
+  leaseExpiresAt?: number | undefined;
+  sentAt?: string | null | undefined;
+  error?: string | null | undefined;
+  playFabId?: string | undefined;
+  maskedEmail?: string | undefined;
+  messageId?: string | undefined;
+}
 
 export function generateOrderId(rewardCurrency = "CO"): string {
   const ts = Date.now().toString(36).toUpperCase();
@@ -69,6 +82,26 @@ export async function updateOrderStatus(
       existing.PayMongoCheckoutSessionId || updates.PayMongoCheckoutSessionId || null,
     createdAt: existing.createdAt,
     status: existing.status === "fulfilled" ? "fulfilled" : (updates.status ?? existing.status),
+    paymentMethod:
+      updates.paymentMethod !== undefined
+        ? updates.paymentMethod
+        : (existing.paymentMethod ?? null),
+    paymentReference:
+      updates.paymentReference !== undefined
+        ? updates.paymentReference
+        : (existing.paymentReference ?? null),
+    receiptEmailStatus:
+      updates.receiptEmailStatus !== undefined
+        ? updates.receiptEmailStatus
+        : (existing.receiptEmailStatus ?? null),
+    receiptEmailSentAt:
+      updates.receiptEmailSentAt !== undefined
+        ? updates.receiptEmailSentAt
+        : (existing.receiptEmailSentAt ?? null),
+    receiptEmailError:
+      updates.receiptEmailError !== undefined
+        ? updates.receiptEmailError
+        : (existing.receiptEmailError ?? null),
   };
 
   await saveOrder(updated);
@@ -98,6 +131,59 @@ export async function markEventProcessed(eventId: string, orderId: string): Prom
     processedAt: new Date().toISOString(),
   });
 
+  await playFabAdmin("Admin/SetTitleInternalData", {
+    Key: key,
+    Value: payload,
+  });
+}
+
+export async function getReceiptEmailClaim(orderId: string): Promise<ReceiptEmailClaim | null> {
+  if (!orderId || typeof orderId !== "string" || !/^[a-z0-9_-]{1,128}$/i.test(orderId)) return null;
+  const key = RECEIPT_CLAIM_PREFIX + orderId.trim();
+  try {
+    const res = await playFabAdmin("Admin/GetTitleInternalData", { Keys: [key] });
+    const data = object(res["Data"]);
+    const raw = data[key];
+    if (typeof raw !== "string" || !raw) return null;
+    return JSON.parse(raw) as ReceiptEmailClaim;
+  } catch (error) {
+    if (error instanceof AdminApiError) throw error;
+    return null;
+  }
+}
+
+export async function saveReceiptEmailClaim(claim: ReceiptEmailClaim): Promise<void> {
+  if (!claim?.orderId || typeof claim.orderId !== "string") return;
+  const key = RECEIPT_CLAIM_PREFIX + claim.orderId.trim();
+  await playFabAdmin("Admin/SetTitleInternalData", {
+    Key: key,
+    Value: JSON.stringify(claim),
+  });
+}
+
+export async function hasReceiptEmailClaim(orderId: string): Promise<boolean> {
+  const claim = await getReceiptEmailClaim(orderId);
+  if (!claim) return false;
+  if (claim.status === "sent") return true;
+  if (claim.status === "sending") {
+    return typeof claim.leaseExpiresAt === "number" && Date.now() < claim.leaseExpiresAt;
+  }
+  return false;
+}
+
+export async function recordReceiptEmailClaim(
+  orderId: string,
+  details: Record<string, unknown> = {},
+): Promise<void> {
+  if (!orderId || typeof orderId !== "string") return;
+  const key = RECEIPT_CLAIM_PREFIX + orderId.trim();
+  const payload = JSON.stringify({
+    orderId,
+    status: (details["status"] as string) || "sent",
+    claimedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...details,
+  });
   await playFabAdmin("Admin/SetTitleInternalData", {
     Key: key,
     Value: payload,

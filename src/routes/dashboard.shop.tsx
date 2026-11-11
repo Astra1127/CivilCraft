@@ -716,10 +716,6 @@ function AuthenticatedShopPage() {
                 Payments are securely handled by PayMongo, supporting QR Ph / QR payments, GCash,
                 Maya, GrabPay, BPI/UBP direct, and credit/debit cards.
               </p>
-              <div className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-xs text-foreground/90 font-medium">
-                <strong className="text-gold">TEST MODE:</strong> This shop is currently operating
-                in PayMongo Test Mode. Simulated sandbox payments do not deduct real funds.
-              </div>
             </div>
           </div>
         </div>
