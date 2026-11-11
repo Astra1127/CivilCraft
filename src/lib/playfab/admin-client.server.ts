@@ -18,6 +18,7 @@ type Operation =
   | "Server/UpdateUserInternalData"
   | "Admin/ResetPassword"
   | "Server/GetPlayerProfile"
+  | "Server/AddOrUpdateContactEmail"
   | "Server/SendEmailFromTemplate"
   | "Server/GetLeaderboard"
   | "Server/GetLeaderboardAroundUser"

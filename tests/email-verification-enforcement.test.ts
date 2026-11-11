@@ -24,6 +24,7 @@ const priorTemplate = process.env["PLAYFAB_EMAIL_VERIFICATION_TEMPLATE_ID"];
 const priorTitle = process.env["VITE_PLAYFAB_TITLE_ID"];
 
 let playFabCalls: { operation: string; body: Record<string, unknown> }[] = [];
+let rejectContactWrite = false;
 const mockProfiles = new Map<string, Record<string, unknown>>();
 
 // Setup localStorage / window mock for session persistence testing
@@ -42,6 +43,7 @@ const mockWindow = {
 
 beforeEach(() => {
   playFabCalls = [];
+  rejectContactWrite = false;
   mockProfiles.clear();
   storage.clear();
   process.env["PLAYFAB_SECRET_KEY"] = "test-secret-key";
@@ -183,6 +185,9 @@ beforeEach(() => {
     }
 
     if (op === "AddOrUpdateContactEmail") {
+      if (rejectContactWrite) {
+        return Response.json({ code: 400, error: "ContactEmailFailure" }, { status: 400 });
+      }
       return Response.json({ code: 200, data: {} });
     }
 
@@ -515,6 +520,57 @@ test("resendVerificationEmail triggers AddOrUpdateContactEmail when template ID 
   const call = playFabCalls.find((c) => c.operation === "AddOrUpdateContactEmail");
   assert.ok(call, "Expected Client/AddOrUpdateContactEmail to be called to fire PlayStream rule");
   assert.equal(call.body["EmailAddress"], "playstream@civilcraft.game");
+});
+
+test("authenticated resend repairs a missing contact using the account's registered email", async () => {
+  mockProfiles.set("A100", { PlayerId: "A100", ContactEmailAddresses: [] });
+  const response = await handlePlayerVerificationRequest(
+    new Request("https://civilcraft.test/api/player/auth/resend-verification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer unverified-ticket" },
+      body: JSON.stringify({
+        identifier: "unrelated@example.com",
+      }),
+    }),
+  );
+
+  assert.ok(response);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.match(body.message, /Verification requested/);
+  assert.deepEqual(
+    playFabCalls.filter((call) => call.operation === "AddOrUpdateContactEmail"),
+    [
+      {
+        operation: "AddOrUpdateContactEmail",
+        body: { PlayFabId: "A100", EmailAddress: "unverified@example.com" },
+      },
+    ],
+  );
+  assert.ok(!playFabCalls.some((call) => call.operation === "SendEmailFromTemplate"));
+});
+
+test("missing contact cannot be written without the account's valid ticket", async () => {
+  mockProfiles.set("A100", { PlayerId: "A100", ContactEmailAddresses: [] });
+  await assert.rejects(
+    () => resendVerificationEmail("unverified_user", "expired-ticket"),
+    (error: unknown) => error instanceof AdminApiError && error.status === 401,
+  );
+  assert.ok(
+    !playFabCalls.some((call) =>
+      ["AddOrUpdateContactEmail", "SendEmailFromTemplate"].includes(call.operation),
+    ),
+  );
+});
+
+test("a rejected contact repair reports a failure to the game", async () => {
+  mockProfiles.set("A100", { PlayerId: "A100", ContactEmailAddresses: [] });
+  rejectContactWrite = true;
+  await assert.rejects(
+    () => resendVerificationEmail("retry-contact", "unverified-ticket"),
+    (error: unknown) => error instanceof AdminApiError && error.status === 503,
+  );
+  assert.ok(!playFabCalls.some((call) => call.operation === "SendEmailFromTemplate"));
 });
 
 test("resendVerificationEmail refuses false success when neither template ID nor session ticket exists", async () => {

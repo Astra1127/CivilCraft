@@ -26,6 +26,12 @@ const RESEND_WINDOW_MS = 10 * 60_000; // 10 minutes
 export async function getPlayerContactVerification(
   playFabId: string,
 ): Promise<PlayerVerificationStatus> {
+  return (await readPlayerContactVerification(playFabId)).status;
+}
+
+async function readPlayerContactVerification(
+  playFabId: string,
+): Promise<{ status: PlayerVerificationStatus; contactState: "present" | "missing" | "unknown" }> {
   if (!playFabId || !/^[a-f0-9]{1,32}$/i.test(playFabId)) {
     throw new AdminApiError(400, "Invalid player identifier.");
   }
@@ -45,11 +51,14 @@ export async function getPlayerContactVerification(
     const verified = status === "Confirmed";
 
     return {
-      playFabId,
-      verified,
-      ...(email ? { email } : {}),
-      maskedEmail: maskEmail(email),
-      status: status === "Confirmed" ? "Confirmed" : "Unconfirmed",
+      contactState: "present",
+      status: {
+        playFabId,
+        verified,
+        ...(email ? { email } : {}),
+        maskedEmail: maskEmail(email),
+        status: status === "Confirmed" ? "Confirmed" : "Unconfirmed",
+      },
     };
   }
 
@@ -61,20 +70,30 @@ export async function getPlayerContactVerification(
     const info = object(accountInfoResult["UserInfo"]);
     const privateInfo = object(info["PrivateInfo"]);
     const loginEmail = typeof privateInfo["Email"] === "string" ? privateInfo["Email"].trim() : "";
+    const missingContact =
+      profile["PlayerId"] === playFabId &&
+      info["PlayFabId"] === playFabId &&
+      (contacts === undefined || (Array.isArray(contacts) && contacts.length === 0));
 
     return {
-      playFabId,
-      verified: false,
-      ...(loginEmail ? { email: loginEmail } : {}),
-      maskedEmail: maskEmail(loginEmail),
-      status: "Unconfirmed",
+      contactState: missingContact ? "missing" : "unknown",
+      status: {
+        playFabId,
+        verified: false,
+        ...(loginEmail ? { email: loginEmail } : {}),
+        maskedEmail: maskEmail(loginEmail),
+        status: "Unconfirmed",
+      },
     };
   } catch {
     return {
-      playFabId,
-      verified: false,
-      maskedEmail: "your registered email address",
-      status: "Unknown",
+      contactState: "unknown",
+      status: {
+        playFabId,
+        verified: false,
+        maskedEmail: "your registered email address",
+        status: "Unknown",
+      },
     };
   }
 }
@@ -172,17 +191,14 @@ export async function resendVerificationEmail(
   }
 
   // Resolve player PlayFabId
+  let authenticatedPlayFabId: string | undefined;
   let playFabId: string | undefined;
   if (sessionTicket) {
-    try {
-      const auth = await playFabAdmin("Server/AuthenticateSessionTicket", {
-        SessionTicket: sessionTicket,
-      });
-      const id = object(auth["UserInfo"])["PlayFabId"];
-      if (typeof id === "string") playFabId = id;
-    } catch {
-      // Fallback to identifier lookup
-    }
+    const auth = await playFabAdmin("Server/AuthenticateSessionTicket", {
+      SessionTicket: sessionTicket,
+    });
+    const id = object(auth["UserInfo"])["PlayFabId"];
+    if (typeof id === "string") authenticatedPlayFabId = playFabId = id;
   }
 
   if (!playFabId) {
@@ -220,7 +236,7 @@ export async function resendVerificationEmail(
   }
 
   // Check if player is already verified
-  const status = await getPlayerContactVerification(playFabId);
+  const { status, contactState } = await readPlayerContactVerification(playFabId);
   if (status.verified) {
     return {
       success: true,
@@ -232,15 +248,30 @@ export async function resendVerificationEmail(
 
   // Send verification email using PlayFab template if configured, or trigger via PlayStream
   const templateId = process.env["PLAYFAB_EMAIL_VERIFICATION_TEMPLATE_ID"]?.trim();
-  let emailDispatched = false;
+  let requested = false;
 
-  if (templateId) {
+  if (contactState === "missing" && playFabId === authenticatedPlayFabId && status.email) {
+    const loginEmail = z.string().email().max(255).safeParse(status.email);
+    if (!loginEmail.success)
+      throw new AdminApiError(503, "Verification contact could not be set up.");
+    // Use the account's own login email. Setting the contact triggers the verification rule.
+    await playFabAdmin("Server/AddOrUpdateContactEmail", {
+      PlayFabId: playFabId,
+      EmailAddress: loginEmail.data,
+    });
+    requested = true;
+  } else if (templateId && contactState === "present") {
     await playFabAdmin("Server/SendEmailFromTemplate", {
       PlayFabId: playFabId,
       EmailTemplateId: templateId,
     });
-    emailDispatched = true;
-  } else if (sessionTicket && status.email) {
+    requested = true;
+  } else if (
+    sessionTicket &&
+    playFabId === authenticatedPlayFabId &&
+    status.email &&
+    contactState === "present"
+  ) {
     // Re-trigger PlayStream com.playfab.player_updated_contact_email via Client API
     const titleId = adminGameConfig().titleId;
     const clientRes = await fetch(
@@ -255,12 +286,10 @@ export async function resendVerificationEmail(
         cache: "no-store",
       },
     );
-    if (clientRes.ok) {
-      emailDispatched = true;
-    }
+    requested = clientRes.ok;
   }
 
-  if (!emailDispatched) {
+  if (!requested) {
     throw new AdminApiError(
       503,
       "Unable to resend verification email automatically. Please sign in with your credentials to verify your account or contact support.",
@@ -274,7 +303,7 @@ export async function resendVerificationEmail(
 
   return {
     success: true,
-    message: `Verification link sent to ${status.maskedEmail}. Please check your inbox.`,
+    message: `Verification requested for ${status.maskedEmail}. Please check your inbox.`,
     cooldownSeconds: 60,
   };
 }
@@ -322,7 +351,11 @@ export async function handlePlayerVerificationRequest(request: Request): Promise
       if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
       const body = await smallBody(request);
       const parsed = resendSchema.parse(body);
-      const result = await resendVerificationEmail(parsed.identifier, parsed.sessionTicket);
+      const ticket =
+        request.headers.get("authorization")?.match(/^Bearer (\S+)$/)?.[1] ?? parsed.sessionTicket;
+      if (ticket && ticket.length > 4096)
+        return json({ error: "Player sign-in is required." }, 401);
+      const result = await resendVerificationEmail(parsed.identifier, ticket);
       return json(result);
     }
 
