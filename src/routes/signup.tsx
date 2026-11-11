@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { Check, Eye, EyeOff, HardHat, MailCheck, X } from "lucide-react";
+import { ArrowLeft, Check, Eye, EyeOff, HardHat, MailCheck, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -11,7 +11,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
-import { CURRENT_PRIVACY_VERSION, CURRENT_TERMS_VERSION, passwordRules } from "@/lib/playfab";
+import {
+  CURRENT_PRIVACY_VERSION,
+  CURRENT_TERMS_VERSION,
+  maskEmail,
+  passwordRules,
+} from "@/lib/playfab";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/signup")({
@@ -75,6 +80,47 @@ function SignupPage() {
   const [pending, setPending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
+  const [sessionTicket, setSessionTicket] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+  const [resending, setResending] = useState(false);
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  const handleResendVerification = async () => {
+    if (!registeredEmail || cooldown > 0 || resending) return;
+    setResending(true);
+    try {
+      const res = await fetch("/api/player/auth/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: registeredEmail,
+          ...(sessionTicket ? { sessionTicket } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Unable to resend verification email.");
+      }
+      if (data.alreadyVerified) {
+        toast.success("Your email is already verified! You can sign in now.");
+        navigate({ to: "/login", search: { verified: true } });
+      } else {
+        toast.success(data.message || "Verification email sent. Please check your inbox.");
+        setCooldown(data.cooldownSeconds ?? 60);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to resend verification link.");
+    } finally {
+      setResending(false);
+    }
+  };
 
   useEffect(() => {
     if (isAuthenticated) navigate({ to: "/dashboard", replace: true });
@@ -107,6 +153,7 @@ function SignupPage() {
         policyAcceptedAt: new Date().toISOString(),
       });
       setRegisteredEmail(result.email);
+      if (result.sessionTicket) setSessionTicket(result.sessionTicket);
       toast.success("Account created — check your email to verify it");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create account");
@@ -177,17 +224,61 @@ function SignupPage() {
 
             {registeredEmail ? (
               <div className="mt-6 space-y-5">
-                <div className="panel flex flex-col items-center gap-2 border-gold/60 px-5 py-10 text-center">
-                  <MailCheck className="h-10 w-10 text-gold" aria-hidden="true" />
-                  <h1 className="font-display text-2xl">Verify your email</h1>
-                  <p className="max-w-sm text-sm text-muted-foreground">
-                    We sent a verification link to <strong>{registeredEmail}</strong>. Confirm your
-                    address, then sign in to open your engineer dashboard.
+                <div className="panel flex flex-col items-center gap-3 border-gold/60 p-6 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gold/15 text-gold">
+                    <MailCheck className="h-6 w-6" aria-hidden="true" />
+                  </div>
+                  <h1 className="font-display text-2xl">Verify Your Email First!</h1>
+                  <p className="max-w-md text-sm text-muted-foreground">
+                    Your Civil Craft account has been created, but your email address has not yet
+                    been verified.
+                  </p>
+                  <p className="max-w-md text-sm text-muted-foreground">
+                    We sent an official verification link to your email address. Open that email and
+                    click the verification link to activate your account. Once verified, you can
+                    return here and sign in.
+                  </p>
+                  <div className="rounded-lg border border-gold/40 bg-gold/10 px-3.5 py-1.5 font-mono text-sm font-semibold text-foreground">
+                    {maskEmail(registeredEmail)}
+                  </div>
+                  <p className="max-w-md text-xs text-muted-foreground">
+                    Please check your inbox. If you don't see the email within a few minutes, be
+                    sure to check your Spam or Junk folder.
                   </p>
                 </div>
-                <Button asChild variant="gold" size="lg" className="w-full">
-                  <Link to="/login">Go to Login</Link>
-                </Button>
+
+                <div className="space-y-3">
+                  <Button
+                    type="button"
+                    variant="gold"
+                    size="lg"
+                    className="w-full"
+                    onClick={handleResendVerification}
+                    disabled={resending || cooldown > 0}
+                  >
+                    <RefreshCw
+                      className={cn("mr-2 h-4 w-4", resending && "animate-spin")}
+                      aria-hidden="true"
+                    />
+                    {resending
+                      ? "Sending Link…"
+                      : cooldown > 0
+                        ? `Resend in ${cooldown}s`
+                        : "Resend Verification Email"}
+                  </Button>
+
+                  <Button asChild variant="outline" size="lg" className="w-full">
+                    <Link to="/login">
+                      <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
+                      Go to Login
+                    </Link>
+                  </Button>
+                </div>
+
+                <p className="text-center text-xs text-muted-foreground">
+                  Already clicked the link in your email? Go to login to access your Player
+                  Dashboard.
+                </p>
               </div>
             ) : (
               <>

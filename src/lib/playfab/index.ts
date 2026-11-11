@@ -16,9 +16,11 @@ import {
   requestPasswordReset as sendRecoveryEmail,
   getStoredPlayer,
   signOutPlayer,
+  EmailVerificationRequiredError,
   CURRENT_TERMS_VERSION,
   CURRENT_PRIVACY_VERSION,
 } from "./auth";
+export { maskEmail } from "./contact-email";
 import {
   PlayFabError,
   currentSessionTicket,
@@ -74,7 +76,7 @@ import type {
 } from "./types";
 
 export * from "./types";
-export { PlayFabError, playFabConfig, demoMode, getVirtualCurrency };
+export { PlayFabError, EmailVerificationRequiredError, playFabConfig, demoMode, getVirtualCurrency };
 export { CURRENT_TERMS_VERSION, CURRENT_PRIVACY_VERSION };
 export type { AuthScope, PlayFabSession };
 

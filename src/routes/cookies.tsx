@@ -63,7 +63,7 @@ function CookiesPage() {
         actions={
           <div className="flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3.5 py-1 text-xs font-semibold text-gold">
             <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Last Updated: October 30, 2026</span>
+            <span>Last Updated: November 10, 2026</span>
           </div>
         }
       />
@@ -103,6 +103,11 @@ function CookiesPage() {
                 </Link>
                 ), your browser uses small amounts of local memory to help the website operate
                 smoothly. These technologies include standard browser cookies and local web storage.
+              </p>
+              <p>
+                This policy applies specifically to the Civil Craft website and its browser-based
+                features. Storage and data processing within the Civil Craft mobile game may be
+                covered by our Privacy Policy or a separate in-game privacy notice.
               </p>
               <p>
                 We believe in straightforward transparency. This policy explains what information is
@@ -173,9 +178,10 @@ function CookiesPage() {
                   <div className="text-xs sm:text-sm">
                     <p className="font-semibold text-foreground">A Simple Storage Notice</p>
                     <p className="text-muted-foreground mt-0.5">
-                      Our small notice explains browser storage without blocking access. Clicking
-                      &ldquo;Got It&rdquo; acknowledges the notice; it does not give consent to
-                      optional tracking or accept all cookies.
+                      Our notice explains browser storage without blocking site access. The
+                      &ldquo;Got It&rdquo; button acknowledges that the notice has been displayed;
+                      it does not serve as consent to optional tracking or unrelated data
+                      processing.
                     </p>
                   </div>
                 </div>
@@ -213,18 +219,22 @@ function CookiesPage() {
                   <p className="text-xs sm:text-sm text-foreground/90 leading-relaxed">
                     <strong>How it is used:</strong> Keeps you securely signed in to your player
                     account while you browse the dashboard, review your bridge scores, and inspect
-                    your cosmetics. Without this storage, you would have to re-enter your password
-                    on every page you open. It also notices when your session has expired so you
-                    know when to sign in again.
+                    your cosmetics. Without this storage, you would have to re-enter your
+                    credentials on every page. It also maintains administrative security sessions
+                    and notices when your login session has expired so you know when to sign in
+                    again.
                   </p>
                   <div className="flex flex-wrap gap-4 pt-1 text-xs text-muted-foreground border-t border-border/60">
                     <p>
-                      <strong className="text-foreground">Lifespan:</strong> Stored securely in your
-                      browser until you click &ldquo;Sign Out&rdquo; or your session expires.
+                      <strong className="text-foreground">Lifespan:</strong> Player login sessions
+                      remain in your browser local storage until you click &ldquo;Sign Out&rdquo;,
+                      an expiration is detected, or browser site data is cleared. Administrative
+                      session cookies expire after 8 hours.
                     </p>
                     <p>
                       <strong className="text-foreground">Can it be disabled?</strong> Essential for
-                      account features; the dashboard cannot function without it.
+                      account features; the authenticated player dashboard cannot function without
+                      it.
                     </p>
                   </div>
                 </div>
@@ -242,18 +252,21 @@ function CookiesPage() {
                   </div>
                   <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                     <strong>How it is used:</strong> Remembers your preferred website display
-                    options, such as whether the dashboard sidebar is expanded or collapsed, and
-                    caches local level information so pages load faster on return visits.
+                    options, such as whether the dashboard sidebar is expanded or collapsed, keeps a
+                    local record of your cookie notice acknowledgment so the prompt does not
+                    reappear unnecessarily, and remembers which notification alerts you have already
+                    read.
                   </p>
                   <div className="flex flex-wrap gap-4 pt-1 text-xs text-muted-foreground border-t border-border/60">
                     <p>
-                      <strong className="text-foreground">Lifespan:</strong> Interface preference
-                      cookies generally last for about 7 days; cached display data remains until
-                      cleared.
+                      <strong className="text-foreground">Lifespan:</strong> The sidebar layout
+                      cookie is set for up to 7 days. Preference records in browser local storage
+                      remain until you clear your browser site data or an updated policy version is
+                      published.
                     </p>
                     <p>
                       <strong className="text-foreground">Can it be disabled?</strong> Yes, through
-                      your browser settings, though your sidebar layout may reset to default.
+                      your browser settings, though your layout preferences will reset to default.
                     </p>
                   </div>
                 </div>
@@ -272,7 +285,8 @@ function CookiesPage() {
                   <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
                     <strong>How it is used:</strong> Holds short-term viewing options while you
                     actively browse (such as your chosen table row density in administrative views).
-                    It does not follow you across pages or record your personal activity.
+                    It does not follow you across different browser tabs or record personal browsing
+                    habits.
                   </p>
                   <div className="flex flex-wrap gap-4 pt-1 text-xs text-muted-foreground border-t border-border/60">
                     <p>
@@ -294,24 +308,27 @@ function CookiesPage() {
                 4. Classification Under Philippine Privacy Law
               </h2>
               <p>
-                In accordance with{" "}
-                <strong>Republic Act No. 10173 (Philippine Data Privacy Act of 2012)</strong> and
-                guidance issued by the
-                <strong>National Privacy Commission (NPC)</strong>, digital storage is evaluated
-                based on its necessity to the service requested by the user:
+                Under the Philippine Data Privacy Act of 2012 (Republic Act No. 10173), Civil Craft
+                aims to follow the principles of transparency, legitimate purpose, and
+                proportionality when using cookies and browser storage.
+              </p>
+              <p>
+                Our website explains the purpose of each storage category and uses essential storage
+                only when necessary to provide requested account features. The &ldquo;Got It&rdquo;
+                button acknowledges that the notice has been displayed; it does not serve as consent
+                to optional tracking or unrelated data processing.
               </p>
               <ul className="list-disc list-inside space-y-2 pl-1 text-xs sm:text-sm">
                 <li>
-                  <strong className="text-foreground">Strictly Necessary Exemption:</strong> Because
-                  Essential Storage is strictly required to fulfill your explicit request to sign
-                  in, verify your identity, and access your account, separate pop-up cookie consent
-                  banners are not mandated under applicable privacy principles.
+                  <strong className="text-foreground">Proportionate to Requested Features:</strong>{" "}
+                  Data stored on your device is strictly limited to what is reasonably needed to
+                  maintain your authenticated player session, preserve interface preferences, and
+                  secure website administration.
                 </li>
                 <li>
                   <strong className="text-foreground">Zero Cross-Site Tracking:</strong> Functional
                   and Temporary Storage operate solely on this website. They are never shared with
-                  advertising networks or data brokers, and they do not track your activity on other
-                  sites.
+                  advertising networks, data brokers, or external analytics firms.
                 </li>
               </ul>
             </section>
@@ -355,8 +372,8 @@ function CookiesPage() {
               </ul>
               <div className="rounded-lg border border-border bg-secondary/40 p-3.5 text-xs text-muted-foreground">
                 <strong>Player Note:</strong> Clearing your browser data will simply sign you out on
-                that device. Your bridge designs, unlocked achievements, and coins remain safely
-                stored in your cloud account.
+                that device and reset local viewing preferences. Your bridge designs, unlocked
+                achievements, and virtual coin balances remain safely stored on our cloud servers.
               </div>
             </section>
 

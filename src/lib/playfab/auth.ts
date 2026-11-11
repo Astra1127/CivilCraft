@@ -69,6 +69,75 @@ function toIdentity(result: LoginResult, fallbackEmail?: string): PlayerIdentity
   };
 }
 
+export class EmailVerificationRequiredError extends Error {
+  readonly maskedEmail: string;
+  readonly playFabId: string;
+  readonly sessionTicket: string;
+  readonly identifier: string;
+
+  constructor(params: {
+    maskedEmail: string;
+    playFabId: string;
+    sessionTicket: string;
+    identifier: string;
+    message?: string | undefined;
+  }) {
+    super(
+      params.message ||
+        "Please verify your email address before signing in. Check your inbox for the verification link.",
+    );
+    this.name = "EmailVerificationRequiredError";
+    this.maskedEmail = params.maskedEmail;
+    this.playFabId = params.playFabId;
+    this.sessionTicket = params.sessionTicket;
+    this.identifier = params.identifier;
+  }
+}
+
+async function assertPlayerEmailVerified(
+  sessionTicket: string,
+  playFabId: string,
+  identifier: string,
+): Promise<void> {
+  const res = await fetch("/api/player/auth/verify-session", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionTicket}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ sessionTicket }),
+  });
+  if (res.ok) {
+    const data = (await res.json()) as {
+      verified?: boolean;
+      maskedEmail?: string;
+    };
+    if (data && data.verified === false) {
+      throw new EmailVerificationRequiredError({
+        maskedEmail: data.maskedEmail || identifier,
+        playFabId,
+        sessionTicket,
+        identifier,
+      });
+    }
+    return;
+  }
+  const errData = (await res.json().catch(() => ({}))) as { error?: string };
+  if (res.status === 403 || errData.error?.toLowerCase().includes("verify")) {
+    throw new EmailVerificationRequiredError({
+      maskedEmail: identifier,
+      playFabId,
+      sessionTicket,
+      identifier,
+      ...(errData.error ? { message: errData.error } : {}),
+    });
+  }
+  throw new PlayFabError(
+    errData.error || "Unable to verify email verification status. Please try again.",
+    "service",
+  );
+}
+
 function persist(result: LoginResult, identity: PlayerIdentity) {
   writeSession("player", {
     identity,
@@ -86,7 +155,9 @@ export async function loginWithEmail(email: string, password: string): Promise<P
     Password: password,
     InfoRequestParameters: INFO_REQUEST,
   });
-  const identity = toIdentity(result, email.trim());
+  const cleanEmail = email.trim();
+  await assertPlayerEmailVerified(result.SessionTicket, result.PlayFabId, cleanEmail);
+  const identity = toIdentity(result, cleanEmail);
   persist(result, identity);
   await syncContactEmail(callPlayFab, {
     playFabId: result.PlayFabId,
@@ -107,6 +178,8 @@ export async function loginWithUsername(
     Password: password,
     InfoRequestParameters: INFO_REQUEST,
   });
+  const cleanUsername = username.trim();
+  await assertPlayerEmailVerified(result.SessionTicket, result.PlayFabId, cleanUsername);
   const identity = toIdentity(result);
   persist(result, identity);
   await syncContactEmail(callPlayFab, {
@@ -211,12 +284,14 @@ export async function registerPlayer({
       }
     }
 
-    if (emailUpdates) {
-      await savePlayerEmailPreference(result.SessionTicket, true);
-    }
+    await savePlayerEmailPreference(result.SessionTicket, Boolean(emailUpdates));
   }
   clearSession("player");
-  return { email: email.trim(), verificationRequired: true };
+  return {
+    email: email.trim(),
+    verificationRequired: true,
+    ...(result?.SessionTicket ? { sessionTicket: result.SessionTicket } : {}),
+  };
 }
 
 /** Client/SendAccountRecoveryEmail */

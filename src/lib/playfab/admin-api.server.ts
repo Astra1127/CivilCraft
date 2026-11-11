@@ -1,4 +1,5 @@
 import { contactSettingsRequest } from "../cms/contact-settings.server.ts";
+import { handleAdminPoliciesRequest } from "../cms/policies.server.ts";
 import {
   getLeaderboardVisibility,
   saveLeaderboardVisibility,
@@ -83,6 +84,8 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
     if (contentResponse) return contentResponse;
     const faqResponse = await faqRequest(request, true);
     if (faqResponse) return faqResponse;
+    const policiesResponse = await handleAdminPoliciesRequest(request, session.user);
+    if (policiesResponse) return policiesResponse;
     if (path === "/api/admin/analytics" && request.method === "GET")
       return json(await getAdminAnalytics(config, session.user.id));
     if (path === "/api/admin/bug-reports") {

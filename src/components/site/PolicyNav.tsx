@@ -54,12 +54,11 @@ export function DraftReviewNotice({ documentTitle }: { documentTitle: string }) 
         <span>Academic Project Review Draft</span>
       </div>
       <p className="text-muted-foreground text-xs leading-relaxed">
-        This <strong>{documentTitle}</strong> is an institutional draft prepared for the CivilCraft:
-        Bridge Edition student capstone research project. It accurately reflects the actual
-        technical implementation, data flows, and backend services in compliance with{" "}
-        <strong>Republic Act No. 10173 (Philippine Data Privacy Act of 2012)</strong>. Final
-        commercial, licensing, and institutional provisions remain subject to formal review and
-        approval by the academic research team and institutional advisors.
+        This document is an academic review draft prepared for the Civil Craft: Bridge Edition
+        student capstone project. It describes the project&apos;s intended policies and practices
+        based on the information currently available. The final version is subject to technical
+        verification and review by the academic research team, institutional advisers, and
+        appropriate privacy or legal professionals.
       </p>
     </div>
   );

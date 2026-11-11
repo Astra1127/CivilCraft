@@ -11,6 +11,8 @@ import { handleLeaderboardRequest } from "./lib/playfab/leaderboard.server";
 import { contentRequest } from "./lib/cms/content.server";
 import { faqRequest } from "./lib/cms/faq.server";
 import { handlePlayerBugRequest } from "./lib/playfab/bug-reports.server";
+import { handlePlayerVerificationRequest } from "./lib/playfab/player-verification.server";
+import { handlePublicPoliciesRequest } from "./lib/cms/policies.server";
 import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
@@ -64,6 +66,10 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const playerVerificationResponse = await handlePlayerVerificationRequest(request);
+      if (playerVerificationResponse) return playerVerificationResponse;
+      const publicPoliciesResponse = await handlePublicPoliciesRequest(request);
+      if (publicPoliciesResponse) return publicPoliciesResponse;
       const messages = await handlePlayerMessages(request);
       if (messages) return messages;
       const gameWalletResponse = await handleGameWalletRequest(request);

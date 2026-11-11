@@ -287,6 +287,8 @@ export interface RegisterResult {
   email: string;
   /** True when the backend requires the player to confirm their email first. */
   verificationRequired: boolean;
+  /** Ephemeral session ticket available in-memory on the registration view to trigger resends. Never stored in browser session. */
+  sessionTicket?: string | undefined;
 }
 
 /* ------------------------------------------------------------- inventory */

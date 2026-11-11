@@ -2,6 +2,7 @@ import { useContactSettings, emptyContactSettings } from "@/lib/cms/contact-sett
 import { contactSettingsSchema } from "@/lib/cms/contact-settings-types";
 import { ErrorState } from "@/components/common/States";
 import { AdminIntegrations } from "@/components/admin/AdminIntegrations";
+import { AdminPolicies } from "@/components/admin/AdminPolicies";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { createFileRoute } from "@tanstack/react-router";
 import { Globe, Search, Share2, Building2 } from "lucide-react";
@@ -17,8 +18,15 @@ import { logActivity, setCmsState, useCms } from "@/lib/cms/store";
 import type { SiteSettings } from "@/lib/cms/types";
 
 export const Route = createFileRoute("/admin/settings")({
-  validateSearch: (search: Record<string, unknown>): { tab?: "general" | "integrations" } => ({
-    tab: search["tab"] === "integrations" ? "integrations" : "general",
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { tab?: "general" | "integrations" | "policies" } => ({
+    tab:
+      search["tab"] === "integrations"
+        ? "integrations"
+        : search["tab"] === "policies"
+          ? "policies"
+          : "general",
   }),
   component: AdminSettings,
 });
@@ -74,7 +82,7 @@ function AdminSettings() {
           </StatusPill>
         }
         actions={
-          tab !== "integrations" ? (
+          tab === "general" ? (
             <Button
               variant="gold"
               size="sm"
@@ -90,13 +98,26 @@ function AdminSettings() {
       <Tabs
         value={tab ?? "general"}
         onValueChange={(value) =>
-          void navigate({ search: { tab: value === "integrations" ? "integrations" : "general" } })
+          void navigate({
+            search: {
+              tab:
+                value === "integrations"
+                  ? "integrations"
+                  : value === "policies"
+                    ? "policies"
+                    : "general",
+            },
+          })
         }
       >
         <TabsList aria-label="Settings sections">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="policies">Policies</TabsTrigger>
         </TabsList>
+        <TabsContent value="policies">
+          <AdminPolicies />
+        </TabsContent>
         <TabsContent value="integrations">
           <AdminIntegrations />
         </TabsContent>

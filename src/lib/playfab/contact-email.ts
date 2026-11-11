@@ -11,6 +11,28 @@ export interface ContactProfile {
   ContactEmailAddresses?: { EmailAddress?: string }[];
 }
 
+/** Safely masks an email address for display in the UI (e.g. j***5@g***l.com) */
+export function maskEmail(email?: string | null): string {
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    return "your registered email address";
+  }
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return "your registered email address";
+
+  const maskedLocal =
+    local.length <= 2 ? local[0] + "***" : local[0] + "***" + local[local.length - 1];
+
+  const domainParts = domain.split(".");
+  const maskedDomain = domainParts
+    .map((part) => {
+      if (part.length <= 2) return (part[0] ?? "") + "***";
+      return part[0] + "***" + part[part.length - 1];
+    })
+    .join(".");
+
+  return `${maskedLocal}@${maskedDomain}`;
+}
+
 /** Called only after successful authentication, never during session restoration/render. */
 export async function syncContactEmail(
   call: ClientCall,
