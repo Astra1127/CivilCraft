@@ -326,26 +326,35 @@ test("settings route places Email updates above Delete Account and hides preview
   assert.ok(content.includes('aria-hidden="true"'), "preview-only controls have aria-hidden");
 });
 
-test("account settings player UI provides enabled, secure deletion flow with confirmation and financial notice", async () => {
+test("account settings player UI simplifies deletion and truthfully reflects unavailable backend status", async () => {
   const fs = await import("node:fs/promises");
   const path = await import("node:path");
 
   const componentPath = path.resolve(process.cwd(), "src/components/dashboard/AccountSettings.tsx");
   const content = await fs.readFile(componentPath, "utf-8");
 
-  // Verify player-facing UI has enabled Delete Account action
-  assert.ok(content.includes("Permanently Delete Civil Craft Account"), "Shows deletion dialog title");
-  assert.ok(content.includes('variant="destructive"'), "Provides destructive deletion action");
-  assert.ok(content.includes("DELETE"), "Requires explicit DELETE confirmation phrase");
-  assert.ok(content.includes("deletePlayerAccount"), "Connects to deletePlayerAccount API");
-
-  // Verify financial compliance notice is explained to player
+  // Verify player-facing UI shows unavailable badge & action
+  assert.ok(content.includes("Currently Unavailable"), "Shows Currently Unavailable badge");
   assert.ok(
-    content.includes("Financial & Legal Compliance Notice") ||
-      content.includes("Financial &amp; Legal Compliance Notice"),
-    "Explains financial record retention notice",
+    content.includes("Delete Account (Unavailable)"),
+    "Action clearly indicates unavailable status",
   );
-  assert.ok(content.includes("PayMongo"), "References PayMongo independent records");
+
+  // Verify dialog states no request was submitted or processed
+  assert.ok(
+    content.includes("No deletion request has been submitted or processed"),
+    "Dialog truthfully states no request was submitted or processed",
+  );
+
+  // Verify false claims are NOT present
+  assert.ok(
+    !content.includes("Identity Reauthenticated & Request Submitted"),
+    "Must not claim request was submitted",
+  );
+  assert.ok(
+    !content.includes("A permanent account deletion request has been registered"),
+    "Must not claim request was registered",
+  );
 
   // Verify developer jargon (SQL trigger names) is removed from player component
   assert.ok(

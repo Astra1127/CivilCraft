@@ -1,5 +1,4 @@
 import { AdminApiError, adminGameConfig, object, playFabAdmin } from "./admin-client.server.ts";
-import { isAccountDeleted } from "./account-deletion-storage.server.ts";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
@@ -20,11 +19,7 @@ export async function handleCharacterPortrait(request: Request): Promise<Respons
   // No caller-supplied identity or filename is supported.
   if (url.search) return empty(400);
   try {
-    const auth = await playFabAdmin("Server/AuthenticateSessionTicket", { SessionTicket: ticket });
-    const playerId = object(auth["UserInfo"])["PlayFabId"];
-    if (typeof playerId !== "string" || !playerId || (await isAccountDeleted(playerId))) {
-      return empty(401);
-    }
+    await playFabAdmin("Server/AuthenticateSessionTicket", { SessionTicket: ticket });
     const { titleId } = adminGameConfig();
     const api = async (path: string, body: unknown, auth: Record<string, string>) => {
       const response = await fetch(`https://${titleId}.playfabapi.com/${path}`, {

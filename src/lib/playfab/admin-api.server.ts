@@ -33,7 +33,6 @@ import {
   getProductById,
   seedMissingDefaultProducts,
 } from "../payments/products.server.ts";
-import { adminRetryAccountDeletion } from "./account-deletion.server.ts";
 
 const headers = {
   "Cache-Control": "no-store, private",
@@ -262,15 +261,6 @@ export async function handlePlayFabAdminRequest(request: Request): Promise<Respo
           options,
         ),
       );
-    }
-    const retryDeletionMatch = path.match(
-      /^\/api\/admin\/players\/([a-f0-9]{1,32})\/(?:retry-deletion|recover-deletion)$/i,
-    );
-    if (retryDeletionMatch) {
-      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
-      const targetPlayerId = retryDeletionMatch[1]!;
-      const result = await adminRetryAccountDeletion(targetPlayerId, session.user.id);
-      return json(result);
     }
     const match = path.match(/^\/api\/admin\/players\/([a-f0-9]{1,32})(?:\/(ban|unban))?$/i);
     if (!match) return json({ error: "Endpoint not found." }, 404);

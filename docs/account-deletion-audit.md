@@ -1,24 +1,26 @@
 # CivilCraft Account Deletion & Data Dependency Security Audit
 
-**Document Version:** 2.1.0  
-**Target Environment:** CivilCraft Production Architecture (PlayFab Title `17FA03` + PostgreSQL Database + Unity Client + Vercel Serverless)  
-**Audience:** Backend Engineers, Security Auditors, Compliance Reviewers, Operations Team
+**Document Version:** 1.0.0  
+**Target Environment:** CivilCraft Production Architecture (PlayFab Title `17FA03` + PostgreSQL Database + Unity Client)  
+**Audience:** Backend Engineers, Security Auditors, Compliance Reviewers  
 
 ---
 
 ## 1. Executive Summary
 
-This document details the multi-system data dependency security audit and authoritative implementation for player account deletion in CivilCraft.
+This document details the multi-system data dependency security audit conducted for account deletion in CivilCraft. 
 
-Account deletion coordinates account credentials, encrypted game saves, level progression, real-time leaderboards, virtual currency ledgers, and durable deletion tracking across independent systems:
-- Microsoft PlayFab Master Player Accounts & Entity storage.
-- External durable PostgreSQL database (`civilcraft_website_account_deletions`).
-- Financial ledgers under Philippine National Internal Revenue Code (NIRC) Section 235 as amended by Republic Act No. 11976 (Ease of Paying Taxes / EOPT Act).
-- Unity game client local data wipe on session revocation.
+Because CivilCraft coordinates account credentials, encrypted game saves, level progression, real-time leaderboards, virtual currency ledgers, and local mobile storage across independent systems, automated self-service account deletion cannot be safely executed via client-side endpoints. 
+
+In particular, the PostgreSQL virtual currency database enforces immutable audit triggers that strictly reject SQL `DELETE` operations, while the Unity Android client retains local save files that require an explicit client-side wipe protocol.
+
+Consequently, the player-facing Player Settings dashboard displays an honest **"Currently Unavailable"** status for account deletion, avoiding any misleading or simulated request submission until the coordinated multi-system backend erasure pipeline is implemented.
 
 ---
 
-## 2. Multi-System Architecture Matrix
+## 2. Multi-System Architecture Audit
+
+CivilCraft player data is distributed across six distinct architectural layers:
 
 ```
 +-----------------------------------------------------------------------------------+
@@ -33,174 +35,84 @@ Account deletion coordinates account credentials, encrypted game saves, level pr
 | playerSaveData    |           | Levels, XP, Keys  |           | Currency Accounts |
 | characterPortrait |           | Statistics/Leader |           | Purchase Receipts |
 +-------------------+           +-------------------+           +-------------------+
-         |                               |                               |
-+-------------------+           +-------------------+           +-------------------+
-|  5. Unity Client  |           | 6. Durable Storage|           | 7. Client Session |
-| persistentDataPath|           | PostgreSQL Record |           | Revoked Ticket    |
-| PlayerPrefs       |           | Lock & Webhooks   |           | Cleared Storage   |
-+-------------------+           +-------------------+           +-------------------+
+         |                                                               |
++-------------------+                                           +-------------------+
+|  5. Unity Client  |                                           | 6. Client Session |
+| persistentDataPath|                                           | LocalStorage      |
+| PlayerPrefs       |                                           | SessionTicket     |
++-------------------+                                           +-------------------+
 ```
 
 ### Layer 1: Authentication & Credentials (PlayFab Master Account)
-- **Data Covered:** Master Player Account ID, username, login email, password hash, device IDs, contact email addresses.
-- **API Invocation:** `Admin/DeleteMasterPlayerAccount`.
-- **Asynchronous Reality:** PlayFab queues master player account deletion and returns an immediate `{ JobReceiptId: string }`. The master account is stripped of credentials, but asynchronous background purging across studio titles takes time.
-- **Authoritative Signal:** Completion is confirmed strictly when PlayFab fires the documented PlayStream GDPR event `title_deleted_master_player` matching `ReceiptId` and `PlayerId`.
+- **Data Covered:** Master Player Account ID, username, login email, password hash, device IDs, contact email addresses, account status (active/banned).
+- **Technical Constraint:** The PlayFab Client API provides no endpoint for account deletion. Deletion requires privileged invocation of `Admin/DeleteMasterPlayerAccount` using the `PLAYFAB_SECRET_KEY`.
+- **Security Requirement:** Secret keys must never be exposed to the browser. Deletion must be executed through a secured, authenticated server endpoint.
 
 ### Layer 2: Game Saves & Customization (PlayFab Title Entity Files)
-- **Data Covered:** `playerSaveData.json` (encrypted level progress, bridge geometry) and `characterPortrait.png` (avatar).
-- **Enforcement:** Purged prior to master deletion via `File/DeleteFiles` using an administrative Title Entity Token.
+- **Data Covered:** `playerSaveData.json` (encrypted level progress, bridge geometry, placed components) and `characterPortrait.png` (rendered chibi character avatar).
+- **Technical Constraint:** Entity files are stored as Title Player Account objects in PlayFab's Entity File service. Deleting the master player account without first purging entity objects can leave orphaned binary blobs in the title's storage quota.
+- **Security Requirement:** The deletion worker must invoke `File/DeleteFiles` for the player's entity context before or during master account removal.
 
 ### Layer 3: Player Progression & Almanac (PlayFab Title UserData & Statistics)
-- **Data Covered:** `UserData` keys (`CurrentLevel`, `XP`, `MapProgress`, `PolicyAgreement`, etc.) and `Statistics` (`TotalScore`, `BridgesCompleted`, `ChallengesCompleted`, `BestSingleBuildScore`).
-- **Enforcement:** UserData keys removed via `Server/UpdateUserData`; statistics reset to 0 via `Server/UpdatePlayerStatistics`.
+- **Data Covered:** `UserData` keys (`CurrentLevel`, `XP`, `MapProgress`, `EquippedCosmetics`, `AlmanacProgress`, `PolicyAgreement`, etc.) and `Statistics` (`TotalScore`, `BridgesCompleted`, `ChallengesCompleted`, `BestSingleBuildScore`).
+- **Technical Constraint:** PlayFab leaderboard rankings remain indexed in the title leaderboard even if UserData is cleared.
+- **Security Requirement:** Leaderboard statistic values must be reset or cleared before account unlinking to prevent ghost entries on global rankings.
 
 ### Layer 4: Virtual Currency & Purchases (PostgreSQL Database)
 - **Data Covered:** In-game currency accounts (`civilcraft_currency.accounts`) and purchase receipts (`civilcraft_currency.receipts`).
-- **Database Trigger Constraints:** The PostgreSQL currency database enforces immutable audit triggers (`permanent_account` on `civilcraft_currency.accounts` and `permanent_receipt` on `civilcraft_currency.receipts`) that strictly reject SQL `DELETE` operations on currency accounts and purchase receipts.
-- **Statutory Retention Basis:** Under Section 235 of the Philippine National Internal Revenue Code (NIRC), as amended by Republic Act (RA) No. 11976 (Ease of Paying Taxes / EOPT Act), commercial sales invoices and accounting records must be preserved for **five (5) years** from the return filing deadline. Furthermore, PayMongo merchant guidelines require preserving payment references for dispute defense and chargeback resolution under Bangko Sentral ng Pilipinas (BSP) banking regulations.
-- **Pseudonymization & Minimization:** Personal identifiers are replaced with deterministic hashes (`PSEUDO_PLAYER_<hash>`), and receipt claim emails are wiped (`DELETED`). Financial figures, transaction amounts, timestamps, and package references are retained for tax audits.
-- **Legal Disclaimer:** This technical data minimization implementation satisfies statutory accounting duties and does not constitute formal legal certification.
+- **Technical Blocker & Constraint:** The PostgreSQL database enforces strict financial ledger immutability via table triggers:
+  ```sql
+  -- Trigger: permanent_account on civilcraft_currency.accounts
+  CREATE OR REPLACE FUNCTION check_account_immutable() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE EXCEPTION 'Currency accounts must not be deleted';
+  END;
+  $$ LANGUAGE plpgsql;
 
-### Layer 5: Local Device Storage (Unity Android Client)
-- **Data Covered:** Local encrypted `playerSaveData.json` in `Application.persistentDataPath` and cached tokens in `PlayerPrefs`.
-- **Technical Reality:** Offline device data cannot be remotely deleted while the player's device is disconnected from the network.
-- **Enforcement:** When the device next connects to the network and launches Civil Craft, PlayFab authentication fails (`401 Unauthorized` / `AccountNotFound`), triggering the game's auth failure handler to purge local `PlayerPrefs` and save data.
+  -- Trigger: permanent_receipt on civilcraft_currency.receipts
+  CREATE OR REPLACE FUNCTION check_receipt_immutable() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE EXCEPTION 'Purchase receipts must never be deleted';
+  END;
+  $$ LANGUAGE plpgsql;
+  ```
+  Any attempt to execute an SQL `DELETE` on a player who has made a purchase or holds a currency account will abort with a fatal exception.
+- **Compliance Requirement:** Financial accounting regulations require retention of transaction records. To comply with privacy laws (GDPR/CCPA/DPA), the system must implement a **pseudonymization / anonymization** procedure rather than a hard delete:
+  - Personal identifiers (`playfab_id`, linked email, order references) must be cryptographically hashed or overwritten with an anonymous UUID (`DELETED_PLAYER_<hash>`).
+  - Purchase amounts, timestamps, and receipt tokens are preserved for tax and financial auditing without referencing identifiable individual data.
 
-### Layer 6: Durable Website Storage (PostgreSQL & Fail-Closed Protection)
-- **Data Covered:** Authoritative deletion lifecycle records (`civilcraft_website_account_deletions`), distributed locks, and completion timestamps.
-- **Production Requirement:** In production (Vercel serverless environment), local JSON files (`.data/account-deletions.json`) or in-memory stores are ephemeral and not shared across serverless instances. Production REQUIRES a verified PostgreSQL database (`CURRENCY_DATABASE_URL`).
-- **Fail-Closed Protection:** If PostgreSQL is unreachable or unconfigured in production, deletion is rejected immediately with HTTP 503 before any destructive API call or data modification can occur.
+### Layer 5: Local Device Storage (Unity Mobile Client)
+- **Data Covered:** Local encrypted `playerSaveData.json` in `Application.persistentDataPath` and cached authentication tokens in Unity's `PlayerPrefs`.
+- **Technical Constraint:** If server records are deleted while the player's Android device retains local saves, the next game launch will attempt to sync an orphaned save to a nonexistent backend account, triggering unhandled exceptions or recreating a blank account.
+- **Security Requirement:** A client-side reset protocol must be built into the Unity APK (or handled upon 404/deleted login response) to wipe local save files and clear device storage.
 
-### Layer 7: Active Browser Sessions & Cache
-- **Enforcement:** Sessions are invalidated immediately upon deletion acceptance (`logout("player")`).
-- **Secure Status Tracking:** Players receive a cryptographically signed HMAC recovery token (`createDeletionRecoveryToken`). This allows querying `/api/player/account/delete/status?token=<recoveryToken>` even after the session ticket has expired, without exposing `jobReceiptId`, player emails, or usernames.
-
----
-
-## 3. Strict 11-Step Deletion Execution Sequence
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Player as Player Browser
-    participant Web as Civil Craft Website Backend
-    participant DB as External PostgreSQL Database
-    participant PF as PlayFab Admin / Server API
-
-    Note over Web,DB: Preflight Health Check: Storage must be verified durable (fail closed)
-    Player->>Web: GET /api/player/account/delete/preflight
-    Web->>PF: Admin/GetPlayedTitleList { PlayFabId }
-    PF-->>Web: { TitleIds: ["17FA03", ...] }
-    Web-->>Player: { affectedTitleIds, hasMultipleTitles, warning }
-
-    Player->>Web: POST /api/player/account/delete (password + "DELETE")
-    Web->>PF: Step 1: Server/AuthenticateSessionTicket
-    Web->>PF: Step 1: Admin/GetUserAccountInfo & verify password credentials
-    Web->>PF: Step 2: Admin/GetPlayedTitleList
-    Note over Web: Step 3: Explicit confirmation verified
-
-    Web->>DB: Step 4: Create & persist record (status: "pending")
-    Web->>DB: Step 5: Acquire durable deletion lock (instance lease)
-
-    rect rgb(240, 245, 255)
-    Note over Web,PF: Step 6: Auxiliary Data Cleanup
-    Web->>PF: 6a. File/DeleteFiles (Entity files purged)
-    Web->>PF: 6b. Object/SetObjects (Entity objects scrubbed)
-    Web->>PF: 6c. Server/UpdateUserData & UpdatePlayerStatistics (0)
-    Web->>PF: 6d. Admin/SetTitleInternalData (Email preferences wiped)
-    Web->>PF: 6e. Admin/SetTitleInternalData (Messages disassociated)
-    Web->>DB: 6f. Pseudonymize financial orders (NIRC Sec 235 / RA 11976)
-    Web->>DB: 6g. Pseudonymize currency accounts
-    end
-
-    Web->>PF: Step 7: Admin/DeleteMasterPlayerAccount { PlayFabId }
-    PF-->>Web: HTTP 200 { JobReceiptId: "job-rcpt-..." }
-
-    Web->>DB: Step 8: Persist JobReceiptId & transition to status: "processing"
-    Web->>DB: Release durable deletion lock
-    Web-->>Player: HTTP 200 { status: "processing", recoveryToken } (No JobReceiptId leaked)
-
-    Note over PF: Step 9: PlayFab background GDPR worker purges master account data across studio titles
-
-    PF->>Web: POST /api/player/account/delete/webhook (X-PlayFab-Webhook-Secret)
-    Note over Web: Event: title_deleted_master_player
-    Web->>DB: Step 10: Match ReceiptId and PlayerId
-    Web->>DB: Step 11: Transition external record to status: "completed"
-    Web-->>PF: HTTP 200 { acknowledged: true, status: "completed" }
-```
+### Layer 6: Active Browser Sessions & Cache
+- **Data Covered:** Session tickets stored in `localStorage` (`civilcraft.session.player.v1`), cached user profile queries in `@tanstack/react-query`, and browser cookies.
+- **Security Requirement:** Upon confirmed deletion, the server must revoke the session ticket in PlayFab, and the client must call `logout("player")` and invalidate all query caches.
 
 ---
 
-## 4. Crash Recovery Procedures
+## 3. Audit Matrix Table
 
-### Scenario A: Server Crash After Step 4 (`pending` record created)
-- The external record is persisted as `status: "pending"`.
-- Upon retry, the server acquires the lock and verifies the PlayFab account status via `Admin/GetUserAccountInfo`.
-- Because the master account is still intact, the server resumes auxiliary cleanup and safely proceeds to Step 7.
-
-### Scenario B: Server Crash After Step 7 (PlayFab accepted deletion, but server crashed before Step 8 receipt persistence)
-- The external record remains in `status: "pending"` with `stepsCompleted` containing `playfab_account_deletion_called`.
-- If player or retry process calls `requestAccountDeletion`:
-  - The server queries `Admin/GetUserAccountInfo`.
-  - PlayFab returns `404 AccountNotFound` / "User not found".
-  - **Safe Recovery:** The server detects the master account is already queued/erased. It **does NOT call `Admin/DeleteMasterPlayerAccount` again**.
-  - It safely transitions the record to `status: "processing"` with recovery note: `PlayFab master player account already queued or erased. Awaiting PlayStream webhook.`
-- When the PlayFab `title_deleted_master_player` webhook arrives:
-  - If lookup by `ReceiptId` finds no record (because the crash happened before `jobReceiptId` was saved), the webhook handler falls back to matching by `PlayerId`.
-  - The webhook associates the authenticated `ReceiptId`, transitions the record to `status: "completed"`, and marks `completedAt`.
+| System | Storage Component | Data Covered | Deletion Blocker / Constraint | Required Resolution |
+|---|---|---|---|---|
+| **PlayFab Master Account** | Server-side credentials | Username, login email, password hash, device IDs | No Client API method; requires Server Secret Key (`Admin/DeleteMasterPlayerAccount`) | Server-side orchestration endpoint |
+| **PlayFab Title Entity Files** | Blob / Entity Storage | `playerSaveData.json`, `characterPortrait.png` | Orphaned storage blobs if master account is deleted first | Explicit `File/DeleteFiles` call prior to account deletion |
+| **PlayFab Title UserData** | UserData & Statistics | Progression, scores, cosmetics, policy records | Leaderboards retain statistics until cleared | Bulk UserData wipe & statistics zeroing |
+| **PostgreSQL Database** | Currency & Receipts | Account balances, transaction receipts | Database triggers (`permanent_account`, `permanent_receipt`) reject `DELETE` queries | Anonymization/pseudonymization migration pipeline |
+| **Unity Android Client** | Device Storage | Local save files, `PlayerPrefs` credentials | Device retains orphaned saves causing launch crashes | APK update with remote wipe / local clear on 401/404 |
+| **Browser Client** | LocalStorage / Cookies | `SessionTicket`, cached queries | Stale sessions and cached data | Complete session revocation & storage purge |
 
 ---
 
-## 5. PlayFab & Production Deployment Checklist
+## 4. Player Settings UI Integration Rationale
 
-> [!IMPORTANT]
-> The PlayStream webhook must be registered in the Microsoft PlayFab Game Manager by an authorized title administrator. Do not assume the webhook is live until these steps are completed.
+1. **No Simulated Deletion Requests:**  
+   Because no verified background worker or database queue currently exists to orchestrate the 6-layer deletion flow, the player dashboard must **not** claim that deletion requests are submitted, queued, or processed.
+2. **Clear "Currently Unavailable" Status:**  
+   The player interface displays an unambiguous **Currently Unavailable** status badge and notice, clearly stating that automated self-service account deletion is under development.
+3. **Player-Friendly Language:**  
+   Internal database trigger names (`permanent_account`, `permanent_receipt`), PlayFab Admin API method signatures, and schema technicalities are reserved for this developer documentation rather than exposing confusing developer jargon to players.
+4. **Reauthentication Readiness:**  
+   The reauthentication logic (`reauthenticatePlayer`) is preserved in `src/lib/playfab/account-settings.ts` and covered by automated regression tests so that when the server-side deletion pipeline is deployed, identity verification can be connected seamlessly.
 
-### Checklist Steps:
-
-1. **PostgreSQL Database Storage Initialization**
-   - Ensure `CURRENCY_DATABASE_URL` is set in the production environment variables (e.g., Vercel Project Settings).
-   - Verify connectivity to the PostgreSQL cluster.
-   - The table `civilcraft_website_account_deletions` is automatically initialized with the required schema:
-     - `playfab_id` (VARCHAR 64 PRIMARY KEY)
-     - `status` (VARCHAR 32 NOT NULL)
-     - `requested_at` (TIMESTAMPTZ NOT NULL)
-     - `job_receipt_id` (VARCHAR 128, INDEXED)
-     - `locked_at` (TIMESTAMPTZ), `locked_by` (VARCHAR 128)
-     - `steps_completed` (JSONB), `affected_title_ids` (JSONB)
-     - `pseudonymized_identifier` (VARCHAR 64)
-     - `recovery_note` (TEXT), `updated_at` (TIMESTAMPTZ)
-
-2. **Generate Secure Webhook Secret**
-   - Generate a cryptographically strong 32-byte hexadecimal secret:
-     ```bash
-     node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-     ```
-   - In Vercel Project Settings, add `PLAYFAB_WEBHOOK_SECRET` with this generated value.
-
-3. **Configure PlayFab Game Manager PlayStream Rule / Webhook**
-   - Log into [PlayFab Game Manager](https://developer.playfab.com).
-   - Select Title: **Civil Craft** (Title ID: `17FA03`).
-   - Navigate to: **Automation** > **Rules** (or **Webhooks**).
-   - Click **New Rule** / **New Webhook**.
-   - **Rule Name:** `Account Deletion Completion Webhook`
-   - **Event Namespace:** `com.playfab`
-   - **Event Name:** `title_deleted_master_player`
-   - **Action Type:** `Send Webhook` (or `Call Webhook`)
-   - **Endpoint URL:** `https://<your-production-domain>/api/player/account/delete/webhook`
-   - **HTTP Headers:**
-     - Header Name: `X-PlayFab-Webhook-Secret`
-     - Header Value: `<PLAYFAB_WEBHOOK_SECRET value configured in Vercel>`
-   - **Status:** Toggle to **Enabled**.
-   - Save the rule.
-
-4. **Verify Live Webhook Health**
-   - Perform a test deletion with a test account.
-   - Check the PlayStream monitor to verify that `title_deleted_master_player` fires upon completion and receives HTTP `200 OK` from the endpoint.
-
----
-
-## 6. Verification Status
-
-All 21 unit and integration test scenarios pass with exit code `0`, covering fail-closed production storage, local development fallback, strict ordering, crash recovery, multi-instance locking, and safe status tracking.

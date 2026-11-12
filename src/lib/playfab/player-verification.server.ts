@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { AdminApiError, adminGameConfig, object, playFabAdmin } from "./admin-client.server.ts";
-import { getDeletionRecord, isAccountDeleted } from "./account-deletion.server.ts";
 import { smallBody } from "./request-body.server.ts";
 import { maskEmail } from "./contact-email.ts";
 
@@ -120,26 +119,6 @@ export async function verifyPlayerSession(
   const playerId = object(auth["UserInfo"])["PlayFabId"];
   if (typeof playerId !== "string" || !/^[a-f0-9]{1,32}$/i.test(playerId)) {
     throw new AdminApiError(502, "Unable to verify player account.");
-  }
-
-  const deletionRecord = await getDeletionRecord(playerId);
-  if (deletionRecord) {
-    if (deletionRecord.status === "completed") {
-      throw new AdminApiError(401, "This account has been deleted.");
-    }
-    if (deletionRecord.status === "processing" || deletionRecord.status === "pending") {
-      throw new AdminApiError(
-        401,
-        "Account deletion is currently in progress. Sign-in and account access are disabled.",
-      );
-    }
-    if (deletionRecord.status === "failed") {
-      throw new AdminApiError(
-        403,
-        "Account deletion encountered an error during data erasure. For your security, this account is locked. Please contact support.",
-      );
-    }
-    throw new AdminApiError(401, "This account is not accessible due to deletion.");
   }
 
   return getPlayerContactVerification(playerId);

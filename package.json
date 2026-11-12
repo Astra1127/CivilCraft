@@ -26,7 +26,6 @@
     "test:verification": "node --test tests/email-verification-enforcement.test.ts",
     "test:policies": "node --test tests/policy-management.test.ts tests/policy-notifications.test.ts",
     "test:receipts": "node --test tests/purchase-receipt-email.test.ts",
-    "test:deletion": "node --test tests/account-deletion.test.ts",
     "verify:currencies": "node scripts/verify-currency-database-local.mjs"
   },
   "overrides": {

@@ -1,5 +1,4 @@
 import { AdminApiError, object, playFabAdmin } from "./admin-client.server.ts";
-import { isAccountDeleted } from "./account-deletion-storage.server.ts";
 import { parseEducation } from "./almanac-education.ts";
 import catalog from "./quiz-review-catalog.server.json" with { type: "json" };
 
@@ -87,8 +86,7 @@ export async function handleQuizReview(request: Request): Promise<Response | nul
       SessionTicket: ticket,
     });
     const playerId = object(authenticated["UserInfo"])["PlayFabId"];
-    if (typeof playerId !== "string" || !playerId || (await isAccountDeleted(playerId)))
-      return empty(401);
+    if (typeof playerId !== "string" || !playerId) return empty(401);
     const data = await playFabAdmin("Server/GetUserData", {
       PlayFabId: playerId,
       Keys: ["AlmanacProgress", "QuizReviewProgress"],

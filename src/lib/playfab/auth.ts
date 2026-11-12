@@ -284,9 +284,7 @@ export async function registerPlayer({
       }
     }
 
-    if (emailUpdates) {
-      await savePlayerEmailPreference(result.SessionTicket, true);
-    }
+    await savePlayerEmailPreference(result.SessionTicket, Boolean(emailUpdates));
   }
   clearSession("player");
   return {
