@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { AdminApiError, object, playFabAdmin } from "../playfab/admin-client.server.ts";
+import { isAccountDeleted } from "../playfab/account-deletion-storage.server.ts";
 import { smallBody } from "../playfab/request-body.server.ts";
 import {
   contactSchema,
@@ -151,7 +152,11 @@ async function playerId(request: Request, optional = false): Promise<string | nu
   const id = object(auth["UserInfo"])["PlayFabId"];
   if (auth["IsSessionTicketExpired"] || typeof id !== "string" || !/^[a-f0-9]{1,32}$/i.test(id))
     throw new AdminApiError(401, "Player sign-in is required.");
-  return id.toUpperCase();
+  const cleanId = id.toUpperCase();
+  if (await isAccountDeleted(cleanId)) {
+    throw new AdminApiError(401, "This account is undergoing deletion.");
+  }
+  return cleanId;
 }
 async function notify(
   id: string,

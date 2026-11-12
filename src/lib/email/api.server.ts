@@ -10,6 +10,7 @@ import { smallBody } from "../playfab/request-body.server.ts";
 import { listContent } from "../cms/content.server.ts";
 import { emailDelivery } from "./delivery.server.ts";
 import { dispatchVersionNotifications } from "./release-notifications.server.ts";
+import { isAccountDeleted } from "../playfab/account-deletion-storage.server.ts";
 
 export const recoveryMessage =
   "If an account exists for that email, password recovery instructions have been sent.";
@@ -58,6 +59,9 @@ async function playerId(request: Request) {
   const id = object(auth["UserInfo"])["PlayFabId"];
   if (auth["IsSessionTicketExpired"] || typeof id !== "string" || !/^[a-f0-9]{1,32}$/i.test(id))
     throw new AdminApiError(401, "Player sign-in is required.");
+  if (await isAccountDeleted(id)) {
+    throw new AdminApiError(401, "This account is undergoing deletion.");
+  }
   return id;
 }
 /** No account lookup or upstream error text is returned to a recovery caller. */

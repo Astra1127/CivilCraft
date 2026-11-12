@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AdminApiError, object, playFabAdmin } from "./admin-client.server.ts";
+import { isAccountDeleted } from "./account-deletion-storage.server.ts";
 import { smallBody } from "./request-body.server.ts";
 import type { BugReport, BugStatus } from "../cms/types.ts";
 
@@ -85,17 +86,19 @@ export async function handlePlayerBugRequest(request: Request): Promise<Response
       );
     const auth = await playFabAdmin("Server/AuthenticateSessionTicket", { SessionTicket: ticket });
     const user = object(auth["UserInfo"]);
+    const playFabId = typeof user["PlayFabId"] === "string" ? user["PlayFabId"] : "";
     if (
       auth["IsSessionTicketExpired"] ||
-      typeof user["PlayFabId"] !== "string" ||
-      !/^[a-f0-9]{1,32}$/i.test(user["PlayFabId"])
+      !playFabId ||
+      !/^[a-f0-9]{1,32}$/i.test(playFabId) ||
+      (await isAccountDeleted(playFabId))
     )
       return json({ error: "Player sign-in is required." }, 401);
     const optional = (value: unknown) =>
       typeof value === "string" ? value.trim().slice(0, 100) : "";
     const report: BugReport = {
       id: randomUUID(),
-      playFabId: user["PlayFabId"],
+      playFabId,
       player:
         optional(object(user["TitleInfo"])["DisplayName"]) ||
         optional(user["Username"]) ||

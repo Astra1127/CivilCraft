@@ -12,6 +12,7 @@ import { contentRequest } from "./lib/cms/content.server";
 import { faqRequest } from "./lib/cms/faq.server";
 import { handlePlayerBugRequest } from "./lib/playfab/bug-reports.server";
 import { handlePlayerVerificationRequest } from "./lib/playfab/player-verification.server";
+import { handleAccountDeletionRequest } from "./lib/playfab/account-deletion.server";
 import { handlePublicPoliciesRequest } from "./lib/cms/policies.server";
 import "./lib/error-capture";
 
@@ -68,6 +69,8 @@ export default {
     try {
       const playerVerificationResponse = await handlePlayerVerificationRequest(request);
       if (playerVerificationResponse) return playerVerificationResponse;
+      const accountDeletionResponse = await handleAccountDeletionRequest(request);
+      if (accountDeletionResponse) return accountDeletionResponse;
       const publicPoliciesResponse = await handlePublicPoliciesRequest(request);
       if (publicPoliciesResponse) return publicPoliciesResponse;
       const messages = await handlePlayerMessages(request);

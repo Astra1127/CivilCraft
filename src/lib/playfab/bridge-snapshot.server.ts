@@ -1,4 +1,5 @@
 import { AdminApiError, adminGameConfig, object, playFabAdmin } from "./admin-client.server.ts";
+import { isAccountDeleted } from "./account-deletion-storage.server.ts";
 
 import { parseAlmanacProgress } from "./almanac.ts";
 import { verifiedLevelCompletion } from "./level-records.ts";
@@ -38,7 +39,8 @@ export async function handleBridgeSnapshot(request: Request): Promise<Response |
       SessionTicket: ticket,
     });
     const playerId = object(authenticated["UserInfo"])["PlayFabId"];
-    if (typeof playerId !== "string" || !playerId) return empty(401);
+    if (typeof playerId !== "string" || !playerId || (await isAccountDeleted(playerId)))
+      return empty(401);
     const { titleId } = adminGameConfig();
     const api = async (path: string, body: unknown, auth: Record<string, string>) => {
       const response = await fetch(`https://${titleId}.playfabapi.com/${path}`, {

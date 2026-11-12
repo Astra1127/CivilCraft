@@ -13,6 +13,7 @@ import {
   playFabAdmin,
   textValue,
 } from "./admin-client.server.ts";
+import { isAccountDeleted } from "./account-deletion-storage.server.ts";
 import {
   LEADERBOARD_PAGE_SIZE,
   DEFAULT_CONTRACT,
@@ -422,8 +423,16 @@ export async function handleLeaderboardRequest(request: Request): Promise<Respon
         SessionTicket: ticket,
       });
       const id = object(auth["UserInfo"])["PlayFabId"];
-      if (!auth["IsSessionTicketExpired"] && typeof id === "string" && /^[a-f0-9]{1,32}$/i.test(id))
+      if (
+        !auth["IsSessionTicketExpired"] &&
+        typeof id === "string" &&
+        /^[a-f0-9]{1,32}$/i.test(id)
+      ) {
+        if (await isAccountDeleted(id)) {
+          return json({ error: "Player account is undergoing deletion." }, 401);
+        }
         playerId = id;
+      }
       if (!playerId) return json({ error: "Player sign-in is required." }, 401);
     } else {
       const config = getAdminAuthConfig(),

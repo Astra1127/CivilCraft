@@ -52,4 +52,5 @@ env.production-handoff.md
 # Local game builds are uploaded to object storage, never committed to Git.
 Apk/
 *.apk
+.data/
 node_modules
